@@ -118,6 +118,18 @@ them stack, or `"id": "burn"` to share one status between abilities.
 
 Abilities don't hurt towers unless you set `"hits_structures": true`.
 
+### Visual effects (optional)
+Every hit plays an impact animation automatically (melee champions slash in a color matching the
+character, ranged attacks spark, abilities burst in the effect's `color`). You can pick specific ones:
+- on `damage`: `"vfx": "fire"` - the impact played on each unit hit
+- on `area`: `"vfx": "fire"` - the explosion style
+- in `attack`: `"hit_vfx": "fire"` - your basic-attack impacts
+
+Names: `spark`, `star`, `twinkle`, `splat`, `burst`, `claw`, `streaks` (these are tinted with the
+effect's `color`), `fire`, `poison`, `star_red`, `claw_red`, `streaks_red`, `magic`, `smoke`,
+`slash` (palette picked from the color) or a specific slash like `slash2_c4` (styles 1-3, palettes c1
+lime, c2 red, c3 violet, c4 orange, c5 cyan), and `none`. They come from `assets/vfx/`.
+
 ### Flow & fun
 | type | keys |
 |---|---|

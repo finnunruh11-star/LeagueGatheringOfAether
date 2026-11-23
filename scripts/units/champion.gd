@@ -127,6 +127,7 @@ func _execute(ab: Dictionary, ctx: Dictionary) -> void:
 	if dead:
 		return
 	ctx.origin = global_position
+	world.fx("cast", {"p": global_position, "c": color, "v": net_id, "d": Vector2(ctx.dir).angle(), "s": ab.slot})
 	Effects.run(ab.effects, ctx)
 	trigger("cast", self, ctx.pos, {"slot": ab.slot})
 
@@ -253,8 +254,7 @@ func _think(delta: float) -> void:
 		if recall_timer <= 0.0:
 			var from := global_position
 			teleport(world.map.spawn_point(team))
-			world.fx("ring", {"pos": from, "radius": 60.0, "color": Color(0.5, 0.7, 1.0)})
-			world.fx("ring", {"pos": global_position, "radius": 80.0, "color": Color(0.5, 0.7, 1.0)})
+			world.fx("blink", {"from": from, "to": global_position, "color": Color(0.5, 0.7, 1.0), "noline": true})
 	if is_bot:
 		_bot_think(delta)
 	if amove != null:
@@ -310,7 +310,7 @@ func _level_up() -> void:
 	for k in def.per_level:
 		base_stats[k] = float(base_stats.get(k, 0.0)) + def.per_level[k]
 	recompute_stats()
-	world.fx("text", {"pos": global_position + Vector2(0, -80), "text": "LEVEL %d!" % level, "color": Color(1, 0.85, 0.3), "size": 22})
+	world.fx("levelup", {"p": global_position, "l": level, "v": net_id})
 	trigger("level_up", self)
 
 
@@ -337,7 +337,7 @@ func respawn() -> void:
 	recompute_stats()
 	hp = stats.max_hp
 	flags = 0
-	world.fx("ring", {"pos": global_position, "radius": 70.0, "color": team_color()})
+	world.fx("spawn", {"p": global_position, "c": team_color(), "r": radius * 2.0})
 	trigger("spawn", self)
 
 
@@ -390,16 +390,28 @@ func _physics_process(delta: float) -> void:
 # ---------------------------------------------------------------- drawing ---
 
 func _draw_body() -> void:
-	var c := color.lerp(Color.WHITE, 0.6) if flash > 0.0 else color
-	draw_circle(Vector2.ZERO, radius, c)
-	draw_arc(Vector2.ZERO, radius, 0, TAU, 40, team_color(), 4.0, true)
-	draw_circle(Vector2(facing * radius * 0.55, -radius * 0.15), radius * 0.18, Color(0, 0, 0, 0.6))
+	var c := body_color()
+	var r := radius
+	draw_circle(Vector2.ZERO, r, c.darkened(0.45))
+	draw_circle(Vector2(0, -r * 0.08), r * 0.88, c)
+	draw_circle(Vector2(-r * 0.32, -r * 0.4), r * 0.3, c.lightened(0.4))
+	draw_arc(Vector2.ZERO, r, 0, TAU, 40, team_color().lightened(0.1), 3.0, true)
+	var tip := Vector2(facing * r * 1.25, 0)
+	draw_colored_polygon(PackedVector2Array([tip, Vector2(facing * r * 0.85, -r * 0.28), Vector2(facing * r * 0.85, r * 0.28)]), team_color().lightened(0.2))
 	var initials := display_name.substr(0, 2)
-	draw_string(ThemeDB.fallback_font, Vector2(-radius, 6.0 * stats.size), initials, HORIZONTAL_ALIGNMENT_CENTER, radius * 2.0, int(16 * stats.size), Color(0, 0, 0, 0.75))
+	draw_string(ThemeDB.fallback_font, Vector2(-r, 6.0 * stats.size), initials, HORIZONTAL_ALIGNMENT_CENTER, r * 2.0, int(16 * stats.size), Color(0, 0, 0, 0.7))
 
 
 func bar_width() -> float:
-	return 76.0
+	return 78.0
+
+
+func bar_height() -> float:
+	return 9.0
+
+
+func icon_y(top: float) -> float:
+	return top - 30.0
 
 
 func _draw_overlay(n: Node2D) -> void:
@@ -408,10 +420,12 @@ func _draw_overlay(n: Node2D) -> void:
 		return
 	var top := bar_top()
 	var font := ThemeDB.fallback_font
-	n.draw_rect(Rect2(-56, top - 2, 16, 11), Color(0.1, 0.1, 0.12, 0.95))
-	n.draw_string(font, Vector2(-56, top + 8), str(level), HORIZONTAL_ALIGNMENT_CENTER, 16, 11, Color(1, 0.9, 0.5))
-	n.draw_string_outline(font, Vector2(-80, top - 5), player_name, HORIZONTAL_ALIGNMENT_CENTER, 160, 13, 3, Color(0, 0, 0, 0.8))
-	n.draw_string(font, Vector2(-80, top - 5), player_name, HORIZONTAL_ALIGNMENT_CENTER, 160, 13, Color(1, 1, 1, 0.95))
+	var lx := -bar_width() * 0.5 - 20.0
+	n.draw_rect(Rect2(lx, top - 3, 17, 15), Color(0.06, 0.06, 0.09, 0.95))
+	n.draw_rect(Rect2(lx, top - 3, 17, 15), ring_color(), false, 1.0)
+	n.draw_string(font, Vector2(lx, top + 9), str(level), HORIZONTAL_ALIGNMENT_CENTER, 17, 12, Color(1, 0.9, 0.5))
+	n.draw_string_outline(font, Vector2(-90, top - 6), player_name, HORIZONTAL_ALIGNMENT_CENTER, 180, 14, 4, Color(0, 0, 0, 0.85))
+	n.draw_string(font, Vector2(-90, top - 6), player_name, HORIZONTAL_ALIGNMENT_CENTER, 180, 14, ring_color().lightened(0.55))
 
 
 # -------------------------------------------------------------------- bot ---

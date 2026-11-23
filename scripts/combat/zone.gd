@@ -94,6 +94,32 @@ func apply_net_state(s: PackedFloat32Array) -> void:
 	net_t = 0.0
 
 
+func _ready() -> void:
+	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	if trap:
+		return
+	var p := CPUParticles2D.new()
+	p.amount = clampi(int(radius / 7.0), 6, 36)
+	p.lifetime = 1.0
+	p.local_coords = false
+	p.emission_shape = CPUParticles2D.EMISSION_SHAPE_SPHERE
+	p.emission_sphere_radius = radius * 0.9
+	p.direction = Vector2.UP
+	p.spread = 15.0
+	p.gravity = Vector2(0, -40)
+	p.initial_velocity_min = 10.0
+	p.initial_velocity_max = 40.0
+	p.scale_amount_min = 2.5
+	p.scale_amount_max = 5.0
+	p.color = color.lightened(0.3)
+	var ramp := Gradient.new()
+	ramp.offsets = PackedFloat32Array([0.0, 0.3, 1.0])
+	ramp.colors = PackedColorArray([Color(1, 1, 1, 0), Color(1, 1, 1, 0.9), Color(1, 1, 1, 0)])
+	p.color_ramp = ramp
+	p.material = Vfx.add_material()
+	add_child(p)
+
+
 func _process(delta: float) -> void:
 	if puppet:
 		life += delta
@@ -106,7 +132,7 @@ func _draw() -> void:
 	var enemy_view: bool = world != null and team != world.local_team
 	if trap and stealth and enemy_view:
 		return
-	var a := 0.55 if trap and stealth else 1.0
+	var a := 0.6 if trap and stealth else 1.0
 	if tex != null:
 		var s := radius * 2.0 / maxf(tex.get_width(), tex.get_height())
 		var size := Vector2(tex.get_width(), tex.get_height()) * s
@@ -114,14 +140,25 @@ func _draw() -> void:
 		return
 	if trap:
 		var armed := life >= arm_time
-		draw_circle(Vector2.ZERO, radius * 0.45, Color(color, 0.8 * a))
-		for i in 8:
-			var ang := i * TAU / 8.0
-			draw_line(Vector2.from_angle(ang) * radius * 0.35, Vector2.from_angle(ang) * radius * 0.75, Color(color.darkened(0.3), a), 3.0)
-		draw_arc(Vector2.ZERO, radius, 0, TAU, 32, Color(color, (0.5 if armed else 0.2) * a), 2.0)
-	else:
-		var pulse := 0.04 * sin(life * 6.0)
-		draw_circle(Vector2.ZERO, radius, Color(color, 0.16 + pulse))
-		draw_arc(Vector2.ZERO, radius, 0, TAU, 64, Color(color, 0.6), 3.0, true)
-		var fade := clampf(1.0 - life / maxf(duration, 0.01), 0.0, 1.0)
-		draw_arc(Vector2.ZERO, radius * 0.92, -PI / 2, -PI / 2 + TAU * fade, 48, Color(color, 0.35), 2.0)
+		var pulse := 0.5 + 0.5 * sin(life * 5.0)
+		draw_circle(Vector2.ZERO, radius, Color(color, 0.1 * a))
+		draw_circle(Vector2.ZERO, radius * 0.42, Color(color.darkened(0.3), 0.9 * a))
+		for i in 10:
+			var ang := i * TAU / 10.0
+			var tip := Vector2.from_angle(ang) * radius * (0.82 if i % 2 == 0 else 0.6)
+			draw_line(Vector2.from_angle(ang) * radius * 0.35, tip, Color(color.lightened(0.2), a), 3.0)
+		draw_circle(Vector2.ZERO, radius * 0.18, Color(1, 0.3, 0.2, (0.5 + 0.5 * pulse) * a) if armed else Color(0.6, 0.6, 0.6, a))
+		draw_arc(Vector2.ZERO, radius, 0, TAU, 32, Color(color, (0.6 if armed else 0.25) * a), 2.0, true)
+		return
+	var pulse := 0.5 + 0.5 * sin(life * 4.0)
+	var fade := clampf(1.0 - life / maxf(duration, 0.01), 0.0, 1.0)
+	var appear := clampf(life * 6.0, 0.0, 1.0)
+	var r := radius * (0.6 + 0.4 * appear)
+	draw_texture_rect(Vfx.glow(), Rect2(-r, -r, r * 2.0, r * 2.0), false, Color(color, 0.32 + 0.1 * pulse))
+	draw_circle(Vector2.ZERO, r, Color(color, 0.1))
+	var segs := 20
+	for i in segs:
+		var a0 := i * TAU / segs + life * 0.6
+		draw_arc(Vector2.ZERO, r, a0, a0 + TAU / segs * 0.6, 4, Color(color.lightened(0.25), 0.9), 3.0, true)
+	draw_arc(Vector2.ZERO, r * (0.5 + 0.12 * pulse), 0, TAU, 48, Color(color.lightened(0.2), 0.3), 2.0, true)
+	draw_arc(Vector2.ZERO, r + 6.0, -PI / 2, -PI / 2 + TAU * fade, 48, Color(color, 0.5), 3.0, true)

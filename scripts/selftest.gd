@@ -21,6 +21,9 @@ func _ready() -> void:
 	var dummy: Dummy = world.spawn("dummy", {"pos": Vector2(1300, 750), "hp": 1000000.0})
 	var ally: Dummy = world.spawn("dummy", {"pos": Vector2(800, 600), "hp": 1000000.0})
 	ally.team = 0
+	world.cam_locked = false
+	world.edge_pan = false
+	world.camera.global_position = Vector2(1075, 700)
 	var only := str(Game.cmdline.get("only", ""))
 	var ids := Game.sorted_character_ids()
 	print("[selftest] testing %d characters" % ids.size())
@@ -32,6 +35,8 @@ func _ready() -> void:
 			continue
 		pid += 1
 		var c: Champion = world.spawn("champion", {"peer": pid, "team": 0, "character": id, "name": "Test", "pos": Vector2(850, 750)})
+		var real_local := world.local_champion
+		world.local_champion = c
 		await get_tree().create_timer(0.3).timeout
 		var before := dummy.total_taken
 		c.attack_target = dummy
@@ -56,6 +61,11 @@ func _ready() -> void:
 			var target := dummy
 			if ab.targeting == "ally":
 				target = ally
+			world.aim_slot = slot
+			world.test_aim = target.global_position
+			await get_tree().create_timer(0.35).timeout
+			world.aim_slot = ""
+			world.test_aim = null
 			var ok := c.cast(slot, target.global_position, target.net_id)
 			await get_tree().create_timer(0.4).timeout
 			var spawned := world.entities.size() - n_before
@@ -63,6 +73,7 @@ func _ready() -> void:
 			var moved := c.global_position.distance_to(start)
 			print("[selftest] %-12s %s %-18s cast=%s dmg=%6.0f spawned=%d moved=%4.0f shield=%3.0f hp=%4.0f/%4.0f dummy_flags=%d" % [
 				id, slot, ab.name.substr(0, 18), str(ok), dummy.total_taken - before, spawned, moved, c.shield, c.hp, c.stats.max_hp, dummy.flags])
+		world.local_champion = real_local
 		world.despawn(c)
 		world.champions.erase(pid)
 		for e in world.entities.values():

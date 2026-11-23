@@ -71,6 +71,15 @@ var overlay: DrawNode
 var collider: CollisionShape2D
 var flash := 0.0
 var life := 0.0
+var squash := 0.0
+var kick := Vector2.ZERO
+var hp_ghost := 0.0
+var _ghost_hold := 0.0
+var _prev_hp := 0.0
+var _last_pos := Vector2.INF
+var _afterimage_t := 0.0
+var _was_shielded := false
+var status_fx: CPUParticles2D = null
 
 
 func setup(_d: Dictionary) -> void:
@@ -243,24 +252,40 @@ func perform_attack(t: Unit) -> void:
 	var dmg := attack_damage_against(t)
 	if attack_def.ranged:
 		var p = world.spawn("projectile", {
-			"pos": global_position, "dir": (t.global_position - global_position).normalized(),
+			"pos": muzzle(), "dir": (t.global_position - global_position).normalized(),
 			"radius": attack_def.size, "color": attack_def.color, "sprite": attack_def.sprite, "char": attack_def.char,
 		})
 		p.init_attack(self, t, dmg, attack_def.speed)
 	else:
 		land_attack(t, dmg)
-		if is_champion:
-			world.fx("ring", {"pos": t.global_position, "radius": t.radius + 8.0, "color": Color(1, 1, 1, 0.8), "dur": 0.15})
+
+
+## Where ranged attacks leave from.
+func muzzle() -> Vector2:
+	return global_position + Vector2(facing * radius * 0.6, -radius * 0.3)
 
 
 func attack_damage_against(_t) -> float:
 	return stats.attack_damage
 
 
+## Visual style of this unit's basic-attack hits (see Vfx / World._hit_fx).
+func attack_hit_style() -> String:
+	var v := str(attack_def.get("hit_vfx", ""))
+	if v != "":
+		return v
+	if is_structure:
+		return "burst"
+	if attack_def.ranged:
+		return "twinkle" if is_champion else "spark"
+	return "slash" if is_champion or self is Summon else "spark"
+
+
 func land_attack(t, dmg: float) -> void:
 	if not is_instance_valid(t) or t.dead:
 		return
-	t.take_damage(dmg, self, "physical")
+	var dir: Vector2 = t.global_position - global_position
+	t.take_damage(dmg, self, "physical", {"vfx": attack_hit_style(), "col": attack_def.color, "dir": dir.angle()})
 	if not attack_def.on_hit.is_empty():
 		Effects.run(attack_def.on_hit, attack_ctx(t))
 	on_attack_hit(t)
@@ -286,7 +311,7 @@ func on_kill(_victim) -> void:
 
 # ------------------------------------------------------------ health/CC ---
 
-func take_damage(amount: float, source = null, dtype := "physical") -> float:
+func take_damage(amount: float, source = null, dtype := "physical", hit := {}) -> float:
 	if dead or puppet or amount <= 0.0:
 		return 0.0
 	if has_status("invulnerable") or is_protected():
@@ -317,7 +342,7 @@ func take_damage(amount: float, source = null, dtype := "physical") -> float:
 		if credit.is_champion:
 			last_champion_hit = credit
 			last_champion_hit_time = world.time
-	world.on_damage(self, dealt, src, dtype)
+	world.on_damage(self, dealt, src, dtype, hit)
 	if hp <= 0.0 and not _cheat_death():
 		die(src)
 	elif not dead:
@@ -334,9 +359,8 @@ func heal(amount: float, _source = null, show := true) -> void:
 		return
 	var before := hp
 	hp = minf(hp + amount, stats.max_hp)
-	if show and hp - before >= 1.0 and is_champion:
-		world.fx("text", {"pos": global_position + Vector2(randf_range(-12, 12), -radius - 40), "text": "+%d" % int(hp - before),
-			"color": Color(0.45, 1, 0.45), "size": 16})
+	if show and hp - before >= 1.0 and (is_champion or self is Summon):
+		world.fx("heal", {"p": global_position, "a": hp - before, "v": net_id, "r": radius})
 
 
 func die(killer = null) -> void:
@@ -354,6 +378,7 @@ func die(killer = null) -> void:
 	flags = F_DEAD
 	if is_structure:
 		collision_layer = 0
+	world.fx("death", {"p": global_position, "r": radius, "c": color, "k": kind, "v": net_id})
 	world.on_unit_died(self, killer if is_instance_valid(killer) else null)
 	_on_death()
 
@@ -402,7 +427,7 @@ func _update_statuses(delta: float) -> void:
 			if s.tick <= 0.0:
 				s.tick += s.interval
 				if s.type == "dot":
-					take_damage(s.amount * s.interval, s.source, s.dtype)
+					take_damage(s.amount * s.interval, s.source, s.dtype, {"vfx": "dot", "col": s.get("col", Color(1, 0.5, 0.2))})
 					if dead:
 						return
 				else:
@@ -574,10 +599,128 @@ func _process(delta: float) -> void:
 		net_t = minf(net_t + delta / World.SNAP_DT, 1.0)
 		global_position = net_from.lerp(net_to, net_t)
 	flash = maxf(flash - delta, 0.0)
+	squash = move_toward(squash, 0.0, delta * 5.0)
+	kick = kick.lerp(Vector2.ZERO, minf(14.0 * delta, 1.0))
+	_update_ghost_hp(delta)
+	_afterimages(delta)
+	_update_status_fx()
 	if sprite != null:
 		_update_sprite()
 	queue_redraw()
 	overlay.queue_redraw()
+
+
+## Visual reaction to a hit (played on every client by the hit FX).
+func hit_react(ang: float, amount: float) -> void:
+	flash = 0.1
+	squash = 1.0
+	if not is_structure:
+		kick = Vector2.from_angle(ang) * clampf(2.0 + amount / 25.0, 2.0, 9.0)
+
+
+func _bob() -> Vector2:
+	if is_structure or dead:
+		return Vector2.ZERO
+	if anim == ANIM_WALK:
+		return Vector2(0, -absf(sin(life * 11.0)) * 3.5)
+	return Vector2(0, sin(life * 2.4) * 1.2)
+
+
+func _body_offset() -> Vector2:
+	return kick + _bob()
+
+
+func _squash_scale() -> Vector2:
+	return Vector2(1.0 + 0.16 * squash, 1.0 - 0.12 * squash)
+
+
+func _update_ghost_hp(delta: float) -> void:
+	if hp_ghost < hp:
+		hp_ghost = hp
+	elif hp < _prev_hp:
+		_ghost_hold = 0.45
+	_prev_hp = hp
+	_ghost_hold -= delta
+	if _ghost_hold <= 0.0:
+		hp_ghost = move_toward(hp_ghost, hp, stats.max_hp * 0.9 * delta)
+	var shielded := shield > 0.0 and not dead
+	if shielded and not _was_shielded and world != null:
+		Vfx.flash(world.fx_layer, global_position, Color(0.75, 0.88, 1.0, 0.8), radius * 1.9, 0.35, Vfx.ring(), 1.3)
+	elif _was_shielded and not shielded and not dead and world != null:
+		Vfx.particles(world.fx_layer, global_position, Color(0.85, 0.93, 1.0), 14, 220.0, 0.4, 3.0)
+	_was_shielded = shielded
+
+
+func _afterimages(delta: float) -> void:
+	var moved := 0.0 if _last_pos == Vector2.INF else global_position.distance_to(_last_pos)
+	_last_pos = global_position
+	if dead or is_structure or delta <= 0.0 or moved > 150.0 or moved / delta < 820.0:
+		return
+	_afterimage_t -= delta
+	if _afterimage_t > 0.0:
+		return
+	_afterimage_t = 0.03
+	var g: Node2D
+	if sprite != null:
+		var s := Sprite2D.new()
+		s.texture = sprite.sprite_frames.get_frame_texture(sprite.animation, sprite.frame)
+		s.flip_h = sprite.flip_h
+		s.scale = sprite.scale
+		s.position = global_position + sprite.position
+		g = s
+	else:
+		var dn := DrawNode.new()
+		var r := radius
+		dn.draw_func = func(n): n.draw_circle(Vector2.ZERO, r, Color.WHITE)
+		dn.position = global_position + _body_offset()
+		g = dn
+	g.modulate = Color(color.lightened(0.35), 0.5)
+	world.under_layer.add_child(g)
+	var tw := g.create_tween()
+	tw.tween_property(g, "modulate:a", 0.0, 0.28)
+	tw.tween_callback(g.queue_free)
+
+
+## Ambient particles that make ongoing statuses readable at a glance.
+func _update_status_fx() -> void:
+	var col := Color.TRANSPARENT
+	var falling := false
+	if not dead:
+		if flags & F_DOT:
+			col = Color(1.0, 0.45, 0.15)
+		elif flags & F_HOT:
+			col = Color(0.4, 1.0, 0.45)
+		elif flags & F_BUFF:
+			col = Color(0.8, 1.0, 0.35)
+		elif flags & F_SLOW:
+			col = Color(0.45, 0.7, 1.0)
+			falling = true
+	if col.a == 0.0:
+		if status_fx != null:
+			status_fx.emitting = false
+		return
+	if status_fx == null:
+		status_fx = CPUParticles2D.new()
+		status_fx.amount = 10
+		status_fx.lifetime = 0.8
+		status_fx.local_coords = false
+		status_fx.emission_shape = CPUParticles2D.EMISSION_SHAPE_SPHERE
+		status_fx.spread = 20.0
+		status_fx.initial_velocity_min = 15.0
+		status_fx.initial_velocity_max = 45.0
+		status_fx.scale_amount_min = 2.5
+		status_fx.scale_amount_max = 4.0
+		var ramp := Gradient.new()
+		ramp.set_color(0, Color(1, 1, 1, 1))
+		ramp.set_color(1, Color(1, 1, 1, 0))
+		status_fx.color_ramp = ramp
+		status_fx.material = Vfx.add_material()
+		add_child(status_fx)
+	status_fx.emission_sphere_radius = radius * 0.8
+	status_fx.direction = Vector2.DOWN if falling else Vector2.UP
+	status_fx.gravity = Vector2(0, 60) if falling else Vector2(0, -60)
+	status_fx.color = col
+	status_fx.emitting = true
 
 
 func _update_sprite() -> void:
@@ -588,8 +731,9 @@ func _update_sprite() -> void:
 	if sprite.animation != anim_name:
 		sprite.play(anim_name)
 	sprite.flip_h = (facing < 0.0) != bool(sprite_info.faces_left)
-	sprite.scale = Vector2.ONE * sprite_info.scale * stats.size
-	sprite.modulate = Color(1.6, 1.6, 1.6) if flash > 0.0 else _tint()
+	sprite.position = sprite_info.offset + _body_offset()
+	sprite.scale = Vector2.ONE * sprite_info.scale * stats.size * _squash_scale()
+	sprite.modulate = Color(2.2, 2.2, 2.2) if flash > 0.0 else _tint()
 
 
 func _tint() -> Color:
@@ -602,56 +746,102 @@ func _tint() -> Color:
 	return Color.WHITE
 
 
-func _draw() -> void:
-	if dead and not is_structure:
-		return
-	draw_set_transform(Vector2(0, radius * 0.75), 0.0, Vector2(1.0, 0.45))
-	draw_circle(Vector2.ZERO, radius * 1.05, Color(0, 0, 0, 0.3))
-	draw_set_transform(Vector2.ZERO)
-	if sprite == null:
-		_draw_body()
-	_draw_statuses()
-
-
-func _draw_body() -> void:
-	var c := color.lerp(Color.WHITE, 0.6) if flash > 0.0 else color
-	draw_circle(Vector2.ZERO, radius, c)
-	draw_arc(Vector2.ZERO, radius, 0, TAU, 32, team_color(), 3.0, true)
-
-
 func team_color() -> Color:
 	return Game.TEAM_COLORS[clampi(team, 0, 2)]
 
 
-func _draw_statuses() -> void:
-	var t := Time.get_ticks_msec() / 1000.0
-	if shield > 0.0:
-		draw_arc(Vector2.ZERO, radius + 6.0, 0, TAU, 40, Color(0.95, 0.95, 1.0, 0.85), 3.0, true)
-	if flags & F_INVULN:
-		draw_arc(Vector2.ZERO, radius + 10.0, 0, TAU, 40, Color(1, 0.85, 0.2, 0.9), 3.0, true)
+## Ring color from the local player's point of view: you, allies, enemies.
+func ring_color() -> Color:
+	if world == null:
+		return team_color()
+	if world.local_champion == self:
+		return Color(0.35, 1.0, 0.4)
+	if team == 2:
+		return Color(1.0, 0.85, 0.3)
+	if team == world.local_team:
+		return Color(0.35, 0.65, 1.0)
+	return Color(1.0, 0.3, 0.25)
+
+
+func body_color() -> Color:
+	var c := color
 	if flags & F_SLOW:
-		draw_arc(Vector2(0, radius * 0.6), radius * 0.9, 0.2, PI - 0.2, 16, Color(0.4, 0.7, 1.0, 0.9), 3.0)
+		c = c.lerp(Color(0.5, 0.7, 1.0), 0.3)
+	return c.lerp(Color.WHITE, 0.7) if flash > 0.0 else c
+
+
+func _draw() -> void:
+	if dead and not is_structure:
+		return
+	_draw_ground()
+	draw_set_transform(_body_offset(), 0.0, _squash_scale())
+	if sprite == null:
+		_draw_body()
+	draw_set_transform(_body_offset())
+	_draw_statuses()
+	draw_set_transform(Vector2.ZERO)
+	_draw_extra()
+
+
+## Shadow, team ring and hover highlight (stays on the ground).
+func _draw_ground() -> void:
+	draw_set_transform(Vector2(0, radius * 0.75), 0.0, Vector2(1.0, 0.45))
+	draw_circle(Vector2.ZERO, radius * 1.05, Color(0, 0, 0, 0.32))
+	if world != null and not dead:
+		if not is_structure:
+			draw_arc(Vector2.ZERO, radius * 1.22, 0, TAU, 40, Color(ring_color(), 0.85 if is_champion else 0.5), 5.0 if is_champion else 3.0, true)
+		if world.hover_unit == self:
+			var pulse := 0.5 + 0.5 * sin(life * 10.0)
+			draw_arc(Vector2.ZERO, radius * 1.5, 0, TAU, 40, Color(1, 0.3, 0.25, 0.55 + 0.45 * pulse), 7.0, true)
+	draw_set_transform(Vector2.ZERO)
+
+
+func _draw_body() -> void:
+	var c := body_color()
+	draw_circle(Vector2.ZERO, radius, c.darkened(0.4))
+	draw_circle(Vector2(0, -radius * 0.1), radius * 0.86, c)
+	draw_circle(Vector2(-radius * 0.3, -radius * 0.38), radius * 0.28, c.lightened(0.35))
+
+
+func _draw_extra() -> void:
+	pass
+
+
+func _draw_statuses() -> void:
+	var t := life
+	if shield > 0.0:
+		draw_circle(Vector2.ZERO, radius + 8.0, Color(0.7, 0.85, 1.0, 0.13))
+		draw_arc(Vector2.ZERO, radius + 8.0, 0, TAU, 40, Color(0.85, 0.93, 1.0, 0.85), 2.5, true)
+		draw_arc(Vector2.ZERO, radius + 4.0, -2.4 + sin(t * 2.0) * 0.2, -1.6 + sin(t * 2.0) * 0.2, 10, Color(1, 1, 1, 0.8), 2.0)
+	if flags & F_INVULN:
+		draw_arc(Vector2.ZERO, radius + 12.0, t * 2.0, t * 2.0 + TAU, 40, Color(1, 0.85, 0.2, 0.9), 3.0, true)
 	if flags & F_ROOT:
-		draw_arc(Vector2.ZERO, radius + 3.0, 0, TAU, 24, Color(0.45, 0.8, 0.3, 0.9), 4.0)
-	if flags & F_DOT:
-		draw_arc(Vector2.ZERO, radius + 2.0, t * 4.0, t * 4.0 + 2.0, 12, Color(1, 0.5, 0.1, 0.9), 3.0)
-	if flags & F_HOT:
-		draw_arc(Vector2.ZERO, radius + 2.0, -t * 4.0, -t * 4.0 + 2.0, 12, Color(0.4, 1, 0.4, 0.9), 3.0)
-	if flags & F_BUFF:
-		draw_arc(Vector2.ZERO, radius + 4.0, -t * 2.0, -t * 2.0 + 1.0, 10, Color(0.6, 1, 0.5, 0.8), 2.0)
+		for i in 3:
+			var a := i * TAU / 3.0 + 0.4
+			draw_arc(Vector2(cos(a), sin(a) * 0.4) * radius * 0.6 + Vector2(0, radius * 0.6), radius * 0.5, a, a + 2.4, 10, Color(0.4, 0.8, 0.25, 0.95), 4.0)
 	if flags & F_STUN:
 		for i in 3:
 			var a := t * 5.0 + i * TAU / 3.0
-			draw_circle(Vector2(cos(a) * radius * 0.7, -radius - 8.0 + sin(a) * 4.0), 4.0, Color(1, 0.9, 0.2))
-	if flags & F_SILENCE:
-		draw_string(ThemeDB.fallback_font, Vector2(-radius, -radius - 4.0), "...", HORIZONTAL_ALIGNMENT_CENTER, radius * 2.0, 16, Color(0.8, 0.6, 1))
+			_star(Vector2(cos(a) * radius * 0.75, -radius - 10.0 + sin(a) * 4.0), 6.0, Color(1, 0.9, 0.25))
 	if flags & F_RECALL:
-		draw_arc(Vector2.ZERO, radius + 14.0, 0, TAU, 40, Color(0.5, 0.7, 1.0, 0.7), 2.0, true)
-		draw_rect(Rect2(-radius * 0.5, -radius * 3.0, radius, radius * 3.0), Color(0.5, 0.7, 1.0, 0.18))
+		var pulse := 0.5 + 0.5 * sin(t * 6.0)
+		draw_arc(Vector2.ZERO, radius + 14.0, 0, TAU, 40, Color(0.5, 0.75, 1.0, 0.5 + 0.4 * pulse), 3.0, true)
+		draw_rect(Rect2(-radius * 0.55, -radius * 3.2, radius * 1.1, radius * 3.2), Color(0.55, 0.75, 1.0, 0.12 + 0.08 * pulse))
+
+
+func _star(c: Vector2, r: float, col: Color) -> void:
+	var pts := PackedVector2Array()
+	for i in 8:
+		pts.append(c + Vector2.from_angle(i * TAU / 8.0 - PI / 2.0) * (r if i % 2 == 0 else r * 0.4))
+	draw_colored_polygon(pts, col)
 
 
 func bar_width() -> float:
 	return 44.0
+
+
+func bar_height() -> float:
+	return 5.0
 
 
 func bar_color() -> Color:
@@ -668,21 +858,54 @@ func bar_top() -> float:
 	if sprite != null:
 		var tex := sprite.sprite_frames.get_frame_texture(sprite.animation, 0)
 		if tex != null:
-			return sprite.position.y - tex.get_height() * sprite.scale.y * 0.5 - 12.0
+			return sprite_info.offset.y - tex.get_height() * sprite_info.scale * stats.size * 0.5 - 12.0
 	return -radius - 16.0
+
+
+func icon_y(top: float) -> float:
+	return top - 10.0
 
 
 func _draw_overlay(n: Node2D) -> void:
 	if dead:
 		return
 	var w := bar_width()
+	var h := bar_height()
 	var top := bar_top()
 	var total := maxf(stats.max_hp, hp + shield)
 	var x := -w * 0.5
 	var col := Color(0.6, 0.6, 0.6) if flags & F_PROTECTED else bar_color()
-	n.draw_rect(Rect2(x - 1, top - 1, w + 2, 8), Color(0, 0, 0, 0.85))
-	n.draw_rect(Rect2(x, top, w * clampf(hp / total, 0.0, 1.0), 6), col)
+	var hw := w * clampf(hp / total, 0.0, 1.0)
+	n.draw_rect(Rect2(x - 2, top - 2, w + 4, h + 4), Color(0.04, 0.04, 0.07, 0.9))
+	n.draw_rect(Rect2(x, top, w, h), Color(0.2, 0.08, 0.08))
+	if hp_ghost > hp:
+		n.draw_rect(Rect2(x + hw, top, w * clampf((hp_ghost - hp) / total, 0.0, 1.0), h), Color(1.0, 0.88, 0.55, 0.9))
+	n.draw_rect(Rect2(x, top, hw, h), col)
+	n.draw_rect(Rect2(x, top, hw, maxf(h * 0.35, 1.0)), col.lightened(0.35))
 	if shield > 0.0:
-		n.draw_rect(Rect2(x + w * hp / total, top, w * shield / total, 6), Color(0.92, 0.92, 0.95))
+		n.draw_rect(Rect2(x + hw, top, w * shield / total, h), Color(0.92, 0.94, 1.0))
+	if is_champion:
+		var v := 100.0
+		while v < total:
+			var tx := x + w * v / total
+			n.draw_line(Vector2(tx, top), Vector2(tx, top + (h if int(v) % 1000 == 0 else h * 0.55)), Color(0, 0, 0, 0.55), 1.0)
+			v += 100.0
 	if flags & F_PROTECTED:
 		n.draw_string(ThemeDB.fallback_font, Vector2(x, top - 3), "protected", HORIZONTAL_ALIGNMENT_CENTER, w, 12, Color(0.8, 0.8, 0.8))
+	_draw_status_icons(n, icon_y(top))
+
+
+func _draw_status_icons(n: Node2D, y: float) -> void:
+	var icons := []
+	for pair in [[F_STUN, "stun"], [F_ROOT, "root"], [F_SILENCE, "silence"], [F_SLOW, "slow"], [F_DOT, "dot"],
+			[F_HOT, "hot"], [F_BUFF, "buff"], [F_INVULN, "invuln"]]:
+		if flags & pair[0]:
+			icons.append(pair[1])
+	if shield > 0.0:
+		icons.append("shield")
+	var x := -(icons.size() - 1) * 8.0
+	for ic in icons:
+		StatusIcons.draw(n, Vector2(x, y), ic)
+		x += 16.0
+
+

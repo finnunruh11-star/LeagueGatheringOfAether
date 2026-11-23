@@ -31,7 +31,7 @@
       "range": 1000,
       "effects": [
         {"type": "projectile", "speed": 1500, "radius": 14, "color": "#7ff0e0", "pierce": true, "on_hit": [
-          {"type": "damage", "amount": "60 + 0.9 * ad", "damage_type": "physical"}
+          {"type": "damage", "amount": "60 + 0.9 * ad", "damage_type": "physical", "vfx": "streaks"}
         ]}
       ]
     },
@@ -44,7 +44,7 @@
       "effects": [
         {"type": "trap", "radius": 55, "duration": 30, "color": "#c0c8d0", "effects": [
           {"type": "root", "duration": 1.5},
-          {"type": "damage", "amount": "60 + 0.4 * ad", "damage_type": "physical"},
+          {"type": "damage", "amount": "60 + 0.4 * ad", "damage_type": "physical", "vfx": "claw"},
           {"type": "text", "text": "SNAP!", "color": "#ffffff"}
         ]}
       ]

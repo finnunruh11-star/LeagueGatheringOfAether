@@ -16,7 +16,8 @@ const HELP := "RMB move/attack   QWER hold to aim, release to cast   A+LMB attac
 var world: World
 var font: Font
 var top_label: Label
-var feed_label: Label
+var feed_label: RichTextLabel
+var _feed_dirty := false
 var center_label: Label
 var bar: DrawControl
 var slot_boxes := {}
@@ -28,22 +29,71 @@ var menu_panel: PanelContainer
 var feed: Array = []
 var _tooltips_for := ""
 var _last_hp := -1.0
+var vignette: TextureRect
+var hurt_rect: TextureRect
+var _hurt := 0.0
+var desat: ColorRect
+var _desat := 0.0
+var banner: Label
+var _banner_t := 9.0
+var _prev_cd := {}
+var _ready_flash := {}
+
+const DESAT_SHADER := """
+shader_type canvas_item;
+uniform sampler2D screen_tex : hint_screen_texture, filter_linear;
+uniform float amount : hint_range(0.0, 1.0) = 0.0;
+void fragment() {
+	vec3 c = texture(screen_tex, SCREEN_UV).rgb;
+	float g = dot(c, vec3(0.299, 0.587, 0.114));
+	COLOR = vec4(mix(c, vec3(g) * 0.7, amount), 1.0);
+}
+"""
 
 
 func _ready() -> void:
 	layer = 10
 	font = ThemeDB.fallback_font
+	var desat_layer := CanvasLayer.new()
+	desat_layer.layer = 5
+	add_child(desat_layer)
+	desat = ColorRect.new()
+	desat.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	desat.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	var mat := ShaderMaterial.new()
+	var sh := Shader.new()
+	sh.code = DESAT_SHADER
+	mat.shader = sh
+	desat.material = mat
+	desat.visible = false
+	desat_layer.add_child(desat)
+
 	var root := Control.new()
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(root)
+	vignette = _vignette(root, Color(0, 0, 0, 0.55), 0.6)
+	hurt_rect = _vignette(root, Color(0.85, 0.05, 0.02, 0.85), 0.45)
+	hurt_rect.modulate.a = 0.0
+
+	banner = _label(root, 46, HORIZONTAL_ALIGNMENT_CENTER)
+	_place(banner, 0.5, 0.2, -500, 0, 1000, 70)
+	banner.pivot_offset = Vector2(500, 35)
+	banner.modulate.a = 0.0
 
 	top_label = _label(root, 26, HORIZONTAL_ALIGNMENT_CENTER)
 	_place(top_label, 0.5, 0.0, -300, 8, 600, 40)
-	feed_label = _label(root, 16, HORIZONTAL_ALIGNMENT_RIGHT)
+	feed_label = RichTextLabel.new()
+	feed_label.bbcode_enabled = true
+	feed_label.scroll_active = false
+	feed_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	feed_label.add_theme_font_size_override("normal_font_size", 16)
+	feed_label.add_theme_constant_override("outline_size", 6)
+	feed_label.add_theme_color_override("font_outline_color", Color.BLACK)
+	root.add_child(feed_label)
 	_place(feed_label, 1.0, 0.0, -620, 10, 600, 200)
 	center_label = _label(root, 36, HORIZONTAL_ALIGNMENT_CENTER)
-	_place(center_label, 0.5, 0.3, -400, 0, 800, 60)
+	_place(center_label, 0.5, 0.3, -400, 0, 800, 110)
 	var help := _label(root, 13, HORIZONTAL_ALIGNMENT_LEFT)
 	help.text = HELP
 	help.modulate = Color(1, 1, 1, 0.55)
@@ -59,6 +109,7 @@ func _ready() -> void:
 		s.draw_func = func(c): _draw_slot(c, key)
 		s.position = Vector2(112 + i * 72, 10)
 		s.size = Vector2(64, 64)
+		s.clip_contents = true
 		bar.add_child(s)
 		slot_boxes[key] = s
 
@@ -106,6 +157,41 @@ func _place(c: Control, ax: float, ay: float, x: float, y: float, w: float, h: f
 	c.offset_top = y
 	c.offset_right = x + w
 	c.offset_bottom = y + h
+
+
+## Full-screen radial gradient: transparent center, `col` at the edges.
+func _vignette(parent: Control, col: Color, inner: float) -> TextureRect:
+	var g := Gradient.new()
+	g.offsets = PackedFloat32Array([0.0, inner, 1.0])
+	g.colors = PackedColorArray([Color(col, 0.0), Color(col, 0.0), col])
+	var t := GradientTexture2D.new()
+	t.gradient = g
+	t.fill = GradientTexture2D.FILL_RADIAL
+	t.fill_from = Vector2(0.5, 0.5)
+	t.fill_to = Vector2(1.05, 0.5)
+	t.width = 256
+	t.height = 256
+	var r := TextureRect.new()
+	r.texture = t
+	r.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+	r.stretch_mode = TextureRect.STRETCH_SCALE
+	r.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	r.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	r.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	parent.add_child(r)
+	return r
+
+
+## Red screen-edge flash when the local champion takes damage.
+func hurt(frac: float) -> void:
+	_hurt = clampf(maxf(_hurt, 0.25 + frac * 3.0), 0.0, 1.0)
+
+
+## Big center-screen announcement.
+func show_banner(text: String, col: Color) -> void:
+	banner.text = text
+	banner.add_theme_color_override("font_color", col)
+	_banner_t = 0.0
 
 
 func _label(parent: Node, size: int, align: HorizontalAlignment) -> Label:
@@ -161,41 +247,70 @@ func show_end(t: int) -> void:
 
 
 func announce(text: String, col: Color) -> void:
-	feed.append([text, col, Time.get_ticks_msec()])
+	announce_rich("[color=#%s]%s[/color]" % [col.to_html(false), text])
+
+
+## Adds a BBCode line to the kill feed (top right).
+func announce_rich(bbcode: String) -> void:
+	feed.append([bbcode, Time.get_ticks_msec()])
 	if feed.size() > 6:
 		feed.pop_front()
+	_feed_dirty = true
 
 
 func _process(_delta: float) -> void:
 	var t := int(world.time)
 	top_label.text = "%s %d  :  %d %s      %02d:%02d" % [Game.TEAM_NAMES[0], world.kills[0], world.kills[1], Game.TEAM_NAMES[1], t / 60, t % 60]
 	var now := Time.get_ticks_msec()
-	var lines := PackedStringArray()
-	for f in feed:
-		if now - f[2] < 10000:
+	var before := feed.size()
+	feed = feed.filter(func(f): return now - f[1] < 10000)
+	if _feed_dirty or feed.size() != before:
+		_feed_dirty = false
+		var lines := PackedStringArray()
+		for f in feed:
 			lines.append(f[0])
-	feed_label.text = "\n".join(lines)
+		feed_label.text = "[right]%s[/right]" % "\n".join(lines)
 	var ch := world.local_champion
-	if ch != null:
-		if _last_hp >= 0.0 and ch.hp < _last_hp - ch.stats.max_hp * 0.01 and not ch.dead:
-			world._sfx("hit", null, -14.0)
-		_last_hp = ch.hp
 	center_label.text = ""
 	if not world.started:
 		center_label.text = "Waiting for players..."
 	elif ch != null and ch.dead and not world.ended:
-		center_label.text = "Respawning in %d" % ceili(ch.respawn_timer)
+		center_label.text = "YOU DIED\nRespawning in %d" % ceili(ch.respawn_timer)
 	elif ch != null and ch.recall_timer > 0.0:
 		center_label.text = "Recalling... %.1f" % ch.recall_timer
 	if ch != null and _tooltips_for != ch.char_id:
 		_tooltips_for = ch.char_id
 		_build_tooltips(ch)
+	_update_effects(_delta, ch)
 	bar.queue_redraw()
 	for s in slot_boxes.values():
 		s.queue_redraw()
 	minimap.queue_redraw()
 	if scores.visible:
 		scores.queue_redraw()
+
+
+func _update_effects(delta: float, ch: Champion) -> void:
+	_hurt = maxf(_hurt - delta * 1.8, 0.0)
+	var low := 0.0
+	if ch != null and not ch.dead and ch.hp < ch.stats.max_hp * 0.3:
+		low = 0.25 + 0.2 * sin(Time.get_ticks_msec() / 1000.0 * 6.0)
+	hurt_rect.modulate.a = maxf(_hurt, low)
+	var dead_amt := 1.0 if ch != null and ch.dead and not world.ended else 0.0
+	_desat = move_toward(_desat, dead_amt, delta * 2.5)
+	desat.material.set_shader_parameter("amount", _desat)
+	desat.visible = _desat > 0.01
+	_banner_t += delta
+	var bt := _banner_t
+	banner.modulate.a = clampf(bt * 6.0, 0.0, 1.0) * clampf((2.2 - bt) * 2.0, 0.0, 1.0)
+	banner.scale = Vector2.ONE * (1.0 + 0.5 * maxf(0.0, 0.15 - bt) / 0.15)
+	if ch != null:
+		for s in ["q", "w", "e", "r"]:
+			var cd: float = ch.cooldowns.get(s, 0.0)
+			if _prev_cd.get(s, 0.0) > 0.0 and cd <= 0.0:
+				_ready_flash[s] = 1.0
+			_prev_cd[s] = cd
+			_ready_flash[s] = maxf(float(_ready_flash.get(s, 0.0)) - delta * 2.5, 0.0)
 
 
 func _build_tooltips(ch: Champion) -> void:
@@ -264,23 +379,39 @@ func _draw_slot(c: Control, slot: String) -> void:
 	if icon != null:
 		c.draw_texture_rect(icon, r.grow(-3), false)
 	elif nm != "":
-		c.draw_rect(r.grow(-3), ch.color.darkened(0.5))
+		var base := ch.color.darkened(0.5)
+		c.draw_rect(r.grow(-3), base)
+		c.draw_rect(Rect2(3, 3, c.size.x - 6, (c.size.y - 6) * 0.45), base.lightened(0.12))
 		var abbr := ""
 		for w in nm.split(" ", false):
 			abbr += w.substr(0, 1).to_upper()
 		if cd <= 0.0:
-			c.draw_string(font, Vector2(0, 40), abbr.substr(0, 3), HORIZONTAL_ALIGNMENT_CENTER, c.size.x, 20)
+			c.draw_string_outline(font, Vector2(0, 41), abbr.substr(0, 3), HORIZONTAL_ALIGNMENT_CENTER, c.size.x, 21, 4, Color(0, 0, 0, 0.6))
+			c.draw_string(font, Vector2(0, 41), abbr.substr(0, 3), HORIZONTAL_ALIGNMENT_CENTER, c.size.x, 21)
 	if cd > 0.0:
 		var frac := clampf(cd / maxf(ch.cd_total.get(slot, 1.0), 0.01), 0.0, 1.0)
-		c.draw_rect(Rect2(0, c.size.y * (1.0 - frac), c.size.x, c.size.y * frac), Color(0, 0, 0, 0.7))
+		var center := c.size * 0.5
+		var pts := PackedVector2Array([center])
+		for i in 33:
+			pts.append(center + Vector2.from_angle(-PI / 2.0 - TAU * frac * i / 32.0) * c.size.x)
+		c.draw_colored_polygon(pts, Color(0, 0, 0, 0.68))
+		c.draw_line(center, center + Vector2.from_angle(-PI / 2.0 - TAU * frac) * c.size.x, Color(1, 1, 1, 0.5), 2.0)
 		var txt := ("%.1f" % cd) if cd < 1.0 else str(ceili(cd))
-		c.draw_string_outline(font, Vector2(0, 42), txt, HORIZONTAL_ALIGNMENT_CENTER, c.size.x, 22, 4, Color.BLACK)
+		c.draw_string_outline(font, Vector2(0, 42), txt, HORIZONTAL_ALIGNMENT_CENTER, c.size.x, 22, 5, Color.BLACK)
 		c.draw_string(font, Vector2(0, 42), txt, HORIZONTAL_ALIGNMENT_CENTER, c.size.x, 22)
 	elif slot != "p" and (ch.dead or ch.flags & (Unit.F_STUN | Unit.F_SILENCE)):
-		c.draw_rect(r, Color(0, 0, 0, 0.5))
-	c.draw_rect(r, Color(0.45, 0.8, 1.0) if world.aim_slot == slot else Color(0.35, 0.37, 0.42), false, 2.0)
-	c.draw_string_outline(font, Vector2(4, 15), slot.to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, 13, 3, Color.BLACK)
-	c.draw_string(font, Vector2(4, 15), slot.to_upper(), HORIZONTAL_ALIGNMENT_LEFT, -1, 13)
+		c.draw_rect(r, Color(0, 0, 0, 0.55))
+	var fl: float = _ready_flash.get(slot, 0.0)
+	if fl > 0.0:
+		c.draw_rect(r, Color(1, 1, 1, 0.45 * fl))
+	var border := Color(0.35, 0.37, 0.42)
+	if world.aim_slot == slot:
+		border = Color(0.45, 0.8, 1.0)
+	elif slot != "p" and cd <= 0.0 and ch.def.abilities.has(slot):
+		border = Color(0.85, 0.75, 0.45).lerp(Color.WHITE, fl)
+	c.draw_rect(r, border, false, 2.0 + 2.0 * fl)
+	c.draw_rect(Rect2(2, 2, 18, 17), Color(0, 0, 0, 0.6))
+	c.draw_string(font, Vector2(2, 15), slot.to_upper(), HORIZONTAL_ALIGNMENT_CENTER, 18, 13, Color(1, 0.95, 0.8))
 
 
 func _draw_minimap(c: Control) -> void:

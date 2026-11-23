@@ -103,6 +103,10 @@ func _setup_lobby(a: Dictionary) -> void:
 		Game.add_bot(0)
 	for i in int(a.get("bots_red", "0")):
 		Game.add_bot(1)
+	if a.has("bot_char"):
+		for pid in Game.players:
+			if Game.players[pid].bot:
+				Game.players[pid].character = a.bot_char
 
 
 func _process(delta: float) -> void:
@@ -119,11 +123,14 @@ func _process(delta: float) -> void:
 		Game.world.send_command("autopilot", [true])
 	if not _shots.is_empty() and _clock >= _shots[0]:
 		var t: float = _shots.pop_front()
-		_screenshot("%s_%d.png" % [str(a.get("shot", "user://shot")), int(t)])
+		_screenshot("%s_%s.png" % [str(a.get("shot", "user://shot")), String.num(t, 1)])
 	_at("end_at", func(): if Game.world != null: Game.world.end_match(0))
 	_at("relobby_at", Game.return_to_lobby)
 	_at("restart_at", Game.start_match)
 	_at("leave_at", func(): Game.leave(); Game.left_game.emit("left (test)"))
+	if a.has("fpslog") and Game.world != null and int(_clock) % 10 == 0 and int(_clock) != _last_fps_log:
+		_last_fps_log = int(_clock)
+		print("[fps] t=%d fps=%d entities=%d fx_nodes=%d" % [_last_fps_log, Engine.get_frames_per_second(), Game.world.entities.size(), Game.world.fx_layer.get_child_count()])
 	if _quit_at > 0.0 and _clock >= _quit_at:
 		_quit_at = -1.0
 		_report()
@@ -131,6 +138,7 @@ func _process(delta: float) -> void:
 
 
 var _done := {}
+var _last_fps_log := -1
 
 
 func _at(key: String, f: Callable) -> void:
@@ -152,7 +160,7 @@ func _report() -> void:
 	if w == null:
 		print("[auto] no match running. players=", Game.players.size(), " chars=", Game.characters.size())
 		return
-	print("[auto] time=%.1f entities=%d units=%d kills=%s ended=%s server=%s" % [w.time, w.entities.size(), w.units.size(), str(w.kills), str(w.ended), str(w.is_server)])
+	print("[auto] time=%.1f fps=%d entities=%d units=%d kills=%s ended=%s server=%s" % [w.time, Engine.get_frames_per_second(), w.entities.size(), w.units.size(), str(w.kills), str(w.ended), str(w.is_server)])
 	for c in w.champions.values():
 		print("[auto]   %s %s team=%d lvl=%d hp=%d/%d pos=%s k/d=%d/%d dead=%s" % [c.player_name, c.char_id, c.team, c.level, c.hp, c.stats.max_hp, str(c.global_position.round()), c.kills, c.deaths, str(c.dead)])
 	var counts := {}

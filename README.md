@@ -63,6 +63,14 @@ describe the blue half. Optional `"tower_stats"`, `"nexus_stats"` and
 `"minion_stats": {"melee": {...}, "ranged": {...}}` override the default stats (same names as
 character stats). See `two_lanes.json`, `bridge.json` and `arena.json`.
 
+## Visual effects
+Hit impacts, slashes, explosions and smoke use the pixel-art packs in the project root
+("Pixel Art VFX Impacts", "Pixel Art VFX - Warlock", "Pixel Art Animations - Slashes"). The sprite
+sheets actually used are copied to `assets/vfx/`; the original pack folders have a `.gdignore` so Godot
+doesn't import their hundreds of extra files. Effects are listed in `scripts/vfx/vfx.gd`, and characters
+can choose them per ability (see MODDING.md, "Visual effects"). Everything else (rings, trails,
+particles, telegraphs, the map art) is drawn procedurally.
+
 ## How it works (for tinkering)
 - `scripts/game.gd` - lobby, networking (Godot ENet), sends characters to clients
 - `scripts/world/world.gd` - a match: spawning, snapshots to clients, waves, rules, input

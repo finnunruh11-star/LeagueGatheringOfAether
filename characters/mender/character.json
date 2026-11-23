@@ -35,7 +35,7 @@
       "effects": [
         {"type": "projectile", "speed": 1000, "radius": 15, "color": "#b7ff9e", "affects": "all", "on_hit": [
           {"type": "heal", "amount": "60 + 0.6 * ap", "if": "ally"},
-          {"type": "damage", "amount": "60 + 0.6 * ap", "if": "ally == 0"},
+          {"type": "damage", "amount": "60 + 0.6 * ap", "if": "ally == 0", "vfx": "twinkle"},
           {"type": "slow", "amount": 0.35, "duration": 1.5, "if": "ally == 0"}
         ]}
       ]
@@ -48,7 +48,7 @@
       "range": 900,
       "effects": [
         {"type": "projectile", "speed": 1500, "radius": 14, "color": "#e0e0e0", "on_hit": [
-          {"type": "damage", "amount": "50 + 0.5 * ap"},
+          {"type": "damage", "amount": "50 + 0.5 * ap", "vfx": "claw"},
           {"type": "pull", "duration": 0.3},
           {"type": "stun", "duration": 0.6}
         ]}

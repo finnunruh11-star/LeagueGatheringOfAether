@@ -13,7 +13,7 @@
     "ability_power": 40
   },
   "per_level": {"max_hp": 70, "attack_damage": 2.5, "ability_power": 12},
-  "attack": {"ranged": true, "projectile_speed": 950, "projectile_color": "#ffb347", "projectile_size": 7},
+  "attack": {"ranged": true, "projectile_speed": 950, "projectile_color": "#ffb347", "projectile_size": 7, "hit_vfx": "fire"},
   "passive": {
     "name": "Kindling",
     "description": "Basic attacks set enemies ablaze for 2s (8 + 10% AP damage per second).",

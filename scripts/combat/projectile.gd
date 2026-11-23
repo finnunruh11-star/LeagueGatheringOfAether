@@ -28,6 +28,7 @@ var hits_structures := false
 var through_walls := false
 var last_hit = null
 var done := false
+var trail: Line2D
 
 var net_from := Vector2.ZERO
 var net_to := Vector2.ZERO
@@ -176,10 +177,56 @@ func apply_net_state(s: PackedFloat32Array) -> void:
 	rotation = s[2]
 
 
+func _ready() -> void:
+	texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	var g := Sprite2D.new()
+	g.texture = Vfx.glow()
+	g.material = Vfx.add_material()
+	g.modulate = Color(color.lightened(0.25), 0.8)
+	g.scale = Vector2.ONE * radius * 5.0 / 64.0
+	add_child(g)
+	trail = Line2D.new()
+	trail.top_level = true
+	trail.width = radius * 1.7
+	var wc := Curve.new()
+	wc.add_point(Vector2(0, 1))
+	wc.add_point(Vector2(1, 0.1))
+	trail.width_curve = wc
+	var gr := Gradient.new()
+	gr.set_color(0, Color(color.lightened(0.3), 0.8))
+	gr.set_color(1, Color(color, 0.0))
+	trail.gradient = gr
+	trail.material = Vfx.add_material()
+	trail.joint_mode = Line2D.LINE_JOINT_ROUND
+	trail.begin_cap_mode = Line2D.LINE_CAP_ROUND
+	add_child(trail)
+	if radius >= 10.0:
+		var p := CPUParticles2D.new()
+		p.amount = 18
+		p.lifetime = 0.4
+		p.local_coords = false
+		p.spread = 180.0
+		p.initial_velocity_min = 10.0
+		p.initial_velocity_max = 50.0
+		p.scale_amount_min = 2.5
+		p.scale_amount_max = 4.5
+		p.color = color.lightened(0.3)
+		var ramp := Gradient.new()
+		ramp.set_color(0, Color(1, 1, 1, 1))
+		ramp.set_color(1, Color(1, 1, 1, 0))
+		p.color_ramp = ramp
+		p.material = Vfx.add_material()
+		add_child(p)
+
+
 func _process(delta: float) -> void:
 	if puppet:
 		net_t = minf(net_t + delta / World.SNAP_DT, 1.0)
 		global_position = net_from.lerp(net_to, net_t)
+	if trail.get_point_count() == 0 or trail.get_point_position(0).distance_to(global_position) > 3.0:
+		trail.add_point(global_position, 0)
+		if trail.get_point_count() > 10:
+			trail.remove_point(10)
 
 
 func _draw() -> void:
@@ -188,6 +235,6 @@ func _draw() -> void:
 		var size := Vector2(tex.get_width(), tex.get_height()) * s
 		draw_texture_rect(tex, Rect2(-size * 0.5, size), false)
 		return
-	draw_line(Vector2(-radius * 3.0, 0), Vector2.ZERO, Color(color, 0.35), radius * 1.3)
 	draw_circle(Vector2.ZERO, radius, color)
-	draw_circle(Vector2.ZERO, radius * 0.5, color.lightened(0.6))
+	draw_circle(Vector2(radius * 0.15, 0), radius * 0.55, color.lightened(0.6))
+	draw_circle(Vector2(radius * 0.25, 0), radius * 0.25, Color.WHITE)

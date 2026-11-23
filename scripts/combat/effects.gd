@@ -97,7 +97,10 @@ static func _one(e: Dictionary, ctx: Dictionary) -> void:
 		"damage":
 			var u := _unit(e, ctx)
 			if u:
-				u.take_damage(num(e.get("amount"), ctx, 50.0), _caster(ctx), str(e.get("damage_type", "magic")))
+				var from: Vector2 = ctx.get("origin", u.global_position)
+				var ang: float = (u.global_position - from).angle() if from.distance_to(u.global_position) > 1.0 else Vector2(ctx.get("dir", Vector2.RIGHT)).angle()
+				u.take_damage(num(e.get("amount"), ctx, 50.0), _caster(ctx), str(e.get("damage_type", "magic")),
+					{"vfx": str(e.get("vfx", "ability")), "col": _color(e, ctx), "dir": ang})
 		"heal":
 			var u := _unit(e, ctx)
 			if u:
@@ -121,7 +124,7 @@ static func _one(e: Dictionary, ctx: Dictionary) -> void:
 			if u:
 				var iv := maxf(num(e.get("interval"), ctx, 0.5), 0.1)
 				u.add_status({"type": type, "amount": num(e.get("amount"), ctx, 20.0), "interval": iv, "tick": iv,
-					"time": num(e.get("duration"), ctx, 3.0), "dtype": str(e.get("damage_type", "magic"))},
+					"time": num(e.get("duration"), ctx, 3.0), "dtype": str(e.get("damage_type", "magic")), "col": _color(e, ctx)},
 					_caster(ctx), _key(e, ctx))
 		"buff":
 			var u := _unit(e, ctx)
@@ -167,7 +170,7 @@ static func _one(e: Dictionary, ctx: Dictionary) -> void:
 			var delay := num(e.get("delay"), ctx, 0.0)
 			var col := _color(e, ctx)
 			if delay > 0.0:
-				w.fx("telegraph", {"pos": center, "radius": radius, "color": col, "dur": delay})
+				w.fx("telegraph", {"pos": center, "radius": radius, "color": col, "dur": delay, "team": int(ctx.get("team", 0))})
 				var c2 := sub(ctx)
 				w.schedule(delay, func(): _area_now(e, c2, center, radius, col))
 			else:
@@ -181,7 +184,7 @@ static func _one(e: Dictionary, ctx: Dictionary) -> void:
 			var col := _color(e, ctx)
 			var end := start + dir * length
 			if delay > 0.0:
-				w.fx("beam_warn", {"from": start, "to": end, "width": width, "color": col, "dur": delay})
+				w.fx("beam_warn", {"from": start, "to": end, "width": width, "color": col, "dur": delay, "team": int(ctx.get("team", 0))})
 				var c2 := sub(ctx)
 				w.schedule(delay, func(): _beam_now(e, c2, start, end, width, col))
 			else:
@@ -281,7 +284,7 @@ static func _area_now(e: Dictionary, ctx: Dictionary, center: Vector2, radius: f
 		return
 	var angle := num(e.get("angle"), ctx, 360.0)
 	var dir: Vector2 = ctx.get("dir", Vector2.RIGHT)
-	w.fx("blast", {"pos": center, "radius": radius, "color": col, "angle": angle, "dir": dir})
+	w.fx("blast", {"pos": center, "radius": radius, "color": col, "angle": angle, "dir": dir, "vfx": str(e.get("vfx", ""))})
 	var cone := deg_to_rad(angle) * 0.5
 	for u in w.query(center, radius, int(ctx.get("team", 0)), str(e.get("affects", "enemies")), bool(e.get("hits_structures", false))):
 		if angle < 359.0:
@@ -295,7 +298,7 @@ static func _beam_now(e: Dictionary, ctx: Dictionary, start: Vector2, end: Vecto
 	var w = Game.world
 	if w == null:
 		return
-	w.fx("beam", {"from": start, "to": end, "width": width, "color": col})
+	w.fx("beam", {"from": start, "to": end, "width": width, "color": col, "vfx": str(e.get("vfx", ""))})
 	for u in w.query_line(start, end, width * 0.5, int(ctx.get("team", 0)), str(e.get("affects", "enemies")), bool(e.get("hits_structures", false))):
 		run(e.get("effects"), sub(ctx, {"target": u, "pos": u.global_position, "origin": start}))
 
@@ -361,11 +364,8 @@ static func _teleport(e: Dictionary, ctx: Dictionary) -> void:
 		"home", "base", "spawn":
 			to = w.map.spawn_point(c.team)
 	to = w.map.nearest_open(to)
-	var col := _color(e, ctx)
-	w.fx("line", {"from": c.global_position, "to": to, "color": col})
-	w.fx("ring", {"pos": c.global_position, "radius": 50.0, "color": col})
+	w.fx("blink", {"from": c.global_position, "to": to, "color": _color(e, ctx)})
 	c.teleport(to)
-	w.fx("ring", {"pos": to, "radius": 70.0, "color": col})
 
 
 static func _projectile(e: Dictionary, ctx: Dictionary) -> void:
@@ -416,3 +416,4 @@ static func _summon(e: Dictionary, ctx: Dictionary) -> void:
 			"char": str(ctx.get("char", "")), "stationary": bool(e.get("stationary", false)),
 		})
 		s.init_server(_caster(ctx), num(e.get("duration"), ctx, 10.0), e, sub(ctx))
+		w.fx("spawn", {"p": s.global_position, "c": s.color, "r": s.radius})

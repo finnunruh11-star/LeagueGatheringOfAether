@@ -85,7 +85,6 @@ func _think(delta: float) -> void:
 func _on_death() -> void:
 	if effect.has("on_death"):
 		Effects.run(effect.on_death, Effects.sub(sctx, {"pos": global_position, "origin": global_position, "target": null}))
-	world.fx("ring", {"pos": global_position, "radius": radius * 2.0, "color": color})
 	world.despawn_later(self, 0.2)
 
 

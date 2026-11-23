@@ -83,14 +83,31 @@ func _on_death() -> void:
 
 
 func _draw_body() -> void:
-	var c := color.lerp(Color.WHITE, 0.6) if flash > 0.0 else color
+	var c := body_color()
+	var r := radius
+	var f := facing
 	if minion_type == "ranged":
-		var r := radius * 1.15
-		draw_colored_polygon(PackedVector2Array([Vector2(0, -r), Vector2(r, 0), Vector2(0, r), Vector2(-r, 0)]), c)
+		draw_colored_polygon(PackedVector2Array([Vector2(0, -r * 1.3), Vector2(r * 0.95, r * 0.2), Vector2(0, r), Vector2(-r * 0.95, r * 0.2)]), c.darkened(0.4))
+		draw_colored_polygon(PackedVector2Array([Vector2(0, -r * 1.12), Vector2(r * 0.7, r * 0.1), Vector2(0, r * 0.72), Vector2(-r * 0.7, r * 0.1)]), c)
+		var orb := Vector2(f * r * 1.15, -r * 0.35)
+		draw_line(Vector2(f * r * 0.55, r * 0.7), orb, Color(0.45, 0.32, 0.2), 2.0)
+		draw_circle(orb, 4.5, Color(c.lightened(0.5), 0.35))
+		draw_circle(orb, 2.8, c.lightened(0.75))
 	else:
-		draw_circle(Vector2.ZERO, radius, c)
-	draw_arc(Vector2.ZERO, radius, 0, TAU, 20, c.darkened(0.45), 2.0)
+		draw_circle(Vector2.ZERO, r, c.darkened(0.4))
+		draw_circle(Vector2(0, -r * 0.1), r * 0.85, c)
+		var swing := 0.5 + 0.5 * sin(life * 25.0) if anim == ANIM_ATTACK else 0.0
+		var hand := Vector2(f * r * 0.75, r * 0.1)
+		var tip := hand + Vector2(f * cos(-1.1 + swing * 1.6), sin(-1.1 + swing * 1.6)) * r * 1.25
+		draw_line(hand, tip, Color(0.88, 0.9, 0.95), 2.5)
+		draw_line(hand + Vector2(0, -3), hand + Vector2(0, 3), Color(0.5, 0.4, 0.3), 2.0)
+	draw_circle(Vector2(f * r * 0.32, -r * 0.3), 1.8, Color(0.05, 0.05, 0.08))
+	draw_circle(Vector2(f * r * 0.02, -r * 0.3), 1.8, Color(0.05, 0.05, 0.08))
 
 
 func bar_width() -> float:
 	return 34.0
+
+
+func bar_height() -> float:
+	return 4.0

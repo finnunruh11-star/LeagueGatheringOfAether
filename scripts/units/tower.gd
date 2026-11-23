@@ -10,6 +10,7 @@ var think_t := 0.0
 var ramp := 0
 var last_target_id := 0
 var target_id := 0
+var glow: Sprite2D
 
 
 func setup(d: Dictionary) -> void:
@@ -47,6 +48,10 @@ func setup(d: Dictionary) -> void:
 
 func is_protected() -> bool:
 	return world != null and world.is_protected(self)
+
+
+func muzzle() -> Vector2:
+	return global_position + Vector2(0, -radius * 1.75)
 
 
 func _think(delta: float) -> void:
@@ -109,30 +114,80 @@ func bar_width() -> float:
 	return 130.0 if is_nexus else 90.0
 
 
+func bar_height() -> float:
+	return 9.0
+
+
+func bar_top() -> float:
+	return -radius * (1.35 if is_nexus else 2.35) - 10.0
+
+
+func _ready() -> void:
+	super._ready()
+	glow = Sprite2D.new()
+	glow.texture = Vfx.glow()
+	glow.material = Vfx.add_material()
+	glow.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+	glow.position = Vector2(0, -radius * 0.2) if is_nexus else Vector2(0, -radius * 1.75)
+	add_child(glow)
+
+
+func _process(delta: float) -> void:
+	super._process(delta)
+	glow.visible = not dead
+	var pulse := 0.5 + 0.5 * sin(life * (2.0 if is_nexus else 3.0))
+	glow.modulate = Color(team_color().lightened(0.2), 0.45 + 0.25 * pulse)
+	glow.scale = Vector2.ONE * radius * (3.2 if is_nexus else 1.9) / 64.0 * (0.9 + 0.15 * pulse)
+
+
 func _draw_body() -> void:
 	var tc := team_color()
+	var r := radius
 	if dead:
-		draw_circle(Vector2.ZERO, radius * 0.8, Color(0.3, 0.3, 0.32))
-		draw_circle(Vector2(radius * 0.3, -radius * 0.2), radius * 0.35, Color(0.38, 0.38, 0.4))
+		for st in [[Vector2(-0.4, 0.2), 0.45], [Vector2(0.35, 0.3), 0.4], [Vector2(0, -0.1), 0.5], [Vector2(0.5, -0.25), 0.3]]:
+			draw_circle(st[0] * r, st[1] * r, Color(0.32, 0.32, 0.35))
+			draw_circle(st[0] * r + Vector2(-2, -3), st[1] * r * 0.6, Color(0.42, 0.42, 0.45))
 		return
-	var c := tc.lerp(Color.WHITE, 0.5) if flash > 0.0 else tc
+	var c := tc.lerp(Color.WHITE, 0.55) if flash > 0.0 else tc
+	var stone := Color(0.42, 0.42, 0.47) if flash <= 0.0 else Color(0.8, 0.8, 0.85)
 	if is_nexus:
-		var pts := PackedVector2Array()
+		draw_circle(Vector2(0, r * 0.15), r * 1.05, stone.darkened(0.35))
+		draw_circle(Vector2.ZERO, r * 0.95, stone)
+		draw_arc(Vector2.ZERO, r * 0.78, life * 0.6, life * 0.6 + TAU, 48, Color(c, 0.7), 3.0, true)
 		for i in 6:
-			pts.append(Vector2.from_angle(i * TAU / 6.0) * radius)
-		draw_colored_polygon(pts, c.darkened(0.3))
-		draw_circle(Vector2.ZERO, radius * 0.55, c)
-		draw_circle(Vector2.ZERO, radius * 0.3 + sin(life * 3.0) * 3.0, c.lightened(0.5))
+			var a := i * TAU / 6.0 + life * 0.6
+			draw_circle(Vector2.from_angle(a) * r * 0.78, 4.0, c.lightened(0.4))
+		var h := r * (1.25 + 0.06 * sin(life * 2.0))
+		var crystal := PackedVector2Array([Vector2(0, -h), Vector2(r * 0.42, -r * 0.2), Vector2(0, r * 0.35), Vector2(-r * 0.42, -r * 0.2)])
+		draw_colored_polygon(crystal, c.darkened(0.15))
+		draw_colored_polygon(PackedVector2Array([Vector2(0, -h), Vector2(r * 0.42, -r * 0.2), Vector2(0, -r * 0.05)]), c.lightened(0.35))
 	else:
-		draw_rect(Rect2(-radius, -radius, radius * 2, radius * 2), Color(0.25, 0.27, 0.3))
-		draw_rect(Rect2(-radius * 0.65, -radius * 1.4, radius * 1.3, radius * 1.6), c.darkened(0.2))
-		draw_circle(Vector2(0, -radius * 1.2), radius * 0.4, c.lightened(0.3))
-	# Range ring when the local champion is close.
+		draw_rect(Rect2(-r, -r * 0.55, r * 2.0, r * 1.25), stone.darkened(0.35))
+		draw_rect(Rect2(-r, -r * 0.75, r * 2.0, r * 1.05), stone)
+		draw_rect(Rect2(-r * 0.55, -r * 1.7, r * 1.1, r * 1.3), stone.lightened(0.08))
+		draw_rect(Rect2(-r * 0.55, -r * 1.7, r * 0.22, r * 1.3), stone.darkened(0.2))
+		draw_rect(Rect2(-r * 0.38, -r * 1.35, r * 0.76, r * 0.42), c.darkened(0.25))
+		var h := -r * 1.75 + sin(life * 3.0) * 2.0
+		var gem := PackedVector2Array([Vector2(0, h - r * 0.55), Vector2(r * 0.3, h), Vector2(0, h + r * 0.35), Vector2(-r * 0.3, h)])
+		draw_colored_polygon(gem, c)
+		draw_colored_polygon(PackedVector2Array([Vector2(0, h - r * 0.55), Vector2(r * 0.3, h), Vector2(0, h)]), c.lightened(0.45))
+
+
+## Range warning and targeting line (not affected by hit squash).
+func _draw_extra() -> void:
 	var lc = world.local_champion if world != null else null
-	if not is_nexus and lc != null and not lc.dead and team != lc.team:
-		var reach: float = stats.attack_range + radius
-		if global_position.distance_to(lc.global_position) < reach + 350.0:
-			var hot: bool = target_id != 0 and target_id == lc.net_id
-			draw_arc(Vector2.ZERO, reach, 0, TAU, 96, Color(1, 0.25, 0.2, 0.75) if hot else Color(tc, 0.35), 3.0 if hot else 2.0, true)
-			if hot:
-				draw_line(Vector2(0, -radius * 1.2), lc.global_position - global_position, Color(1, 0.2, 0.2, 0.7), 3.0)
+	if dead or is_nexus or lc == null or lc.dead or team == lc.team:
+		return
+	var reach: float = stats.attack_range + radius
+	var d := global_position.distance_to(lc.global_position)
+	if d > reach + 350.0:
+		return
+	var hot: bool = target_id != 0 and target_id == lc.net_id
+	var pulse := 0.5 + 0.5 * sin(life * 12.0)
+	var col := Color(1, 0.22, 0.18, 0.55 + 0.4 * pulse) if hot else Color(team_color(), 0.18 + 0.4 * clampf(1.0 - (d - reach) / 350.0, 0.0, 1.0))
+	draw_arc(Vector2.ZERO, reach, 0, TAU, 96, col, 4.0 if hot else 2.0, true)
+	if hot:
+		var from := Vector2(0, -radius * 1.75)
+		var to: Vector2 = lc.global_position - global_position
+		draw_line(from, to, Color(1, 0.2, 0.15, 0.35 + 0.35 * pulse), 6.0)
+		draw_line(from, to, Color(1, 0.75, 0.7, 0.8), 2.0)

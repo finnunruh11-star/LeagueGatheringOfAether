@@ -37,6 +37,7 @@ var local_team := 0
 var local_champion: Champion = null
 
 var zone_layer: Node2D
+var under_layer: Node2D
 var unit_layer: Node2D
 var proj_layer: Node2D
 var fx_layer: Node2D
@@ -45,11 +46,16 @@ var camera: Camera2D
 var hud: Hud
 
 var cam_locked := true
+var edge_pan := true
 var cam_zoom := 1.0
 var aim_slot := ""
 var amove_armed := false
 var rmb_held := false
 var rmb_timer := 0.0
+var hover_unit: Unit = null
+var test_aim = null  # Vector2 override for automated indicator screenshots
+var _shake := 0.0
+var _cursor_attack := false
 
 
 func start(cfg: Dictionary) -> void:
@@ -61,9 +67,11 @@ func start(cfg: Dictionary) -> void:
 	var me = cfg.players.get(local_peer)
 	local_team = int(me.team) if me != null else 0
 	map = GameMap.new()
+	map.z_index = -10
 	add_child(map)
 	map.build(cfg.map_data)
-	zone_layer = _layer(-1, false)
+	zone_layer = _layer(-5, false)
+	under_layer = _layer(-4, false)
 	unit_layer = _layer(0, true)
 	proj_layer = _layer(5, false)
 	fx_layer = _layer(20, false)
@@ -100,6 +108,7 @@ func _layer(z: int, ysort: bool) -> Node2D:
 
 
 func _exit_tree() -> void:
+	Input.set_custom_mouse_cursor(null)
 	if Game.world == self:
 		Game.world = null
 
@@ -107,6 +116,7 @@ func _exit_tree() -> void:
 func shutdown() -> void:
 	closing = true
 	ended = true
+	Input.set_custom_mouse_cursor(null)
 	visible = false
 	hud.visible = false
 	camera.enabled = false
@@ -311,19 +321,37 @@ func _play_fx(kind: String, data: Dictionary) -> void:
 		elif txt.contains("slain") or txt.contains("died"):
 			_sfx("death", null, -6.0)
 		return
+	if FxPlayer.play(self, kind, data):
+		return
 	var f := Fx.new()
 	f.setup(kind, data)
 	fx_layer.add_child(f)
 	match kind:
-		"blast":
-			_sfx("boom", data.get("pos"), -14.0 + clampf(float(data.get("radius", 100.0)) / 40.0, 0.0, 7.0))
 		"ring":
 			_sfx("pop", data.get("pos"), -16.0)
 		"line", "beam":
 			_sfx("zap", data.get("from"), -12.0)
-		"text":
-			if str(data.get("text", "")).begins_with("LEVEL"):
-				_sfx("level", data.get("pos"), -8.0)
+	if kind == "beam":
+		Vfx.particles(fx_layer, data.to, Color(data.get("color", Color.WHITE)).lightened(0.3), 10, 260.0, 0.4, 3.0)
+
+
+## Client-side delayed visual (not part of the simulation).
+func schedule_visual(delay: float, f: Callable) -> void:
+	get_tree().create_timer(delay, false).timeout.connect(func():
+		if not closing:
+			f.call()
+	)
+
+
+func shake(amount: float) -> void:
+	_shake = maxf(_shake, amount)
+
+
+## Shake scaled by how close the event is to what the camera is looking at.
+func shake_at(pos: Vector2, amount: float) -> void:
+	var d := pos.distance_to(camera.get_screen_center_position())
+	if d < 1400.0:
+		shake(amount * clampf(1.3 - d / 1000.0, 0.2, 1.0))
 
 
 func _sfx(sound: String, pos, volume: float) -> void:
@@ -470,8 +498,8 @@ func _fountain(delta: float) -> void:
 			if c.team == t:
 				c.heal(c.stats.max_hp * 0.07, null, false)
 			elif map.lane_count() > 0:
-				c.take_damage(300.0, null, "true")
-				fx("line", {"from": map.spawn_point(t), "to": c.global_position, "color": Game.TEAM_COLORS[t], "dur": 0.2})
+				c.take_damage(300.0, null, "true", {"vfx": "star", "col": Game.TEAM_COLORS[t]})
+				fx("beam", {"from": map.spawn_point(t), "to": c.global_position, "color": Game.TEAM_COLORS[t], "width": 18.0})
 
 
 func _trickle(delta: float) -> void:
@@ -505,16 +533,10 @@ func is_protected(t: Tower) -> bool:
 	return false
 
 
-func on_damage(victim: Unit, amount: float, src, dtype: String) -> void:
-	var show: bool = victim.is_champion or victim is Dummy or (src != null and src.is_champion)
-	if show and amount >= 1.0:
-		var col := Color(1, 0.75, 0.35)
-		if dtype == "true":
-			col = Color.WHITE
-		elif dtype != "physical":
-			col = Color(0.8, 0.55, 1.0)
-		fx("text", {"pos": victim.global_position + Vector2(randf_range(-18, 18), -victim.radius - 30), "text": str(int(round(amount))),
-			"color": col, "size": 18 if victim.is_champion else 15})
+func on_damage(victim: Unit, amount: float, src, dtype: String, hit := {}) -> void:
+	if amount >= 1.0:
+		fx("hit", {"p": victim.global_position, "v": victim.net_id, "a": amount, "t": dtype, "x": str(hit.get("vfx", "spark")),
+			"c": hit.get("col", Color.WHITE), "r": float(hit.get("dir", randf() * TAU)), "s": src.net_id if src != null else 0})
 	if src != null and src.is_champion and victim.is_champion:
 		for t in structures:
 			if t.team == victim.team and t.global_position.distance_to(victim.global_position) < t.stats.attack_range + 300.0:
@@ -534,9 +556,7 @@ func on_unit_died(u: Unit, killer) -> void:
 		if ck != null:
 			ck.kills += 1
 			ck.on_kill(u)
-			fx("announce", {"text": "%s slain by %s" % [u.label(), ck.label()], "color": Game.TEAM_COLORS[ck.team]})
-		else:
-			fx("announce", {"text": "%s died" % u.label(), "color": Color(0.8, 0.8, 0.8)})
+		fx("kill", {"k": ck.net_id if ck != null else 0, "v": u.net_id})
 		_give_xp(u.global_position, u.team, 90.0 + 30.0 * u.level, ck)
 	else:
 		if is_instance_valid(credit) and credit is Champion:
@@ -545,6 +565,8 @@ func on_unit_died(u: Unit, killer) -> void:
 			_give_xp(u.global_position, u.team, u.xp_value, null)
 	if u is Tower:
 		fx("announce", {"text": "%s %s destroyed!" % [Game.TEAM_NAMES[u.team], u.display_name], "color": Game.TEAM_COLORS[1 - u.team]})
+		if not u.is_nexus:
+			fx("kill", {"k": 0, "v": u.net_id, "tower": true, "t": u.team})
 		if u.is_nexus:
 			end_match(1 - u.team)
 
@@ -753,14 +775,15 @@ func _process(delta: float) -> void:
 	elif not cam_locked:
 		var vp := get_viewport().get_visible_rect().size
 		var mp := get_viewport().get_mouse_position()
+		var edge := edge_pan and get_window().has_focus() and Rect2(Vector2.ZERO, vp).has_point(mp)
 		var pan := Vector2.ZERO
-		if mp.x < 10 or Input.is_key_pressed(KEY_LEFT):
+		if (edge and mp.x < 10) or Input.is_key_pressed(KEY_LEFT):
 			pan.x -= 1
-		if mp.x > vp.x - 10 or Input.is_key_pressed(KEY_RIGHT):
+		if (edge and mp.x > vp.x - 10) or Input.is_key_pressed(KEY_RIGHT):
 			pan.x += 1
-		if mp.y < 10 or Input.is_key_pressed(KEY_UP):
+		if (edge and mp.y < 10) or Input.is_key_pressed(KEY_UP):
 			pan.y -= 1
-		if mp.y > vp.y - 10 or Input.is_key_pressed(KEY_DOWN):
+		if (edge and mp.y > vp.y - 10) or Input.is_key_pressed(KEY_DOWN):
 			pan.y += 1
 		camera.global_position += pan * 1400.0 * delta / cam_zoom
 		var half := get_viewport_rect().size * 0.5 / camera.zoom
@@ -772,6 +795,19 @@ func _process(delta: float) -> void:
 		rmb_timer -= delta
 		if rmb_timer <= 0.0:
 			_right_click(false)
+	if _shake > 0.2:
+		camera.offset = Vector2(randf_range(-1.0, 1.0), randf_range(-1.0, 1.0)) * _shake
+		_shake = lerpf(_shake, 0.0, minf(12.0 * delta, 1.0))
+	else:
+		_shake = 0.0
+		camera.offset = Vector2.ZERO
+	hover_unit = null
+	if local_champion != null and not ended and not closing:
+		hover_unit = pick_unit(get_global_mouse_position(), local_team, true, 10.0)
+	var want_attack := hover_unit != null or amove_armed
+	if want_attack != _cursor_attack:
+		_cursor_attack = want_attack
+		Input.set_custom_mouse_cursor(Cursors.attack() if want_attack else null, Input.CURSOR_ARROW, Vector2(15, 15) if want_attack else Vector2.ZERO)
 	indicator.queue_redraw()
 
 
@@ -787,25 +823,63 @@ func _draw_indicator(n: Node2D) -> void:
 	var ab = c.def.abilities.get(aim_slot)
 	if ab == null:
 		return
+	var ind: Dictionary = ab.get("indicator", {})
 	var rng := Effects.num(ab.range, {"caster": c}, 700.0)
-	var col := Color(0.45, 0.8, 1.0, 0.7)
-	var m := get_global_mouse_position()
+	var col := Color(0.6, 0.6, 0.6) if c.cooldowns.get(aim_slot, 0.0) > 0.0 else Color(0.45, 0.82, 1.0)
+	var m: Vector2 = test_aim if test_aim != null else get_global_mouse_position()
 	var to := m - p
 	var dir := to.normalized() if to.length() > 1.0 else Vector2(c.facing, 0)
 	var end := p + dir * minf(to.length(), rng)
-	var rad: float = ab.indicator_radius
-	match ab.targeting:
+	if ab.targeting != "self":
+		n.draw_arc(p, rng, 0, TAU, 96, Color(col, 0.35), 2.0, true)
+	if ab.targeting == "unit" or ab.targeting == "ally":
+		var t := pick_unit(m, local_team, ab.targeting == "unit", 70.0, false)
+		if t != null:
+			n.draw_arc(t.global_position, t.radius + 8.0, 0, TAU, 32, col, 4.0, true)
+		return
+	var r: float = ind.get("radius", ab.indicator_radius)
+	match str(ind.get("shape", "")):
+		"line":
+			var count := int(ind.get("count", 1))
+			var spread := deg_to_rad(float(ind.get("spread", 0.0)))
+			for k in count:
+				var a := 0.0
+				if count > 1:
+					a = TAU * k / count if spread >= TAU - 0.01 else -spread * 0.5 + spread * k / (count - 1)
+				_draw_lane(n, p, dir.rotated(a), rng, maxf(float(ind.get("width", 24.0)), 8.0), col)
+		"dash":
+			var length := minf(to.length(), float(ind.get("length", 350.0)))
+			var tip := p + dir * length
+			_draw_lane(n, p, dir, length, c.radius * 2.0, col)
+			if r > 0.0:
+				_draw_disc(n, tip, r, col)
+		"cone":
+			var half := deg_to_rad(float(ind.get("angle", 90.0))) * 0.5
+			var pts := PackedVector2Array([p])
+			for i in 21:
+				pts.append(p + dir.rotated(-half + 2.0 * half * i / 20.0) * r)
+			n.draw_colored_polygon(pts, Color(col, 0.18))
+			pts.append(p)
+			n.draw_polyline(pts, Color(col, 0.85), 2.0, true)
 		"self":
-			n.draw_arc(p, rad if rad > 0.0 else c.radius + 20.0, 0, TAU, 64, col, 3.0, true)
-		"direction":
-			n.draw_arc(p, rng, 0, TAU, 96, Color(col, 0.25), 2.0, true)
-			n.draw_line(p, p + dir * rng, Color(col, 0.25), 40.0)
-			n.draw_line(p, p + dir * rng, col, 2.0)
-		"point":
-			n.draw_arc(p, rng, 0, TAU, 96, Color(col, 0.3), 2.0, true)
-			n.draw_arc(end, rad if rad > 0.0 else 40.0, 0, TAU, 48, col, 3.0, true)
+			_draw_disc(n, p, r, col)
 		_:
-			n.draw_arc(p, rng, 0, TAU, 96, Color(col, 0.3), 2.0, true)
-			var t := pick_unit(m, local_team, ab.targeting == "unit", 70.0, false)
-			if t != null:
-				n.draw_arc(t.global_position, t.radius + 8.0, 0, TAU, 32, col, 4.0, true)
+			if ab.targeting == "self":
+				_draw_disc(n, p, r if r > 0.0 else c.radius + 20.0, col)
+			else:
+				_draw_disc(n, end, r if r > 0.0 else 40.0, col)
+
+
+func _draw_disc(n: Node2D, at: Vector2, r: float, col: Color) -> void:
+	n.draw_circle(at, r, Color(col, 0.15))
+	n.draw_arc(at, r, 0, TAU, 64, Color(col, 0.9), 2.5, true)
+
+
+## Skillshot lane with an arrow head.
+func _draw_lane(n: Node2D, from: Vector2, d: Vector2, length: float, w: float, col: Color) -> void:
+	var side := d.orthogonal() * w * 0.5
+	var tip := from + d * length
+	var body := tip - d * minf(w, length * 0.3)
+	n.draw_colored_polygon(PackedVector2Array([from + side, body + side, body - side, from - side]), Color(col, 0.16))
+	n.draw_colored_polygon(PackedVector2Array([body + side * 1.6, tip, body - side * 1.6]), Color(col, 0.35))
+	n.draw_polyline(PackedVector2Array([from + side, body + side, body + side * 1.6, tip, body - side * 1.6, body - side, from - side]), Color(col, 0.85), 2.0, true)

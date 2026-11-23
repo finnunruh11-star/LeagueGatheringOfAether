@@ -165,6 +165,7 @@ static func build_character(pack: Dictionary, errors: PackedStringArray):
 		"color": parse_color(atk.get("projectile_color"), def.color.lightened(0.3)),
 		"size": float(atk.get("projectile_size", 7.0)),
 		"sprite": str(atk.get("projectile_sprite", "")),
+		"hit_vfx": str(atk.get("hit_vfx", "")),
 		"on_hit": atk.get("on_hit", []),
 		"char": id,
 	}
@@ -228,7 +229,44 @@ static func _ability(a: Dictionary, slot: String, def: Dictionary, errors: Packe
 	_validate(effects, "%s %s (%s)" % [def.id, slot.to_upper(), ab.name], errors)
 	# Indicator hint: radius of the first area/zone effect, if any.
 	ab.indicator_radius = _find_radius(effects)
+	ab.indicator = _indicator(effects)
 	return ab
+
+
+## Describes how to draw the aiming indicator, from the ability's first effect.
+static func _indicator(list) -> Dictionary:
+	if not (list is Array):
+		return {}
+	for e in list:
+		if not (e is Dictionary):
+			continue
+		match str(e.get("type", "")):
+			"projectile":
+				var count := int(_n(e.get("count"), 1.0))
+				return {"shape": "line", "width": _n(e.get("radius"), 12.0) * 2.0, "count": count,
+					"spread": _n(e.get("spread"), 0.0 if count == 1 else 30.0)}
+			"beam":
+				return {"shape": "line", "width": _n(e.get("width"), 70.0), "count": 1, "spread": 0.0}
+			"dash":
+				return {"shape": "dash", "length": _n(e.get("distance"), 350.0), "radius": _find_radius(e.get("on_end"))}
+			"area":
+				var r := _n(e.get("radius"), 150.0) + _n(e.get("scatter"), 0.0)
+				if _n(e.get("angle"), 360.0) < 359.0:
+					return {"shape": "cone", "radius": r, "angle": _n(e.get("angle"), 90.0)}
+				return {"shape": "self" if str(e.get("at", "pos")) == "self" else "circle", "radius": r}
+			"zone", "trap":
+				return {"shape": "circle", "radius": _n(e.get("radius"), 150.0)}
+			"teleport", "blink":
+				return {"shape": "circle", "radius": 30.0}
+			"repeat", "delay":
+				var inner := _indicator(e.get("effects"))
+				if not inner.is_empty():
+					return inner
+	return {}
+
+
+static func _n(v, def: float) -> float:
+	return float(v) if v is float or v is int else def
 
 
 static func _find_radius(list) -> float:
