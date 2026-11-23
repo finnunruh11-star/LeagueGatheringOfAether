@@ -11,7 +11,7 @@ signal match_started(config: Dictionary)
 signal back_to_lobby
 signal left_game(reason: String)
 
-const PROTOCOL := 1
+const PROTOCOL := 2
 const DEFAULT_PORT := 7777
 const TEAM_NAMES := ["Blue", "Red", "Neutral"]
 const TEAM_COLORS := [Color("4d8dff"), Color("ff5a4d"), Color("bbbbbb")]
@@ -24,6 +24,10 @@ var port := DEFAULT_PORT
 var characters := {}       # id -> built character definition
 var character_packs := {}  # id -> {id, files} raw files, sent to clients
 var maps := {}             # id -> map dictionary
+var items := {}            # id -> item definition
+var item_pack := {}        # raw items/ folder, sent to clients
+var item_ids: Array = []   # sorted ids; snapshots send items as index + 1
+var item_index := {}       # id -> index + 1
 var content_errors := PackedStringArray()
 var using_host_content := false
 
@@ -34,6 +38,7 @@ var settings := {"map": "two_lanes"}
 var world: Node = null
 var match_count := 0
 var cmdline := {}
+var debug_log := false  # --itemtest prints every damage/heal/proc
 var _ready_peers := {}
 var _next_bot := -1
 
@@ -66,12 +71,23 @@ func reload_content() -> void:
 		if def != null:
 			characters[id] = def
 	maps = Content.read_maps(content_errors)
+	item_pack = Content.read_item_pack(content_errors)
+	_build_items()
 	using_host_content = false
 	if not maps.has(settings.map) and not maps.is_empty():
 		settings.map = "two_lanes" if maps.has("two_lanes") else maps.keys()[0]
 	for e in content_errors:
 		push_warning("[content] " + e)
 	content_changed.emit()
+
+
+func _build_items() -> void:
+	items = Content.build_items(item_pack, content_errors)
+	item_ids = items.keys()
+	item_ids.sort()
+	item_index.clear()
+	for i in item_ids.size():
+		item_index[item_ids[i]] = i + 1
 
 
 func sorted_character_ids() -> Array:
@@ -194,6 +210,7 @@ func _rpc_register(pname: String, protocol: int) -> void:
 	_rpc_content_begin.rpc_id(id)
 	for cid in character_packs:
 		_rpc_character_pack.rpc_id(id, cid, character_packs[cid])
+	_rpc_item_pack.rpc_id(id, item_pack)
 	_rpc_content_end.rpc_id(id)
 	_broadcast_lobby()
 
@@ -218,6 +235,12 @@ func _rpc_character_pack(cid: String, pack: Dictionary) -> void:
 	var def = Content.build_character(pack, content_errors)
 	if def != null:
 		characters[cid] = def
+
+
+@rpc("authority", "call_remote", "reliable")
+func _rpc_item_pack(pack: Dictionary) -> void:
+	item_pack = pack
+	_build_items()
 
 
 @rpc("authority", "call_remote", "reliable")

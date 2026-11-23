@@ -1,0 +1,24 @@
+{
+  "name": "Spear of Shojin",
+  "cost": 3300,
+  "rarity": "legendary",
+  "from": [
+    "pickaxe",
+    "caulfields_warhammer",
+    "kindlegem"
+  ],
+  "tags": [
+    "Health",
+    "Damage",
+    "NonbootsMovement",
+    "AbilityHaste"
+  ],
+  "group": "haste_capstone",
+  "stats": {
+    "attack_damage": 55.0,
+    "max_hp": 500.0,
+    "ability_haste": 20.0
+  },
+  "description": "",
+  "passives": []
+}

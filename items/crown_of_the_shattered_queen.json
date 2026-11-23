@@ -1,0 +1,26 @@
+{
+  "name": "Crown of the Shattered Queen",
+  "cost": 2800,
+  "rarity": "mythic",
+  "from": [
+    "kindlegem",
+    "lost_chapter",
+    "amplifying_tome"
+  ],
+  "tags": [
+    "Health",
+    "SpellDamage",
+    "Mana",
+    "NonbootsMovement",
+    "AbilityHaste"
+  ],
+  "stats": {
+    "ability_power": 85.0,
+    "max_hp": 250.0,
+    "max_mana": 600.0,
+    "ability_haste": 20.0
+  },
+  "mythic_stats": {},
+  "description": "",
+  "passives": []
+}

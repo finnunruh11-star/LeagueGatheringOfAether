@@ -1,0 +1,23 @@
+{
+  "name": "Titanic Hydra",
+  "cost": 3300,
+  "rarity": "legendary",
+  "from": [
+    "tiamat",
+    "ruby_crystal",
+    "giants_belt"
+  ],
+  "tags": [
+    "Health",
+    "HealthRegen",
+    "Damage",
+    "OnHit"
+  ],
+  "group": "hydra",
+  "stats": {
+    "attack_damage": 30.0,
+    "max_hp": 500.0
+  },
+  "description": "",
+  "passives": []
+}

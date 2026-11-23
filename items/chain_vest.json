@@ -1,0 +1,16 @@
+{
+  "name": "Chain Vest",
+  "cost": 800,
+  "rarity": "epic",
+  "from": [
+    "cloth_armor"
+  ],
+  "tags": [
+    "Armor"
+  ],
+  "stats": {
+    "armor": 40.0
+  },
+  "description": "",
+  "passives": []
+}

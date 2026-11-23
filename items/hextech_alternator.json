@@ -1,0 +1,19 @@
+{
+  "name": "Hextech Alternator",
+  "cost": 1050,
+  "rarity": "epic",
+  "from": [
+    "amplifying_tome",
+    "ruby_crystal"
+  ],
+  "tags": [
+    "Health",
+    "SpellDamage"
+  ],
+  "stats": {
+    "ability_power": 25.0,
+    "max_hp": 150.0
+  },
+  "description": "",
+  "passives": []
+}

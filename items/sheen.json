@@ -1,0 +1,53 @@
+{
+  "name": "Sheen",
+  "cost": 700,
+  "rarity": "basic",
+  "tags": [
+    "OnHit"
+  ],
+  "stats": {},
+  "description": "",
+  "passives": [
+    {
+      "name": "Spellblade",
+      "unique": "spellblade_charge",
+      "description": "After you cast an ability, your next basic attack within 10s deals bonus physical damage equal to 100% of your base AD (1.5s cooldown).",
+      "on": "cast",
+      "if": "not has('spellblade_cd')",
+      "effects": [
+        {
+          "type": "mark",
+          "id": "spellblade",
+          "target": "self",
+          "duration": 10
+        }
+      ]
+    },
+    {
+      "name": "Spellblade",
+      "unique": "spellblade_hit",
+      "on": "attack",
+      "if": "has('spellblade')",
+      "effects": [
+        {
+          "type": "remove",
+          "id": "spellblade",
+          "target": "self"
+        },
+        {
+          "type": "mark",
+          "id": "spellblade_cd",
+          "target": "self",
+          "duration": 1.5
+        },
+        {
+          "type": "damage",
+          "damage_type": "physical",
+          "amount": "1.0 * base_ad",
+          "vfx": "star",
+          "color": "#9fd8ff"
+        }
+      ]
+    }
+  ]
+}

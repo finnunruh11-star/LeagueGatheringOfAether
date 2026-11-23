@@ -1,0 +1,18 @@
+{
+  "name": "Tiamat",
+  "cost": 1200,
+  "rarity": "epic",
+  "from": [
+    "pickaxe"
+  ],
+  "tags": [
+    "Damage",
+    "OnHit"
+  ],
+  "group": "hydra",
+  "stats": {
+    "attack_damage": 25.0
+  },
+  "description": "",
+  "passives": []
+}

@@ -1,0 +1,24 @@
+{
+  "name": "Youmuu's Ghostblade",
+  "cost": 3100,
+  "rarity": "mythic",
+  "from": [
+    "serrated_dirk",
+    "caulfields_warhammer"
+  ],
+  "tags": [
+    "Damage",
+    "Active",
+    "NonbootsMovement",
+    "ArmorPenetration",
+    "AbilityHaste"
+  ],
+  "stats": {
+    "attack_damage": 60.0,
+    "lethality": 18.0,
+    "ability_haste": 15.0
+  },
+  "mythic_stats": {},
+  "description": "",
+  "passives": []
+}

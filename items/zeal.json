@@ -1,0 +1,21 @@
+{
+  "name": "Zeal",
+  "cost": 1100,
+  "rarity": "epic",
+  "from": [
+    "cloak_of_agility",
+    "dagger"
+  ],
+  "tags": [
+    "CriticalStrike",
+    "AttackSpeed",
+    "NonbootsMovement"
+  ],
+  "stats": {
+    "bonus_attack_speed": 0.15,
+    "crit_chance": 0.15,
+    "move_speed_bonus": 0.05
+  },
+  "description": "",
+  "passives": []
+}

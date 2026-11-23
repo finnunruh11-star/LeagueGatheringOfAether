@@ -1,0 +1,22 @@
+{
+  "name": "Bandleglass Mirror",
+  "cost": 950,
+  "rarity": "epic",
+  "from": [
+    "faerie_charm",
+    "amplifying_tome"
+  ],
+  "tags": [
+    "SpellDamage",
+    "ManaRegen",
+    "CooldownReduction",
+    "AbilityHaste"
+  ],
+  "stats": {
+    "ability_power": 20.0,
+    "ability_haste": 10.0,
+    "mana_regen_percent": 0.5
+  },
+  "description": "",
+  "passives": []
+}

@@ -44,6 +44,8 @@ func _on_match_started(cfg: Dictionary) -> void:
 	w.start(cfg)
 	if Game.cmdline.has("selftest"):
 		add_child(preload("res://scripts/selftest.gd").new())
+	if Game.cmdline.has("itemtest"):
+		add_child(preload("res://scripts/itemtest.gd").new())
 
 
 func _set_screen(n: Node) -> void:

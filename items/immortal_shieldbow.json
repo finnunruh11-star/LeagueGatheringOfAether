@@ -1,0 +1,25 @@
+{
+  "name": "Immortal Shieldbow",
+  "cost": 3000,
+  "rarity": "legendary",
+  "from": [
+    "pickaxe",
+    "cloak_of_agility",
+    "vampiric_scepter"
+  ],
+  "tags": [
+    "Damage",
+    "CriticalStrike",
+    "AttackSpeed",
+    "LifeSteal",
+    "NonbootsMovement"
+  ],
+  "group": "lifeline",
+  "stats": {
+    "attack_damage": 50.0,
+    "crit_chance": 0.2,
+    "lifesteal": 0.1
+  },
+  "description": "",
+  "passives": []
+}

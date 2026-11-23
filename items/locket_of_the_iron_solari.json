@@ -1,0 +1,27 @@
+{
+  "name": "Locket of the Iron Solari",
+  "cost": 2300,
+  "rarity": "mythic",
+  "from": [
+    "lifewell_pendant",
+    "null_magic_mantle"
+  ],
+  "tags": [
+    "Health",
+    "SpellBlock",
+    "Armor",
+    "Aura",
+    "Active",
+    "MagicResist",
+    "AbilityHaste"
+  ],
+  "stats": {
+    "max_hp": 200.0,
+    "armor": 30.0,
+    "magic_resist": 30.0,
+    "ability_haste": 20.0
+  },
+  "mythic_stats": {},
+  "description": "",
+  "passives": []
+}

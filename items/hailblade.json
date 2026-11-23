@@ -1,0 +1,14 @@
+{
+  "name": "Hailblade",
+  "cost": 350,
+  "rarity": "jungle",
+  "tags": [
+    "LifeSteal",
+    "SpellVamp",
+    "Jungle"
+  ],
+  "group": "jungle",
+  "stats": {},
+  "description": "",
+  "passives": []
+}

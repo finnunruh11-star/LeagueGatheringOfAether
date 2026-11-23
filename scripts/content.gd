@@ -9,31 +9,58 @@ const MAX_FILE_BYTES := 8 * 1024 * 1024
 const SLOTS := ["q", "w", "e", "r"]
 const BASE_RADIUS := 24.0
 
+## Every stat a unit can have. Percent-style stats are fractions (0.3 = 30%).
+## Regen values are per second.
 const DEFAULT_STATS := {
 	"max_hp": 650.0,
-	"hp_regen": 3.0,
-	"move_speed": 330.0,
+	"hp_regen": 1.5,
+	"hp_regen_percent": 0.0,     # bonus % of base health regen
+	"max_mana": 0.0,             # 0 = manaless (abilities are free)
+	"mana_regen": 0.0,
+	"mana_regen_percent": 0.0,   # bonus % of base mana regen
+	"move_speed": 330.0,         # flat
+	"move_speed_bonus": 0.0,     # percent bonus
 	"attack_damage": 60.0,
-	"attack_speed": 0.8,
+	"ability_power": 0.0,
+	"attack_speed": 0.8,         # base attacks per second
+	"bonus_attack_speed": 0.0,   # percent bonus; final = attack_speed * (1 + bonus)
+	"attack_speed_cap": 2.5,
 	"attack_range": 125.0,
 	"armor": 20.0,
-	"ability_power": 0.0,
-	"lifesteal": 0.0,
+	"magic_resist": 30.0,
+	"crit_chance": 0.0,
+	"crit_damage": 1.75,
+	"ability_haste": 0.0,
+	"lethality": 0.0,            # flat armor pen (scales 60%..100% with your level)
+	"armor_pen": 0.0,            # percent armor pen
+	"magic_pen": 0.0,            # flat magic pen
+	"magic_pen_percent": 0.0,
+	"lifesteal": 0.0,            # heals % of basic attack / on-hit damage
+	"omnivamp": 0.0,             # heals % of all damage
+	"heal_power": 0.0,           # heal & shield power of heals/shields you give
+	"heal_received": 0.0,        # bonus healing & shielding you receive
+	"tenacity": 0.0,             # shortens stuns/roots/silences/slows
+	"slow_resist": 0.0,
+	"vision": 1000.0,
 	"size": 1.0,
 	"damage_mult": 1.0,
 	"damage_taken_mult": 1.0,
 	"cooldown_mult": 1.0,
 }
 
-const DEFAULT_PER_LEVEL := {"max_hp": 75.0, "attack_damage": 3.5, "armor": 2.0, "hp_regen": 0.3, "ability_power": 8.0}
+const DEFAULT_PER_LEVEL := {"max_hp": 75.0, "attack_damage": 3.5, "armor": 2.0, "magic_resist": 1.0, "hp_regen": 0.12,
+	"ability_power": 8.0, "bonus_attack_speed": 0.025}
 
 const EFFECT_TYPES := [
 	"damage", "heal", "shield", "stun", "root", "silence", "slow", "dot", "hot", "buff",
 	"invulnerable", "cleanse", "knockback", "pull", "dash", "teleport", "blink", "swap",
 	"projectile", "area", "beam", "zone", "trap", "summon", "delay", "repeat", "random",
 	"cooldown", "text", "sound",
+	"mana", "gold", "mark", "remove", "counter", "stasis", "stealth", "spellshield", "grievous",
+	"untargetable", "modify_damage", "transform", "vfx", "attack_reset", "item_cooldown",
 ]
 const NESTED_KEYS := ["effects", "on_hit", "on_end", "on_expire", "on_death", "options"]
+const ITEM_RARITIES := ["basic", "epic", "legendary", "mythic", "boots", "starter", "consumable", "jungle", "transform"]
 
 
 static func root_dir() -> String:
@@ -48,6 +75,10 @@ static func characters_dir() -> String:
 
 static func maps_dir() -> String:
 	return root_dir() + "maps"
+
+
+static func items_dir() -> String:
+	return root_dir() + "items"
 
 
 # ---------------------------------------------------------------- reading ---
@@ -103,6 +134,136 @@ static func read_maps(errors: PackedStringArray) -> Dictionary:
 		if m is Dictionary:
 			out[f.get_basename()] = m
 	return out
+
+
+## All files of the items/ folder (json + images) as one pack, sent to clients like characters.
+static func read_item_pack(errors: PackedStringArray) -> Dictionary:
+	var files := {}
+	if DirAccess.dir_exists_absolute(items_dir()):
+		_collect(items_dir(), "", files, errors, "items")
+	return {"id": "items", "files": files}
+
+
+static func build_items(pack: Dictionary, errors: PackedStringArray) -> Dictionary:
+	var out := {}
+	var holder := {"id": "items", "pack": pack, "textures": {}}
+	for f in pack.files:
+		if f.get_extension().to_lower() != "json" or f.get_file().begins_with("_"):
+			continue
+		var raw = parse_json(pack.files[f], "items/" + f, errors)
+		if not (raw is Dictionary):
+			continue
+		var id := str(f.get_file().get_basename())
+		var it := _item(id, raw, holder, errors)
+		if not it.is_empty():
+			out[id] = it
+	for id in out:
+		for c in out[id].from:
+			if not out.has(c):
+				errors.append("items/%s.json: component '%s' does not exist" % [id, c])
+		out[id].from = out[id].from.filter(func(c): return out.has(c))
+		if out[id].get("transform_into", "") != "" and not out.has(out[id].transform_into):
+			errors.append("items/%s.json: transform target '%s' does not exist" % [id, out[id].transform_into])
+	# Which items each item builds into (for the shop's recipe view).
+	for id in out:
+		out[id].into = []
+	for id in out:
+		for c in out[id].from:
+			if not out[c].into.has(id):
+				out[c].into.append(id)
+	return out
+
+
+static func _item(id: String, raw: Dictionary, holder: Dictionary, errors: PackedStringArray) -> Dictionary:
+	var where := "items/%s.json" % id
+	var it := {"id": id}
+	it.name = str(raw.get("name", id.capitalize()))
+	it.cost = int(raw.get("cost", 0))
+	it.from = []
+	var fr = raw.get("from", [])
+	if fr is Array:
+		for c in fr:
+			it.from.append(str(c))
+	it.rarity = str(raw.get("rarity", "legendary"))
+	if not ITEM_RARITIES.has(it.rarity):
+		errors.append("%s: unknown rarity '%s'" % [where, it.rarity])
+	it.tags = raw.get("tags", []) if raw.get("tags") is Array else []
+	it.description = str(raw.get("description", ""))
+	it.groups = []
+	var g = raw.get("group", [])
+	if g is String and g != "":
+		it.groups.append(g)
+	elif g is Array:
+		for x in g:
+			it.groups.append(str(x))
+	it.limit = int(raw.get("limit", 1 if it.rarity in ["legendary", "mythic", "boots", "jungle"] else 0))
+	it.stack = maxi(int(raw.get("stack", 1)), 1)
+	it.consumable = bool(raw.get("consumable", it.rarity == "consumable"))
+	it.buyable = bool(raw.get("buyable", it.rarity != "transform"))
+	it.transform_into = str(raw.get("transform_into", ""))
+	it.color = parse_color(raw.get("color"), _item_color(it))
+	it.short = str(raw.get("short", _abbrev(it.name)))
+	it.stats = {}
+	it.stats_mult = {}
+	it.mythic_stats = {}
+	it.dynamic = false
+	for pair in [["stats", it.stats], ["stats_mult", it.stats_mult], ["mythic_stats", it.mythic_stats]]:
+		var src = raw.get(pair[0], {})
+		if not (src is Dictionary):
+			continue
+		for k in src:
+			var v = src[k]
+			if v is float or v is int:
+				pair[1][k] = float(v)
+			elif v is String:
+				pair[1][k] = v
+				it.dynamic = true
+			else:
+				errors.append("%s: %s.%s must be a number or an expression" % [where, pair[0], k])
+	it.passives = []
+	var ps = raw.get("passives", [])
+	if ps is Dictionary:
+		ps = [ps]
+	if ps is Array:
+		for p in ps:
+			if p is Dictionary:
+				it.passives.append(p)
+				_validate(p.get("effects", []), "%s passive '%s'" % [where, p.get("name", "?")], errors)
+	it.active = null
+	var a = raw.get("active")
+	if a is Dictionary:
+		var ab := _ability(a, "item", {"id": id, "pack": holder.pack, "textures": holder.textures}, errors)
+		ab.cooldown = a.get("cooldown", 60.0)
+		ab.consume = bool(a.get("consume", it.consumable))
+		it.active = ab
+	it.icon = texture(holder, raw.icon) if raw.has("icon") else null
+	return it
+
+
+static func _item_color(it: Dictionary) -> Color:
+	var tags: Array = it.tags
+	if tags.has("SpellDamage"):
+		return Color(0.55, 0.45, 1.0)
+	if tags.has("CriticalStrike") or tags.has("AttackSpeed"):
+		return Color(1.0, 0.78, 0.3)
+	if tags.has("Damage"):
+		return Color(1.0, 0.45, 0.3)
+	if tags.has("Armor") or tags.has("SpellBlock"):
+		return Color(0.55, 0.8, 0.95)
+	if tags.has("Health"):
+		return Color(0.45, 0.9, 0.45)
+	if tags.has("ManaRegen") or tags.has("Mana"):
+		return Color(0.35, 0.6, 1.0)
+	return Color(0.75, 0.75, 0.8)
+
+
+static func _abbrev(n: String) -> String:
+	var out := ""
+	for w in n.replace("'", "").replace("-", " ").split(" ", false):
+		if w.to_lower() in ["of", "the", "s"]:
+			continue
+		out += w.substr(0, 1).to_upper()
+	return out.substr(0, 3)
 
 
 ## Parses JSON with readable errors. Lines starting with // are treated as comments.
@@ -219,6 +380,13 @@ static func _ability(a: Dictionary, slot: String, def: Dictionary, errors: Packe
 	ab.targeting = str(a.get("targeting", "direction"))
 	ab.range = a.get("range", 700.0)
 	ab.cast_time = a.get("cast_time", 0.0)
+	ab.cost = a.get("cost", 0.0)
+	ab.cost_type = str(a.get("cost_type", "mana"))
+	ab.max_rank = int(a.get("max_rank", 3 if slot == "r" else 5))
+	var ul = a.get("unlock_levels", [6, 11, 16] if slot == "r" else [1, 3, 5, 7, 9])
+	ab.unlock_levels = ul if ul is Array else [1, 3, 5, 7, 9]
+	# Abilities without any per-rank values get stronger automatically with rank.
+	ab.auto_rank = bool(a.get("auto_rank", not _has_rank_values(a)))
 	var effects = a.get("effects", [])
 	if effects is Dictionary:
 		effects = [effects]
@@ -231,6 +399,25 @@ static func _ability(a: Dictionary, slot: String, def: Dictionary, errors: Packe
 	ab.indicator_radius = _find_radius(effects)
 	ab.indicator = _indicator(effects)
 	return ab
+
+
+## True if an ability uses per-rank arrays ([60, 90, 120, ...]) or the `rank` variable anywhere.
+static func _has_rank_values(v) -> bool:
+	if v is Dictionary:
+		for k in v:
+			if k in ["color", "offset", "unlock_levels"]:
+				continue
+			if _has_rank_values(v[k]):
+				return true
+	elif v is Array:
+		if not v.is_empty() and (v[0] is float or v[0] is int):
+			return true
+		for x in v:
+			if _has_rank_values(x):
+				return true
+	elif v is String:
+		return v.contains("rank")
+	return false
 
 
 ## Describes how to draw the aiming indicator, from the ability's first effect.
@@ -266,6 +453,8 @@ static func _indicator(list) -> Dictionary:
 
 
 static func _n(v, def: float) -> float:
+	if v is Array and not v.is_empty():
+		v = v[v.size() - 1]
 	return float(v) if v is float or v is int else def
 
 
@@ -274,8 +463,8 @@ static func _find_radius(list) -> float:
 		return 0.0
 	for e in list:
 		if e is Dictionary:
-			if e.get("type") in ["area", "zone", "trap"] and (e.get("radius") is float or e.get("radius") is int):
-				return float(e.radius)
+			if e.get("type") in ["area", "zone", "trap"] and _n(e.get("radius"), 0.0) > 0.0:
+				return _n(e.get("radius"), 0.0)
 			for k in ["effects", "on_end"]:
 				var r := _find_radius(e.get(k))
 				if r > 0.0:
@@ -298,6 +487,10 @@ static func _validate(list, where: String, errors: PackedStringArray) -> void:
 		var t := str(e.get("type", ""))
 		if not EFFECT_TYPES.has(t):
 			errors.append("%s: unknown effect type '%s'" % [where, t])
+		if e.get("triggers") is Array:
+			for tr in e.triggers:
+				if tr is Dictionary:
+					_validate(tr.get("effects", []), where + " > triggers", errors)
 		for k in NESTED_KEYS:
 			if e.has(k):
 				if k == "options" and e[k] is Array:

@@ -1,0 +1,22 @@
+{
+  "name": "Aegis of the Legion",
+  "cost": 1200,
+  "rarity": "epic",
+  "from": [
+    "null_magic_mantle",
+    "cloth_armor"
+  ],
+  "tags": [
+    "SpellBlock",
+    "Armor",
+    "CooldownReduction",
+    "AbilityHaste"
+  ],
+  "stats": {
+    "armor": 30.0,
+    "magic_resist": 30.0,
+    "ability_haste": 10.0
+  },
+  "description": "",
+  "passives": []
+}

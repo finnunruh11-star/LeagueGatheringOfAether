@@ -1,0 +1,15 @@
+{
+  "name": "Doran's Shield",
+  "cost": 450,
+  "rarity": "starter",
+  "tags": [
+    "Health",
+    "HealthRegen"
+  ],
+  "group": "dorans",
+  "stats": {
+    "max_hp": 110.0
+  },
+  "description": "",
+  "passives": []
+}

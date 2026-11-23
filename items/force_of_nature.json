@@ -1,0 +1,22 @@
+{
+  "name": "Force of Nature",
+  "cost": 2800,
+  "rarity": "legendary",
+  "from": [
+    "negatron_cloak",
+    "ruby_crystal",
+    "winged_moonplate"
+  ],
+  "tags": [
+    "Health",
+    "SpellBlock",
+    "NonbootsMovement"
+  ],
+  "stats": {
+    "max_hp": 400.0,
+    "magic_resist": 60.0,
+    "move_speed_bonus": 0.05
+  },
+  "description": "",
+  "passives": []
+}

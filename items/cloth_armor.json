@@ -1,0 +1,13 @@
+{
+  "name": "Cloth Armor",
+  "cost": 300,
+  "rarity": "basic",
+  "tags": [
+    "Armor"
+  ],
+  "stats": {
+    "armor": 15.0
+  },
+  "description": "",
+  "passives": []
+}

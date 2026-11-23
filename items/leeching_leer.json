@@ -1,0 +1,21 @@
+{
+  "name": "Leeching Leer",
+  "cost": 1300,
+  "rarity": "epic",
+  "from": [
+    "ruby_crystal",
+    "amplifying_tome"
+  ],
+  "tags": [
+    "Health",
+    "SpellDamage",
+    "SpellVamp"
+  ],
+  "stats": {
+    "ability_power": 20.0,
+    "max_hp": 250.0,
+    "omnivamp": 0.05
+  },
+  "description": "",
+  "passives": []
+}

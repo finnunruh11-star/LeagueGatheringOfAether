@@ -1,0 +1,77 @@
+{
+  "name": "Luden's Tempest",
+  "cost": 3200,
+  "rarity": "mythic",
+  "from": [
+    "lost_chapter",
+    "blasting_wand"
+  ],
+  "tags": [
+    "SpellDamage",
+    "Mana",
+    "CooldownReduction",
+    "NonbootsMovement",
+    "MagicPenetration",
+    "AbilityHaste"
+  ],
+  "stats": {
+    "ability_power": 80.0,
+    "magic_pen": 6.0,
+    "max_mana": 600.0,
+    "ability_haste": 20.0
+  },
+  "mythic_stats": {
+    "magic_pen": 5
+  },
+  "description": "",
+  "passives": [
+    {
+      "name": "Echo",
+      "description": "Damaging an enemy with an ability also blasts it and up to 3 enemies near it for 100 + 10% AP magic damage, and gives you 15% move speed for 2s (10s cooldown).",
+      "on": "deal_damage",
+      "if": "is_ability and not is_dot",
+      "cooldown": 10,
+      "effects": [
+        {
+          "type": "damage",
+          "amount": "100 + 0.1 * ap",
+          "vfx": "magic",
+          "color": "#9fd8ff"
+        },
+        {
+          "type": "area",
+          "at": "target",
+          "radius": 450,
+          "exclude_target": true,
+          "max_targets": 3,
+          "sort": "nearest",
+          "show": false,
+          "effects": [
+            {
+              "type": "vfx",
+              "kind": "line",
+              "from": "origin",
+              "to": "target",
+              "color": "#9fd8ff"
+            },
+            {
+              "type": "damage",
+              "amount": "100 + 0.1 * ap",
+              "vfx": "magic",
+              "color": "#9fd8ff"
+            }
+          ]
+        },
+        {
+          "type": "buff",
+          "target": "self",
+          "id": "echo_speed",
+          "duration": 2,
+          "add": {
+            "move_speed_bonus": 0.15
+          }
+        }
+      ]
+    }
+  ]
+}

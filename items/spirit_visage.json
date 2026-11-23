@@ -1,0 +1,24 @@
+{
+  "name": "Spirit Visage",
+  "cost": 2900,
+  "rarity": "legendary",
+  "from": [
+    "spectres_cowl",
+    "kindlegem"
+  ],
+  "tags": [
+    "Health",
+    "SpellBlock",
+    "HealthRegen",
+    "CooldownReduction",
+    "AbilityHaste"
+  ],
+  "stats": {
+    "max_hp": 450.0,
+    "magic_resist": 60.0,
+    "ability_haste": 10.0,
+    "hp_regen_percent": 1.0
+  },
+  "description": "",
+  "passives": []
+}

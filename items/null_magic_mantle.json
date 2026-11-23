@@ -1,0 +1,13 @@
+{
+  "name": "Null-Magic Mantle",
+  "cost": 450,
+  "rarity": "basic",
+  "tags": [
+    "SpellBlock"
+  ],
+  "stats": {
+    "magic_resist": 25.0
+  },
+  "description": "",
+  "passives": []
+}

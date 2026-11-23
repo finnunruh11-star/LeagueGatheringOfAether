@@ -1,0 +1,13 @@
+{
+  "name": "Sapphire Crystal",
+  "cost": 350,
+  "rarity": "basic",
+  "tags": [
+    "Mana"
+  ],
+  "stats": {
+    "max_mana": 250.0
+  },
+  "description": "",
+  "passives": []
+}

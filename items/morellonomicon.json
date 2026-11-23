@@ -1,0 +1,22 @@
+{
+  "name": "Morellonomicon",
+  "cost": 3000,
+  "rarity": "legendary",
+  "from": [
+    "oblivion_orb",
+    "hextech_alternator",
+    "amplifying_tome"
+  ],
+  "tags": [
+    "Health",
+    "SpellDamage",
+    "MagicPenetration"
+  ],
+  "stats": {
+    "ability_power": 90.0,
+    "max_hp": 200.0,
+    "magic_pen": 10.0
+  },
+  "description": "",
+  "passives": []
+}

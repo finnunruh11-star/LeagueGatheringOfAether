@@ -1,0 +1,25 @@
+{
+  "name": "Ravenous Hydra",
+  "cost": 3400,
+  "rarity": "legendary",
+  "from": [
+    "tiamat",
+    "vampiric_scepter",
+    "caulfields_warhammer"
+  ],
+  "tags": [
+    "Damage",
+    "LifeSteal",
+    "CooldownReduction",
+    "OnHit",
+    "AbilityHaste"
+  ],
+  "group": "hydra",
+  "stats": {
+    "attack_damage": 65.0,
+    "ability_haste": 25.0,
+    "lifesteal": 0.1
+  },
+  "description": "",
+  "passives": []
+}

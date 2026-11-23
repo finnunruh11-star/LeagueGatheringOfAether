@@ -1,0 +1,26 @@
+{
+  "name": "Black Cleaver",
+  "cost": 3100,
+  "rarity": "legendary",
+  "from": [
+    "caulfields_warhammer",
+    "kindlegem",
+    "long_sword"
+  ],
+  "tags": [
+    "Health",
+    "Damage",
+    "CooldownReduction",
+    "OnHit",
+    "NonbootsMovement",
+    "ArmorPenetration",
+    "AbilityHaste"
+  ],
+  "stats": {
+    "attack_damage": 50.0,
+    "max_hp": 400.0,
+    "ability_haste": 30.0
+  },
+  "description": "",
+  "passives": []
+}

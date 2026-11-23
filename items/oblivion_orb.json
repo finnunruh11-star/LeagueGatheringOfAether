@@ -1,0 +1,16 @@
+{
+  "name": "Oblivion Orb",
+  "cost": 800,
+  "rarity": "epic",
+  "from": [
+    "amplifying_tome"
+  ],
+  "tags": [
+    "SpellDamage"
+  ],
+  "stats": {
+    "ability_power": 30.0
+  },
+  "description": "",
+  "passives": []
+}

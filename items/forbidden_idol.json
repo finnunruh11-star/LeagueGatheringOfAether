@@ -1,0 +1,17 @@
+{
+  "name": "Forbidden Idol",
+  "cost": 800,
+  "rarity": "epic",
+  "from": [
+    "faerie_charm"
+  ],
+  "tags": [
+    "ManaRegen"
+  ],
+  "stats": {
+    "mana_regen_percent": 0.5,
+    "heal_power": 0.08
+  },
+  "description": "",
+  "passives": []
+}

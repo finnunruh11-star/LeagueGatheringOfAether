@@ -1,0 +1,23 @@
+{
+  "name": "Sanguine Blade",
+  "cost": 3000,
+  "rarity": "legendary",
+  "from": [
+    "serrated_dirk",
+    "vampiric_scepter"
+  ],
+  "tags": [
+    "Damage",
+    "AttackSpeed",
+    "LifeSteal",
+    "SpellVamp",
+    "ArmorPenetration"
+  ],
+  "stats": {
+    "attack_damage": 50.0,
+    "lethality": 10.0,
+    "lifesteal": 0.12
+  },
+  "description": "",
+  "passives": []
+}

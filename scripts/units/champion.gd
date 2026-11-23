@@ -1,9 +1,13 @@
 class_name Champion
 extends Unit
 ## A player (or bot) controlled character built from a character definition.
+## Also owns everything per-player: ability ranks, mana, gold and items.
 
-const MAX_LEVEL := 18
+const MAX_LEVEL := 21
+const SKILL_POINT_LEVELS := 18
 const SLOTS := ["q", "w", "e", "r"]
+const ITEM_SLOTS := 6
+const SELL_RATIO := 0.7
 
 var peer := 0
 var def := {}
@@ -11,22 +15,35 @@ var player_name := ""
 var is_bot := false
 var cooldowns := {"q": 0.0, "w": 0.0, "e": 0.0, "r": 0.0}
 var cd_total := {"q": 1.0, "w": 1.0, "e": 1.0, "r": 1.0}
+var ranks := {"q": 0, "w": 0, "e": 0, "r": 0}
+var skill_points := 1
 var level := 1
 var xp := 0.0
 var xp_frac := 0.0
 var kills := 0
 var deaths := 0
+var assists := 0
+var gold := 0.0
+var energy := 0.0
+var items: Array = [null, null, null, null, null, null]  # {id, n, cd, cd_total}
+var counters := {}
 var respawn_timer := 0.0
 var recall_timer := 0.0
 var casting = null
 var amove = null
+var trig_list: Array = []      # [{tr, key, src, slot, name, color}]
+var trig_by_event := {}
 var trigger_counts := {}
 var trigger_cds := {}
 var interval_timers := {}
 var _trigger_depth := 0
+var _dynamic_stats := false
+var _dyn_t := 0.0
+var _energy_pos := Vector2.INF
 var bot_t := 0.0
 var bot_lane := 0
 var bot_wp := 1
+var bot_plan: Array = []
 var target_id := 0
 
 
@@ -51,6 +68,8 @@ func setup(d: Dictionary) -> void:
 	attack_def = def.attack
 	sprite_info = def.sprite
 	global_position = d.pos
+	gold = float(d.get("gold", 0.0))
+	_rebuild_triggers()
 
 
 func get_level() -> int:
@@ -61,9 +80,46 @@ func label() -> String:
 	return "%s (%s)" % [player_name, display_name]
 
 
+func uses_mana() -> bool:
+	return stats.max_mana > 0.0
+
+
 # --------------------------------------------------------------- commands ---
 
 func command(cmd: String, args: Array) -> void:
+	match cmd:
+		"rank_up":
+			if args.size() > 0 and args[0] is String:
+				rank_up(args[0])
+			return
+		"buy":
+			if args.size() > 0 and args[0] is String:
+				var err := buy(args[0])
+				if err != "":
+					world.fx("notice", {"peer": peer, "text": err})
+			return
+		"sell":
+			if args.size() > 0 and (args[0] is int or args[0] is float):
+				var err := sell(int(args[0]))
+				if err != "":
+					world.fx("notice", {"peer": peer, "text": err})
+			return
+		"swap_items":
+			if args.size() > 1 and (args[0] is int or args[0] is float) and (args[1] is int or args[1] is float):
+				var a := clampi(int(args[0]), 0, ITEM_SLOTS - 1)
+				var b := clampi(int(args[1]), 0, ITEM_SLOTS - 1)
+				var tmp = items[a]
+				items[a] = items[b]
+				items[b] = tmp
+				_items_changed()
+			return
+		"cheat":
+			if args.size() > 0 and args[0] is String and world.cheats_allowed():
+				cheat(args[0])
+			return
+		"autopilot":
+			is_bot = args.size() > 0 and bool(args[0])
+			return
 	if dead:
 		return
 	match cmd:
@@ -95,20 +151,31 @@ func command(cmd: String, args: Array) -> void:
 		"cast":
 			if args.size() >= 3 and args[0] is String and args[1] is Vector2 and (args[2] is int or args[2] is float):
 				cast(args[0], args[1], int(args[2]))
+		"item":
+			if args.size() >= 3 and (args[0] is int or args[0] is float) and args[1] is Vector2 and (args[2] is int or args[2] is float):
+				use_item(int(args[0]), args[1], int(args[2]))
 		"recall":
 			start_recall()
-		"autopilot":
-			is_bot = args.size() > 0 and bool(args[0])
 
 
 func cast(slot: String, aim: Vector2, tid: int) -> bool:
 	var ab = def.abilities.get(slot)
-	if ab == null or dead or cooldowns.get(slot, 0.0) > 0.0 or not can_cast() or casting != null:
+	if ab == null or int(ranks.get(slot, 0)) <= 0 or dead or cooldowns.get(slot, 0.0) > 0.0 or not can_cast() or casting != null:
 		return false
 	var ctx := _make_ctx(ab, aim, tid)
 	if ctx.is_empty():
 		return false
-	var cd := maxf(Effects.num(ab.cooldown, ctx, 6.0) * stats.cooldown_mult, 0.0)
+	var cost := ability_cost(ab, ctx)
+	if cost > 0.0:
+		if ab.cost_type == "health":
+			if hp <= cost:
+				return false
+			hp -= cost
+		else:
+			if mana < cost:
+				return false
+			mana -= cost
+	var cd := ability_cooldown(ab, ctx)
 	cooldowns[slot] = cd
 	cd_total[slot] = maxf(cd, 0.01)
 	_cancel_recall()
@@ -123,18 +190,40 @@ func cast(slot: String, aim: Vector2, tid: int) -> bool:
 	return true
 
 
+## Mana (or health) cost at the ability's current rank. Manaless champions pay nothing.
+func ability_cost(ab: Dictionary, ctx := {}) -> float:
+	if ab.cost_type != "health" and not uses_mana():
+		return 0.0
+	if ctx.is_empty():
+		ctx = {"caster": self, "rank": maxi(int(ranks.get(ab.slot, 1)), 1)}
+	return maxf(Effects.num(ab.cost, ctx, 0.0), 0.0)
+
+
+func ability_cooldown(ab: Dictionary, ctx := {}) -> float:
+	var r := maxi(int(ranks.get(ab.slot, 1)), 1)
+	if ctx.is_empty():
+		ctx = {"caster": self, "rank": r}
+	var cd := Effects.num(ab.cooldown, ctx, 6.0)
+	if ab.get("auto_rank", false):
+		cd *= 1.0 - (0.08 if ab.slot == "r" else 0.05) * (r - 1)
+	return maxf(cd * 100.0 / (100.0 + maxf(stats.ability_haste, -50.0)) * stats.cooldown_mult, 0.0)
+
+
 func _execute(ab: Dictionary, ctx: Dictionary) -> void:
 	if dead:
 		return
 	ctx.origin = global_position
 	world.fx("cast", {"p": global_position, "c": color, "v": net_id, "d": Vector2(ctx.dir).angle(), "s": ab.slot})
 	Effects.run(ab.effects, ctx)
-	trigger("cast", self, ctx.pos, {"slot": ab.slot})
+	trigger("cast", self, ctx.pos, {"cast_slot": ab.slot})
 
 
 func _make_ctx(ab: Dictionary, aim: Vector2, tid: int) -> Dictionary:
+	var r := maxi(int(ranks.get(ab.slot, 1)), 1)
 	var ctx := {"caster": self, "team": team, "ability": ab.name, "char": char_id, "color": color,
-		"origin": global_position, "target": self, "i": 0}
+		"origin": global_position, "target": self, "i": 0, "rank": r, "src_slot": ab.slot}
+	if ab.get("auto_rank", false) and ab.slot in SLOTS:
+		ctx.rank_mult = 1.0 + (0.5 if ab.slot == "r" else 0.25) * (r - 1)
 	var rng := Effects.num(ab.range, ctx, 700.0)
 	ctx.range = rng
 	var to := aim - global_position
@@ -160,55 +249,191 @@ func _make_ctx(ab: Dictionary, aim: Vector2, tid: int) -> Dictionary:
 
 
 func _unit_ok(t: Unit, enemy: bool) -> bool:
-	return not t.dead and t.targetable() and not t.is_structure and (t.team != team) == enemy
+	return not t.dead and t.targetable() and not t.is_structure and (t.team != team) == enemy and t.visible_to(team)
 
 
-func change_cooldown(slot: String, amount: float, reset: bool) -> void:
+## slot: q/w/e/r, "all" or "basic" (q, w and e). percent: reduce by that fraction of the remaining time.
+func change_cooldown(slot: String, amount: float, reset: bool, percent := false) -> void:
 	for s in SLOTS:
-		if slot == "all" or slot == s:
-			cooldowns[s] = 0.0 if reset else maxf(cooldowns[s] - amount, 0.0)
+		if slot == "all" or slot == s or (slot == "basic" and s != "r"):
+			if reset:
+				cooldowns[s] = 0.0
+			elif percent:
+				cooldowns[s] = maxf(cooldowns[s] * (1.0 - amount), 0.0)
+			else:
+				cooldowns[s] = maxf(cooldowns[s] - amount, 0.0)
+
+
+func change_item_cooldown(item_id: String, amount: float, reset: bool) -> void:
+	for inst in items:
+		if inst != null and (item_id == "all" or inst.id == item_id):
+			inst.cd = 0.0 if reset else maxf(inst.cd - amount, 0.0)
+
+
+# ------------------------------------------------------------------ ranks ---
+
+func can_rank_up(slot: String) -> bool:
+	var ab = def.abilities.get(slot)
+	if ab == null or skill_points <= 0:
+		return false
+	var r := int(ranks.get(slot, 0))
+	if r >= int(ab.max_rank):
+		return false
+	var ul: Array = ab.unlock_levels
+	var need := int(ul[r]) if r < ul.size() else 1
+	return level >= need
+
+
+func rank_up(slot: String) -> bool:
+	if not can_rank_up(slot):
+		return false
+	ranks[slot] += 1
+	skill_points -= 1
+	world.fx("rankup", {"v": net_id, "s": slot})
+	trigger("rank_up", self, null, {"cast_slot": slot})
+	return true
+
+
+func max_ranks() -> void:
+	for s in SLOTS:
+		var ab = def.abilities.get(s)
+		if ab != null:
+			ranks[s] = int(ab.max_rank)
+	skill_points = 0
 
 
 # ---------------------------------------------------------------- passive ---
 
-func trigger(event: String, target = null, pos = null, extra := {}, only := -1) -> bool:
-	if puppet or _trigger_depth > 2 or def.is_empty():
+## Collects the character passive's triggers plus every owned item's passives.
+## Passives with the same "unique" name (default: item id + index) don't stack.
+func _rebuild_triggers() -> void:
+	trig_list = []
+	var seen := {}
+	var ptr: Array = def.passive.triggers
+	for i in ptr.size():
+		trig_list.append({"tr": ptr[i], "key": "p%d" % i, "src": "passive", "slot": -1, "name": str(def.passive.name), "color": color})
+	for slot in ITEM_SLOTS:
+		var inst = items[slot]
+		if inst == null:
+			continue
+		var it = Game.items.get(inst.id)
+		if it == null:
+			continue
+		for j in it.passives.size():
+			var p: Dictionary = it.passives[j]
+			if not p.has("on"):
+				continue
+			var key := "%s#%d" % [inst.id, j]
+			var u := str(p.get("unique", key))
+			if seen.has(u):
+				continue
+			seen[u] = true
+			trig_list.append({"tr": p, "key": key, "src": inst.id, "slot": slot, "name": it.name, "color": it.color})
+	trig_by_event = {}
+	for r in trig_list:
+		var ev := str(r.tr.on)
+		if not trig_by_event.has(ev):
+			trig_by_event[ev] = []
+		trig_by_event[ev].append(r)
+
+
+func trigger(event: String, target = null, pos = null, extra := {}, only := "") -> bool:
+	if puppet or _trigger_depth > 3:
 		return false
+	var list = trig_by_event.get(event)
+	if list == null:
+		return _status_triggers(event, target, pos, extra) if only == "" else false
 	var fired := false
-	var trigs: Array = def.passive.triggers
-	for i in trigs.size():
-		var tr: Dictionary = trigs[i]
-		if (only >= 0 and i != only) or str(tr.get("on", "")) != event or trigger_cds.get(i, 0.0) > 0.0:
+	for r in list:
+		var tr: Dictionary = r.tr
+		if (only != "" and r.key != only) or trigger_cds.get(r.key, 0.0) > 0.0:
+			continue
+		if extra.get("is_proc", false) and event.begins_with("deal_damage") and not tr.get("procs", false):
 			continue
 		if event == "low_health" and hp > stats.max_hp * float(tr.get("threshold", 0.3)):
 			continue
-		if tr.has("every"):
-			trigger_counts[i] = int(trigger_counts.get(i, 0)) + 1
-			if int(trigger_counts[i]) % maxi(int(tr.every), 1) != 0:
-				continue
-		if tr.has("chance") and randf() > float(tr.chance):
-			continue
 		var tgt = target if is_instance_valid(target) else self
 		var tpos: Vector2 = pos if pos is Vector2 else tgt.global_position
-		var ctx := {"caster": self, "team": team, "ability": str(def.passive.name), "char": char_id, "color": color,
-			"origin": global_position, "target": tgt, "pos": tpos, "range": 600.0, "i": int(trigger_counts.get(i, 0)),
-			"dir": (tpos - global_position).normalized() if tpos.distance_to(global_position) > 1.0 else Vector2(facing, 0)}
+		var is_item: bool = r.src != "passive"
+		var ctx := {"caster": self, "team": team, "ability": r.name, "char": char_id, "color": r.color,
+			"origin": global_position, "target": tgt, "pos": tpos, "range": 600.0, "i": int(trigger_counts.get(r.key, 0)),
+			"dir": (tpos - global_position).normalized() if tpos.distance_to(global_position) > 1.0 else Vector2(facing, 0),
+			"rank": level, "proc": true, "src_slot": "item" if is_item else "passive",
+			"item": r.src if is_item else "", "item_slot": r.slot, "trigger_key": r.key}
 		ctx.merge(extra, true)
 		if tr.has("if") and Effects.num(tr["if"], ctx, 1.0) == 0.0:
 			continue
-		trigger_cds[i] = float(tr.get("cooldown", 0.0))
+		if tr.has("every"):
+			trigger_counts[r.key] = int(trigger_counts.get(r.key, 0)) + 1
+			ctx.i = trigger_counts[r.key]
+			if int(trigger_counts[r.key]) % maxi(int(Effects.num(tr.every, ctx, 1.0)), 1) != 0:
+				continue
+		if tr.has("chance") and randf() > Effects.num(tr.chance, ctx, 1.0):
+			continue
+		trigger_cds[r.key] = Effects.num(tr.get("cooldown", 0.0), ctx, 0.0)
+		if Game.debug_log and event != "interval":
+			print("[proc] t=%.2f %s: %s '%s' on %s" % [world.time, display_name, r.key, str(tr.get("name", r.name)), event])
 		_trigger_depth += 1
 		Effects.run(tr.get("effects"), ctx)
 		_trigger_depth -= 1
 		fired = true
+	if only == "" and _status_triggers(event, target, pos, extra):
+		fired = true
 	return fired
 
 
-func on_attack_hit(t) -> void:
-	trigger("attack", t)
+## Buffs/marks can carry their own "triggers" while they last (e.g. "your next 3 attacks
+## stun", Ardent Censer). They run as the status' giver, aimed at the event's target.
+func _status_triggers(event: String, target, pos, extra: Dictionary) -> bool:
+	var fired := false
+	for s in statuses.duplicate():
+		var trs = s.get("triggers")
+		if not (trs is Array):
+			continue
+		for j in trs.size():
+			var tr = trs[j]
+			if not (tr is Dictionary) or str(tr.get("on", "")) != event:
+				continue
+			var key := "s:%s:%d" % [s.key, j]
+			if trigger_cds.get(key, 0.0) > 0.0:
+				continue
+			if extra.get("is_proc", false) and event.begins_with("deal_damage") and not tr.get("procs", false):
+				continue
+			var giver = s.source if is_instance_valid(s.source) and not s.source.dead else self
+			var tgt = target if is_instance_valid(target) else self
+			var tpos: Vector2 = pos if pos is Vector2 else tgt.global_position
+			var ctx := {"caster": giver, "team": giver.team, "ability": str(s.get("id", "buff")), "char": giver.char_id,
+				"color": giver.color, "origin": global_position, "target": tgt, "pos": tpos, "range": 600.0, "holder": self,
+				"dir": (tpos - global_position).normalized() if tpos.distance_to(global_position) > 1.0 else Vector2(facing, 0),
+				"rank": giver.get_level(), "proc": true, "src_slot": "passive", "i": int(s.get("fired", 0))}
+			ctx.merge(extra, true)
+			if tr.has("if") and Effects.num(tr["if"], ctx, 1.0) == 0.0:
+				continue
+			s.fired = int(s.get("fired", 0)) + 1
+			if tr.has("every") and int(s.fired) % maxi(int(Effects.num(tr.every, ctx, 1.0)), 1) != 0:
+				continue
+			trigger_cds[key] = Effects.num(tr.get("cooldown", 0.0), ctx, 0.0)
+			_trigger_depth += 1
+			Effects.run(tr.get("effects"), ctx)
+			_trigger_depth -= 1
+			fired = true
+			var charges := int(Effects.num(tr.get("charges", 0), ctx, 0.0))
+			if bool(tr.get("consume", false)) or (charges > 0 and int(s.fired) >= charges):
+				statuses.erase(s)
+				stats_dirty = true
+				break
+	return fired
 
 
-func on_damaged(amount: float, src) -> void:
+func on_attack_hit(t, crit := false) -> void:
+	energy = minf(energy + 6.0, 100.0)
+	if energy >= 100.0 and trig_by_event.has("energized"):
+		energy = 0.0
+		trigger("energized", t, null, {"crit_hit": crit, "onhit": true})
+	trigger("attack", t, null, {"crit_hit": crit, "onhit": true})
+
+
+func on_damaged(_amount: float, src) -> void:
 	_cancel_recall()
 	trigger("damaged", src)
 	if not dead and hp < stats.max_hp * 0.5:
@@ -217,9 +442,15 @@ func on_damaged(amount: float, src) -> void:
 
 func on_kill(victim) -> void:
 	var p: Vector2 = victim.global_position if is_instance_valid(victim) else global_position
-	trigger("kill", self, p)
+	trigger("kill", victim, p)
 	if victim is Champion:
-		trigger("champion_kill", self, p)
+		trigger("champion_kill", victim, p)
+
+
+func on_takedown(victim, assist: bool) -> void:
+	if assist:
+		assists += 1
+	trigger("takedown", victim, victim.global_position if is_instance_valid(victim) else global_position, {"amount": 0.0 if assist else 1.0})
 
 
 func _cheat_death() -> bool:
@@ -228,21 +459,298 @@ func _cheat_death() -> bool:
 		return true
 	return false
 
+
+func change_counter(id: String, e: Dictionary, ctx: Dictionary) -> void:
+	var v := float(counters.get(id, 0.0))
+	if e.has("set"):
+		v = Effects.num(e.set, ctx, 0.0)
+	v += Effects.num(e.get("add"), ctx, 0.0)
+	if e.has("mult"):
+		v *= Effects.num(e.mult, ctx, 1.0)
+	if e.has("max"):
+		v = minf(v, Effects.num(e.max, ctx, v))
+	v = maxf(v, Effects.num(e.get("min"), ctx, 0.0))
+	counters[id] = v
+	stats_dirty = true
+
+
+# ------------------------------------------------------------------ items ---
+
+func item_def(slot: int):
+	if slot < 0 or slot >= ITEM_SLOTS or items[slot] == null:
+		return null
+	return Game.items.get(items[slot].id)
+
+
+func has_item(id: String) -> bool:
+	for inst in items:
+		if inst != null and inst.id == id:
+			return true
+	return false
+
+
+func count_items(rarity: String) -> int:
+	var n := 0
+	for inst in items:
+		if inst != null:
+			var it = Game.items.get(inst.id)
+			if it != null and (rarity == "" or it.rarity == rarity):
+				n += 1
+	return n
+
+
+func can_shop() -> bool:
+	if dead or world.map.data.get("shop_anywhere", false) or world.cheats_allowed():
+		return true
+	return global_position.distance_to(world.map.spawn_point(team)) <= world.map.fountain_radius * 1.25
+
+
+## What buying `id` would cost right now, after the value of owned components
+## it would use up. Returns {cost, uses: [item slots consumed]}.
+func price_for(id: String) -> Dictionary:
+	var it = Game.items.get(id)
+	if it == null:
+		return {"cost": 999999, "uses": []}
+	var used := []
+	var discount := _discount(it, used)
+	return {"cost": maxi(it.cost - discount, 0), "uses": used}
+
+
+func _discount(it: Dictionary, used: Array) -> int:
+	var total := 0
+	for c in it.from:
+		var found := -1
+		for s in ITEM_SLOTS:
+			if items[s] != null and items[s].id == c and not used.has(s):
+				found = s
+				break
+		if found >= 0:
+			used.append(found)
+			total += int(Game.items[c].cost)
+		elif Game.items.has(c):
+			total += _discount(Game.items[c], used)
+	return total
+
+
+## Returns "" if the purchase is allowed, otherwise the reason why not.
+func check_buy(id: String) -> String:
+	var it = Game.items.get(id)
+	if it == null or not it.buyable:
+		return "That item can't be bought"
+	if not can_shop():
+		return "You can only shop in your base (or while dead)"
+	var p := price_for(id)
+	if gold + 0.01 < p.cost:
+		return "Not enough gold (%d needed)" % p.cost
+	var uses: Array = p.uses
+	for s in ITEM_SLOTS:
+		var inst = items[s]
+		if inst == null or uses.has(s):
+			continue
+		var other = Game.items.get(inst.id)
+		if other == null:
+			continue
+		if it.rarity == "mythic" and other.rarity == "mythic":
+			return "You can only own one Mythic item"
+		for g in it.groups:
+			if other.groups.has(g):
+				return "You can only own one %s item" % str(g).replace("_", " ").capitalize()
+		if it.rarity == "boots" and other.rarity == "boots":
+			return "You can only own one pair of boots"
+		if inst.id == id and it.limit > 0 and _count_id(id, uses) >= it.limit:
+			return "You can only own %d of that" % it.limit
+	if _stack_slot(id) < 0 and _free_slot(uses) < 0:
+		return "Your inventory is full"
+	return ""
+
+
+func _count_id(id: String, skip: Array) -> int:
+	var n := 0
+	for s in ITEM_SLOTS:
+		if items[s] != null and items[s].id == id and not skip.has(s):
+			n += int(items[s].n)
+	return n
+
+
+func _stack_slot(id: String) -> int:
+	var it = Game.items.get(id)
+	if it == null or it.stack <= 1:
+		return -1
+	for s in ITEM_SLOTS:
+		if items[s] != null and items[s].id == id and int(items[s].n) < it.stack:
+			return s
+	return -1
+
+
+func _free_slot(freed: Array = []) -> int:
+	for s in ITEM_SLOTS:
+		if items[s] == null:
+			return s
+	return freed[0] if not freed.is_empty() else -1
+
+
+func buy(id: String) -> String:
+	var err := check_buy(id)
+	if err != "":
+		return err
+	var p := price_for(id)
+	gold -= p.cost
+	var stack := _stack_slot(id)
+	if stack >= 0:
+		items[stack].n += 1
+	else:
+		var freed: Array = p.uses
+		freed.sort()
+		for s in freed:
+			items[s] = null
+		var slot: int = freed[0] if not freed.is_empty() else _free_slot()
+		items[slot] = {"id": id, "n": 1, "cd": 0.0, "cd_total": 1.0}
+	_items_changed()
+	world.fx("buy", {"v": net_id, "i": id})
+	trigger("buy", self, null, {"amount": float(p.cost)})
+	return ""
+
+
+func sell(slot: int) -> String:
+	var it = item_def(slot)
+	if it == null:
+		return ""
+	if not can_shop():
+		return "You can only sell in your base (or while dead)"
+	gold += floorf(it.cost * SELL_RATIO)
+	items[slot].n -= 1
+	if items[slot].n <= 0:
+		items[slot] = null
+	_items_changed()
+	return ""
+
+
+## Replaces an item (e.g. Tear of the Goddess line upgrades, jungle pets evolving).
+func transform_item(slot: int, into: String) -> void:
+	if slot < 0 or slot >= ITEM_SLOTS or items[slot] == null or not Game.items.has(into):
+		return
+	items[slot] = {"id": into, "n": 1, "cd": 0.0, "cd_total": 1.0}
+	_items_changed()
+	world.fx("text", {"pos": global_position + Vector2(0, -90), "text": Game.items[into].name + "!", "color": Color(1, 0.85, 0.4), "size": 22})
+
+
+func _items_changed() -> void:
+	_rebuild_triggers()
+	_dynamic_stats = false
+	for inst in items:
+		if inst != null:
+			var it = Game.items.get(inst.id)
+			if it != null and it.dynamic:
+				_dynamic_stats = true
+	stats_dirty = true
+
+
+func use_item(slot: int, aim: Vector2, tid: int) -> bool:
+	var it = item_def(slot)
+	if it == null or it.active == null or dead or has_status("stasis"):
+		return false
+	var inst: Dictionary = items[slot]
+	if inst.cd > 0.0:
+		return false
+	var ab: Dictionary = it.active
+	var ctx := _make_ctx(ab, aim, tid)
+	if ctx.is_empty():
+		return false
+	ctx.ability = it.name
+	ctx.src_slot = "item"
+	ctx.item = inst.id
+	ctx.item_slot = slot
+	ctx.rank = level
+	ctx.color = it.color
+	ctx.erase("rank_mult")
+	var cd := maxf(Effects.num(ab.cooldown, ctx, 60.0), 0.0)
+	inst.cd = cd
+	inst.cd_total = maxf(cd, 0.01)
+	_cancel_recall()
+	if ab.targeting != "self":
+		face(ctx.pos)
+	world.fx("cast", {"p": global_position, "c": it.color, "v": net_id, "d": Vector2(ctx.dir).angle(), "s": "item"})
+	Effects.run(ab.effects, ctx)
+	if ab.get("consume", false) and items[slot] == inst:
+		inst.n -= 1
+		if inst.n <= 0:
+			items[slot] = null
+			_items_changed()
+	trigger("item_used", self, ctx.pos, {"cast_slot": inst.id})
+	return true
+
+
+func _extra_stats(st: Dictionary, mult: Dictionary) -> void:
+	var legendary := 0
+	var mythic = null
+	for inst in items:
+		if inst == null:
+			continue
+		var it = Game.items.get(inst.id)
+		if it == null:
+			continue
+		if it.rarity == "legendary":
+			legendary += 1
+		elif it.rarity == "mythic":
+			mythic = it
+		for k in it.stats:
+			var v = it.stats[k]
+			st[k] = float(st.get(k, 0.0)) + (v if v is float else Effects.num(v, {"caster": self, "target": self, "rank": level}, 0.0))
+		for k in it.stats_mult:
+			var v = it.stats_mult[k]
+			mult[k] = float(mult.get(k, 1.0)) * (v if v is float else Effects.num(v, {"caster": self, "target": self, "rank": level}, 1.0))
+	if mythic != null and legendary > 0:
+		for k in mythic.mythic_stats:
+			var v = mythic.mythic_stats[k]
+			st[k] = float(st.get(k, 0.0)) + legendary * (v if v is float else Effects.num(v, {"caster": self, "target": self, "rank": level}, 0.0))
+
+
+# ------------------------------------------------------------------- gold ---
+
+func add_gold(amount: float, at = null) -> void:
+	if amount == 0.0 or puppet:
+		return
+	gold = maxf(gold + amount, 0.0)
+	if amount >= 1.0 and at is Vector2:
+		world.fx("gold", {"peer": peer, "p": at, "a": amount})
+
+
+func cheat(what: String) -> void:
+	match what:
+		"level":
+			if level < MAX_LEVEL:
+				xp = 0.0
+				_level_up()
+		"gold":
+			gold += 1000.0
+		"cd":
+			change_cooldown("all", 0.0, true)
+			change_item_cooldown("all", 0.0, true)
+			mana = stats.max_mana
+		"ranks":
+			max_ranks()
+
+
 # ------------------------------------------------------------------ think ---
 
 func _think(delta: float) -> void:
 	for s in SLOTS:
 		if cooldowns[s] > 0.0:
 			cooldowns[s] = maxf(cooldowns[s] - delta, 0.0)
-	for k in trigger_cds:
-		trigger_cds[k] -= delta
-	var trigs: Array = def.passive.triggers
-	for i in trigs.size():
-		if str(trigs[i].get("on", "")) == "interval":
-			interval_timers[i] = float(interval_timers.get(i, 0.0)) + delta
-			if interval_timers[i] >= maxf(float(trigs[i].get("interval", 5.0)), 0.1):
-				interval_timers[i] = 0.0
-				trigger("interval", self, null, {}, i)
+	_tick_items(delta)
+	if _energy_pos != Vector2.INF:
+		energy = minf(energy + global_position.distance_to(_energy_pos) / 24.0, 100.0)
+	_energy_pos = global_position
+	if _dynamic_stats:
+		_dyn_t -= delta
+		if _dyn_t <= 0.0:
+			_dyn_t = 0.25
+			stats_dirty = true
+	for r in trig_by_event.get("interval", []):
+		interval_timers[r.key] = float(interval_timers.get(r.key, 0.0)) + delta
+		if interval_timers[r.key] >= maxf(float(r.tr.get("interval", 5.0)), 0.1):
+			interval_timers[r.key] = 0.0
+			trigger("interval", self, null, {}, r.key)
 	if casting != null:
 		casting.time -= delta
 		if casting.time <= 0.0:
@@ -266,8 +774,16 @@ func _think(delta: float) -> void:
 				amove = null
 
 
+func _tick_items(delta: float) -> void:
+	for k in trigger_cds:
+		trigger_cds[k] -= delta
+	for inst in items:
+		if inst != null and inst.cd > 0.0:
+			inst.cd = maxf(inst.cd - delta, 0.0)
+
+
 func _act(delta: float) -> void:
-	if casting != null or recall_timer > 0.0:
+	if casting != null or recall_timer > 0.0 or has_status("stasis"):
 		velocity = Vector2.ZERO
 		return
 	super._act(delta)
@@ -307,6 +823,8 @@ func xp_to_next() -> float:
 
 func _level_up() -> void:
 	level += 1
+	if level <= SKILL_POINT_LEVELS:
+		skill_points += 1
 	for k in def.per_level:
 		base_stats[k] = float(base_stats.get(k, 0.0)) + def.per_level[k]
 	recompute_stats()
@@ -319,13 +837,18 @@ func _on_death() -> void:
 	casting = null
 	recall_timer = 0.0
 	amove = null
+	energy = 0.0
 	respawn_timer = world.respawn_time(level)
+	trigger("death", self)
 
 
 func _dead_process(delta: float) -> void:
 	for s in SLOTS:
 		cooldowns[s] = maxf(cooldowns[s] - delta, 0.0)
+	_tick_items(delta)
 	respawn_timer -= delta
+	if is_bot:
+		_bot_shop()
 	if respawn_timer <= 0.0:
 		respawn()
 
@@ -336,12 +859,17 @@ func respawn() -> void:
 	teleport(world.map.spawn_point(team) + Vector2(randf_range(-40, 40), randf_range(-40, 40)))
 	recompute_stats()
 	hp = stats.max_hp
+	mana = stats.max_mana
 	flags = 0
 	world.fx("spawn", {"p": global_position, "c": team_color(), "r": radius * 2.0})
 	trigger("spawn", self)
 
 
 # ---------------------------------------------------------------- network ---
+
+const HUD_STATS := ["attack_speed", "armor", "magic_resist", "ability_haste", "crit_chance", "lethality", "armor_pen",
+	"magic_pen", "magic_pen_percent", "lifesteal", "omnivamp", "tenacity", "heal_power", "hp_regen", "mana_regen", "crit_damage"]
+
 
 func net_state() -> PackedFloat32Array:
 	var s := super.net_state()
@@ -350,13 +878,28 @@ func net_state() -> PackedFloat32Array:
 		f |= F_RECALL
 	if casting != null:
 		f |= F_CAST
+	if energy >= 100.0 and trig_by_event.has("energized"):
+		f |= F_ENERGIZED
 	s[5] = f
 	var tid := 0
 	if is_instance_valid(attack_target):
 		tid = attack_target.net_id
 	s.append_array([level, xp / xp_to_next(), respawn_timer, recall_timer, kills, deaths, tid,
 		cooldowns.q, cooldowns.w, cooldowns.e, cooldowns.r, cd_total.q, cd_total.w, cd_total.e, cd_total.r,
-		stats.attack_range, stats.move_speed, stats.attack_damage, stats.ability_power])
+		stats.attack_range, stats.move_speed, stats.attack_damage, stats.ability_power,
+		mana, stats.max_mana, gold, skill_points, ranks.q, ranks.w, ranks.e, ranks.r, assists, energy])
+	for inst in items:
+		if inst == null:
+			s.append_array([0, 0, 0, 1])
+		else:
+			s.append_array([Game.item_index.get(inst.id, 0), inst.n, inst.cd, inst.cd_total])
+	for k in HUD_STATS:
+		var v: float = stats.get(k, 0.0)
+		if k == "hp_regen":
+			v *= 1.0 + stats.hp_regen_percent
+		elif k == "mana_regen":
+			v *= 1.0 + stats.mana_regen_percent
+		s.append(v)
 	return s
 
 
@@ -377,6 +920,36 @@ func apply_net_state(s: PackedFloat32Array) -> void:
 	stats.move_speed = s[b + 16]
 	stats.attack_damage = s[b + 17]
 	stats.ability_power = s[b + 18]
+	mana = s[b + 19]
+	stats.max_mana = s[b + 20]
+	gold = s[b + 21]
+	skill_points = int(s[b + 22])
+	for i in 4:
+		ranks[SLOTS[i]] = int(s[b + 23 + i])
+	assists = int(s[b + 27])
+	energy = s[b + 28]
+	var o := b + 29
+	var changed := false
+	for i in ITEM_SLOTS:
+		var idx := int(s[o + i * 4])
+		var id: String = Game.item_ids[idx - 1] if idx > 0 and idx <= Game.item_ids.size() else ""
+		if id == "":
+			if items[i] != null:
+				changed = true
+			items[i] = null
+		else:
+			if items[i] == null or items[i].id != id:
+				changed = true
+				items[i] = {"id": id, "n": 1, "cd": 0.0, "cd_total": 1.0}
+			items[i].n = int(s[o + i * 4 + 1])
+			items[i].cd = s[o + i * 4 + 2]
+			items[i].cd_total = s[o + i * 4 + 3]
+	o += ITEM_SLOTS * 4
+	for i in HUD_STATS.size():
+		if o + i < s.size():
+			stats[HUD_STATS[i]] = s[o + i]
+	if changed:
+		_rebuild_triggers()
 
 
 func _physics_process(delta: float) -> void:
@@ -385,6 +958,8 @@ func _physics_process(delta: float) -> void:
 		xp_frac = xp / xp_to_next()
 		if recall_timer > 0.0:
 			flags |= F_RECALL
+		if energy >= 100.0 and trig_by_event.has("energized"):
+			flags |= F_ENERGIZED
 
 
 # ---------------------------------------------------------------- drawing ---
@@ -420,7 +995,12 @@ func _draw_overlay(n: Node2D) -> void:
 		return
 	var top := bar_top()
 	var font := ThemeDB.fallback_font
-	var lx := -bar_width() * 0.5 - 20.0
+	var w := bar_width()
+	if stats.max_mana > 0.0:
+		var mr := Rect2(-w * 0.5, top + bar_height() + 1.0, w, 3.0)
+		n.draw_rect(mr.grow(1.0), Color(0.04, 0.04, 0.07, 0.9))
+		n.draw_rect(Rect2(mr.position, Vector2(w * clampf(mana / stats.max_mana, 0.0, 1.0), mr.size.y)), Color(0.35, 0.6, 1.0))
+	var lx := -w * 0.5 - 20.0
 	n.draw_rect(Rect2(lx, top - 3, 17, 15), Color(0.06, 0.06, 0.09, 0.95))
 	n.draw_rect(Rect2(lx, top - 3, 17, 15), ring_color(), false, 1.0)
 	n.draw_string(font, Vector2(lx, top + 9), str(level), HORIZONTAL_ALIGNMENT_CENTER, 17, 12, Color(1, 0.9, 0.5))
@@ -435,13 +1015,18 @@ func _bot_think(delta: float) -> void:
 	if bot_t > 0.0 or casting != null or forced != null:
 		return
 	bot_t = 0.25 + randf() * 0.15
+	_bot_level_up()
 	var home := world.map.spawn_point(team)
-	if global_position.distance_to(home) < world.map.fountain_radius and hp < stats.max_hp * 0.9:
+	var at_home := global_position.distance_to(home) < world.map.fountain_radius
+	if at_home:
+		_bot_shop()
+	if at_home and (hp < stats.max_hp * 0.9 or (uses_mana() and mana < stats.max_mana * 0.6)):
 		move_goal = null
 		attack_target = null
 		amove = null
 		return
-	if hp < stats.max_hp * 0.28:
+	if hp < stats.max_hp * 0.28 or (not at_home and gold >= 1400.0 and world.map.lane_count() > 0
+			and world.nearest_enemy(global_position, team, 1100.0, true) == null):
 		amove = null
 		attack_target = null
 		if recall_timer <= 0.0:
@@ -452,6 +1037,7 @@ func _bot_think(delta: float) -> void:
 		return
 	if recall_timer > 0.0:
 		return
+	_bot_items()
 	var foe := world.nearest_enemy(global_position, team, 850.0, true)
 	if foe != null:
 		_bot_cast(foe)
@@ -482,15 +1068,29 @@ func _bot_think(delta: float) -> void:
 	amove = goal
 
 
+func _bot_level_up() -> void:
+	var guard := 0
+	while skill_points > 0 and guard < 8:
+		guard += 1
+		var done := false
+		for s in ["r", "q", "w", "e"]:
+			if can_rank_up(s):
+				rank_up(s)
+				done = true
+				break
+		if not done:
+			return
+
+
 func _bot_cast(foe: Unit) -> void:
 	var order := SLOTS.duplicate()
 	order.shuffle()
 	var d := global_position.distance_to(foe.global_position)
 	for slot in order:
 		var ab = def.abilities.get(slot)
-		if ab == null or cooldowns[slot] > 0.0:
+		if ab == null or cooldowns[slot] > 0.0 or int(ranks[slot]) <= 0 or mana < ability_cost(ab):
 			continue
-		var rng := Effects.num(ab.range, {"caster": self, "target": foe}, 700.0)
+		var rng := Effects.num(ab.range, {"caster": self, "target": foe, "rank": ranks[slot]}, 700.0)
 		match ab.targeting:
 			"self":
 				if d > maxf(ab.indicator_radius, 320.0) + 40.0:
@@ -506,6 +1106,118 @@ func _bot_cast(foe: Unit) -> void:
 					continue
 		if cast(slot, foe.global_position + foe.velocity * 0.25, foe.net_id):
 			return
+
+
+## Bots use potions when hurt and fire offensive actives at nearby enemy champions.
+func _bot_items() -> void:
+	var foe := world.nearest_enemy(global_position, team, 600.0, true)
+	for i in ITEM_SLOTS:
+		var it = item_def(i)
+		if it == null or it.active == null or items[i].cd > 0.0:
+			continue
+		if it.consumable:
+			if hp < stats.max_hp * 0.55 and not has_status("hot"):
+				use_item(i, global_position, net_id)
+			continue
+		if foe == null:
+			continue
+		var ab: Dictionary = it.active
+		match ab.targeting:
+			"ally":
+				if hp < stats.max_hp * 0.5:
+					use_item(i, global_position, net_id)
+			"self":
+				if hp < stats.max_hp * 0.4 or randf() < 0.3:
+					use_item(i, foe.global_position, foe.net_id)
+			_:
+				use_item(i, foe.global_position, foe.net_id)
+
+
+## Bots pick a simple build for their role the first time they shop, then buy
+## the next item (or its most expensive affordable component) whenever possible.
+func _bot_shop() -> void:
+	if Game.items.is_empty() or not can_shop():
+		return
+	if bot_plan.is_empty():
+		bot_plan = _bot_make_plan()
+	for attempt in 6:
+		var goal := ""
+		for id in bot_plan:
+			if not has_item(id) and Game.items.has(id):
+				goal = id
+				break
+		if goal == "":
+			return
+		var step := _bot_step(goal)
+		if step == "":
+			if check_buy(goal).begins_with("Not enough gold") or check_buy(goal).begins_with("Your inventory"):
+				return
+			bot_plan.erase(goal)
+			continue
+		var err := buy(step)
+		if err != "":
+			if err.begins_with("Not enough gold") or err.begins_with("Your inventory"):
+				return
+			bot_plan.erase(goal)
+
+
+func _bot_step(id: String) -> String:
+	if price_for(id).cost <= gold and check_buy(id) == "":
+		return id
+	var best := ""
+	var best_cost := 0
+	for c in Game.items[id].from:
+		if has_item(c):
+			continue
+		var s := _bot_step(c)
+		if s != "" and int(Game.items[s].cost) > best_cost:
+			best = s
+			best_cost = int(Game.items[s].cost)
+	return best
+
+
+func _bot_make_plan() -> Array:
+	var role := "bruiser"
+	if float(def.stats.get("ability_power", 0.0)) >= 25.0 or float(def.stats.get("max_mana", 0.0)) > 0.0:
+		role = "mage"
+	elif attack_def.ranged:
+		role = "marksman"
+	var want: String = {"mage": "SpellDamage", "marksman": "CriticalStrike", "bruiser": "Health"}[role]
+	var also: String = {"mage": "SpellDamage", "marksman": "AttackSpeed", "bruiser": "Damage"}[role]
+	var mythics := []
+	var legend := []
+	for id in Game.items:
+		var it = Game.items[id]
+		if not it.buyable or not it.tags.has(want):
+			continue
+		if it.rarity == "mythic":
+			mythics.append(id)
+		elif it.rarity == "legendary" and (it.tags.has(also) or role == "mage"):
+			legend.append(id)
+	mythics.shuffle()
+	legend.shuffle()
+	var plan := []
+	var boots: String = {"mage": "sorcerers_shoes", "marksman": "berserkers_greaves", "bruiser": "plated_steelcaps"}[role]
+	if Game.items.has("boots"):
+		plan.append("boots")
+	if not mythics.is_empty():
+		plan.append(mythics[0])
+	plan.append(boots)
+	var groups := {}
+	for id in legend:
+		var gs: Array = Game.items[id].groups
+		var clash := false
+		for g in gs:
+			if groups.has(g):
+				clash = true
+		if clash:
+			continue
+		for g in gs:
+			groups[g] = true
+		plan.append(id)
+		if plan.size() >= 7:
+			break
+	return plan
 
 
 func _under_enemy_tower(p: Vector2) -> bool:

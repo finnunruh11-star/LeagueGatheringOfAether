@@ -1,0 +1,25 @@
+{
+  "name": "Night Harvester",
+  "cost": 3200,
+  "rarity": "mythic",
+  "from": [
+    "hextech_alternator",
+    "fiendish_codex",
+    "amplifying_tome"
+  ],
+  "tags": [
+    "Health",
+    "SpellDamage",
+    "CooldownReduction",
+    "NonbootsMovement",
+    "AbilityHaste"
+  ],
+  "stats": {
+    "ability_power": 90.0,
+    "max_hp": 300.0,
+    "ability_haste": 25.0
+  },
+  "mythic_stats": {},
+  "description": "",
+  "passives": []
+}

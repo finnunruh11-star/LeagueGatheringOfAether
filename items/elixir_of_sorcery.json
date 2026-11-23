@@ -1,0 +1,13 @@
+{
+  "name": "Elixir of Sorcery",
+  "cost": 500,
+  "rarity": "consumable",
+  "tags": [
+    "Consumable",
+    "ManaRegen",
+    "SpellDamage"
+  ],
+  "stats": {},
+  "description": "",
+  "passives": []
+}

@@ -1,0 +1,23 @@
+{
+  "name": "Mikael's Blessing",
+  "cost": 2300,
+  "rarity": "legendary",
+  "from": [
+    "chalice_of_blessing",
+    "forbidden_idol"
+  ],
+  "tags": [
+    "Health",
+    "Mana",
+    "ManaRegen",
+    "Active",
+    "Tenacity"
+  ],
+  "stats": {
+    "max_hp": 250.0,
+    "mana_regen_percent": 1.0,
+    "heal_power": 0.15
+  },
+  "description": "",
+  "passives": []
+}

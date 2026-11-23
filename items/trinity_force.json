@@ -1,0 +1,28 @@
+{
+  "name": "Trinity Force",
+  "cost": 3333,
+  "rarity": "mythic",
+  "from": [
+    "sheen",
+    "hearthbound_axe",
+    "kindlegem"
+  ],
+  "tags": [
+    "Health",
+    "Damage",
+    "AttackSpeed",
+    "CooldownReduction",
+    "OnHit",
+    "NonbootsMovement",
+    "AbilityHaste"
+  ],
+  "stats": {
+    "attack_damage": 40.0,
+    "bonus_attack_speed": 0.33,
+    "max_hp": 300.0,
+    "ability_haste": 20.0
+  },
+  "mythic_stats": {},
+  "description": "",
+  "passives": []
+}

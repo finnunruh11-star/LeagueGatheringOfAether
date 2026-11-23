@@ -1,0 +1,19 @@
+{
+  "name": "Fiendish Codex",
+  "cost": 900,
+  "rarity": "epic",
+  "from": [
+    "amplifying_tome"
+  ],
+  "tags": [
+    "SpellDamage",
+    "CooldownReduction",
+    "AbilityHaste"
+  ],
+  "stats": {
+    "ability_power": 35.0,
+    "ability_haste": 10.0
+  },
+  "description": "",
+  "passives": []
+}

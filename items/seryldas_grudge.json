@@ -1,0 +1,23 @@
+{
+  "name": "Serylda's Grudge",
+  "cost": 3200,
+  "rarity": "legendary",
+  "from": [
+    "caulfields_warhammer",
+    "last_whisper"
+  ],
+  "tags": [
+    "Damage",
+    "CooldownReduction",
+    "ArmorPenetration",
+    "AbilityHaste"
+  ],
+  "group": "last_whisper",
+  "stats": {
+    "attack_damage": 45.0,
+    "armor_pen": 0.3,
+    "ability_haste": 20.0
+  },
+  "description": "",
+  "passives": []
+}

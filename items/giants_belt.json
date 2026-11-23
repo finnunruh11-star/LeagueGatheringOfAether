@@ -1,0 +1,16 @@
+{
+  "name": "Giant's Belt",
+  "cost": 900,
+  "rarity": "epic",
+  "from": [
+    "ruby_crystal"
+  ],
+  "tags": [
+    "Health"
+  ],
+  "stats": {
+    "max_hp": 350.0
+  },
+  "description": "",
+  "passives": []
+}

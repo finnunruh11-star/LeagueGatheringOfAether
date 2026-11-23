@@ -1,0 +1,12 @@
+{
+  "name": "Scorchclaw Pup",
+  "cost": 450,
+  "rarity": "jungle",
+  "tags": [
+    "Jungle"
+  ],
+  "group": "jungle",
+  "stats": {},
+  "description": "",
+  "passives": []
+}

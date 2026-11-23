@@ -1,0 +1,18 @@
+{
+  "name": "Bami's Cinder",
+  "cost": 1000,
+  "rarity": "epic",
+  "from": [
+    "ruby_crystal",
+    "ruby_crystal"
+  ],
+  "tags": [
+    "Health"
+  ],
+  "group": "immolate",
+  "stats": {
+    "max_hp": 300.0
+  },
+  "description": "",
+  "passives": []
+}

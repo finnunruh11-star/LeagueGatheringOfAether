@@ -1,0 +1,21 @@
+{
+  "name": "Sterak's Gage",
+  "cost": 3000,
+  "rarity": "legendary",
+  "from": [
+    "pickaxe",
+    "phage",
+    "ruby_crystal"
+  ],
+  "tags": [
+    "Health",
+    "Damage",
+    "Tenacity"
+  ],
+  "group": "lifeline",
+  "stats": {
+    "max_hp": 450.0
+  },
+  "description": "",
+  "passives": []
+}

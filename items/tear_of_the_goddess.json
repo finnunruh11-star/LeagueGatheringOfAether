@@ -1,0 +1,15 @@
+{
+  "name": "Tear of the Goddess",
+  "cost": 400,
+  "rarity": "basic",
+  "tags": [
+    "Mana",
+    "ManaRegen"
+  ],
+  "group": "tear",
+  "stats": {
+    "max_mana": 240.0
+  },
+  "description": "",
+  "passives": []
+}

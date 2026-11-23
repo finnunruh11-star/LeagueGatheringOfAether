@@ -1,0 +1,14 @@
+{
+  "name": "Elixir of Iron",
+  "cost": 500,
+  "rarity": "consumable",
+  "tags": [
+    "Health",
+    "Consumable",
+    "NonbootsMovement",
+    "Tenacity"
+  ],
+  "stats": {},
+  "description": "",
+  "passives": []
+}

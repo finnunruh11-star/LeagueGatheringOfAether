@@ -1,0 +1,18 @@
+{
+  "name": "Sorcerer's Shoes",
+  "cost": 1100,
+  "rarity": "boots",
+  "from": [
+    "boots"
+  ],
+  "tags": [
+    "Boots",
+    "MagicPenetration"
+  ],
+  "stats": {
+    "magic_pen": 18.0,
+    "move_speed": 45.0
+  },
+  "description": "",
+  "passives": []
+}

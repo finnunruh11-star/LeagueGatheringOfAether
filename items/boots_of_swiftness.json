@@ -1,0 +1,16 @@
+{
+  "name": "Boots of Swiftness",
+  "cost": 900,
+  "rarity": "boots",
+  "from": [
+    "boots"
+  ],
+  "tags": [
+    "Boots"
+  ],
+  "stats": {
+    "move_speed": 60.0
+  },
+  "description": "",
+  "passives": []
+}

@@ -1,0 +1,22 @@
+{
+  "name": "Edge of Night",
+  "cost": 2900,
+  "rarity": "legendary",
+  "from": [
+    "long_sword",
+    "serrated_dirk",
+    "ruby_crystal"
+  ],
+  "tags": [
+    "Health",
+    "Damage",
+    "ArmorPenetration"
+  ],
+  "stats": {
+    "attack_damage": 50.0,
+    "lethality": 10.0,
+    "max_hp": 325.0
+  },
+  "description": "",
+  "passives": []
+}

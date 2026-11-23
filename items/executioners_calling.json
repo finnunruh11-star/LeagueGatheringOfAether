@@ -1,0 +1,16 @@
+{
+  "name": "Executioner's Calling",
+  "cost": 800,
+  "rarity": "epic",
+  "from": [
+    "long_sword"
+  ],
+  "tags": [
+    "Damage"
+  ],
+  "stats": {
+    "attack_damage": 15.0
+  },
+  "description": "",
+  "passives": []
+}

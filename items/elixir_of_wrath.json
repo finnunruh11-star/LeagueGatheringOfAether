@@ -1,0 +1,14 @@
+{
+  "name": "Elixir of Wrath",
+  "cost": 500,
+  "rarity": "consumable",
+  "tags": [
+    "Consumable",
+    "Damage",
+    "LifeSteal",
+    "SpellVamp"
+  ],
+  "stats": {},
+  "description": "",
+  "passives": []
+}

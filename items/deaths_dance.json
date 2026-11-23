@@ -1,0 +1,22 @@
+{
+  "name": "Death's Dance",
+  "cost": 3300,
+  "rarity": "legendary",
+  "from": [
+    "pickaxe",
+    "chain_vest",
+    "caulfields_warhammer"
+  ],
+  "tags": [
+    "Armor",
+    "Damage",
+    "AbilityHaste"
+  ],
+  "stats": {
+    "attack_damage": 55.0,
+    "ability_haste": 15.0,
+    "armor": 45.0
+  },
+  "description": "",
+  "passives": []
+}

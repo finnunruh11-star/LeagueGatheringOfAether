@@ -1,0 +1,12 @@
+{
+  "name": "Stopwatch",
+  "cost": 750,
+  "rarity": "basic",
+  "tags": [
+    "Active"
+  ],
+  "group": "stopwatch",
+  "stats": {},
+  "description": "",
+  "passives": []
+}

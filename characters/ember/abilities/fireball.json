@@ -1,15 +1,48 @@
 {
   "name": "Fireball",
-  "description": "Hurl a fireball that explodes on the first enemy hit (or at max range), burning everyone nearby.",
-  "cooldown": 5,
+  "description": "Hurl a fireball that explodes on the first enemy hit (or at max range), burning everyone nearby. Damage 70/105/140/175/210 (+70% AP).",
+  "cooldown": [
+    6,
+    5.5,
+    5,
+    4.5,
+    4
+  ],
   "targeting": "direction",
   "range": 900,
   "effects": [
-    {"type": "projectile", "speed": 1000, "radius": 16, "color": "#ff6a1f", "on_end": [
-      {"type": "area", "radius": 140, "color": "#ff8a3d", "vfx": "fire", "effects": [
-        {"type": "damage", "amount": "70 + 0.7 * ap"},
-        {"type": "dot", "amount": "12 + 0.1 * ap", "duration": 2, "id": "burn"}
-      ]}
-    ]}
+    {
+      "type": "projectile",
+      "speed": 1000,
+      "radius": 16,
+      "color": "#ff6a1f",
+      "on_end": [
+        {
+          "type": "area",
+          "radius": 140,
+          "color": "#ff8a3d",
+          "vfx": "fire",
+          "effects": [
+            {
+              "type": "damage",
+              "amount": "[70, 105, 140, 175, 210][rank - 1] + 0.7 * ap"
+            },
+            {
+              "type": "dot",
+              "amount": "12 + 0.1 * ap",
+              "duration": 2,
+              "id": "burn"
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "cost": [
+    50,
+    55,
+    60,
+    65,
+    70
   ]
 }

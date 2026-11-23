@@ -25,12 +25,14 @@ func setup(d: Dictionary) -> void:
 	if is_nexus:
 		base_stats.max_hp = 3600.0
 		base_stats.armor = 30.0
+		base_stats.magic_resist = 30.0
 		base_stats.attack_damage = 0.0
 		base_radius = 62.0
 		display_name = "Nexus"
 	else:
 		base_stats.max_hp = 2200.0
 		base_stats.armor = 45.0
+		base_stats.magic_resist = 45.0
 		base_stats.attack_damage = 150.0
 		base_stats.attack_speed = 0.83
 		base_stats.attack_range = 480.0

@@ -1,0 +1,19 @@
+{
+  "name": "Blighting Jewel",
+  "cost": 1100,
+  "rarity": "epic",
+  "from": [
+    "amplifying_tome"
+  ],
+  "tags": [
+    "MagicPenetration",
+    "SpellDamage"
+  ],
+  "group": "void_pen",
+  "stats": {
+    "ability_power": 25.0,
+    "magic_pen_percent": 0.13
+  },
+  "description": "",
+  "passives": []
+}

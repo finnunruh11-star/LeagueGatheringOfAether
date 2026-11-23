@@ -1,0 +1,25 @@
+{
+  "name": "Essence Reaver",
+  "cost": 2900,
+  "rarity": "legendary",
+  "from": [
+    "sheen",
+    "caulfields_warhammer",
+    "cloak_of_agility"
+  ],
+  "tags": [
+    "Damage",
+    "CriticalStrike",
+    "ManaRegen",
+    "CooldownReduction",
+    "OnHit",
+    "AbilityHaste"
+  ],
+  "stats": {
+    "attack_damage": 55.0,
+    "crit_chance": 0.2,
+    "ability_haste": 20.0
+  },
+  "description": "",
+  "passives": []
+}

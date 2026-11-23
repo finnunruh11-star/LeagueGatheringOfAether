@@ -1,0 +1,20 @@
+{
+  "name": "Guardian Angel",
+  "cost": 3000,
+  "rarity": "legendary",
+  "from": [
+    "b_f_sword",
+    "chain_vest",
+    "stopwatch"
+  ],
+  "tags": [
+    "Armor",
+    "Damage"
+  ],
+  "stats": {
+    "attack_damage": 45.0,
+    "armor": 40.0
+  },
+  "description": "",
+  "passives": []
+}

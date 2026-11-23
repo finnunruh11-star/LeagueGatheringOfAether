@@ -1,0 +1,19 @@
+{
+  "name": "Kindlegem",
+  "cost": 800,
+  "rarity": "epic",
+  "from": [
+    "ruby_crystal"
+  ],
+  "tags": [
+    "Health",
+    "CooldownReduction",
+    "AbilityHaste"
+  ],
+  "stats": {
+    "max_hp": 200.0,
+    "ability_haste": 10.0
+  },
+  "description": "",
+  "passives": []
+}

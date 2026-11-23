@@ -16,6 +16,7 @@ func setup(d: Dictionary) -> void:
 	base_stats.max_hp = float(d.get("hp", 4000.0))
 	base_stats.hp_regen = 0.0
 	base_stats.armor = float(d.get("armor", 0.0))
+	base_stats.magic_resist = float(d.get("mr", 0.0))
 	base_stats.move_speed = 220.0
 	base_stats.attack_damage = 0.0
 	base_radius = 26.0

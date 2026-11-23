@@ -1,0 +1,17 @@
+{
+  "name": "Kircheis Shard",
+  "cost": 700,
+  "rarity": "epic",
+  "from": [
+    "long_sword"
+  ],
+  "tags": [
+    "Damage",
+    "OnHit"
+  ],
+  "stats": {
+    "attack_damage": 15.0
+  },
+  "description": "",
+  "passives": []
+}

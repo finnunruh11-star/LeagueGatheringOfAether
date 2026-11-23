@@ -1,0 +1,23 @@
+{
+  "name": "Lich Bane",
+  "cost": 3000,
+  "rarity": "legendary",
+  "from": [
+    "sheen",
+    "aether_wisp",
+    "fiendish_codex"
+  ],
+  "tags": [
+    "SpellDamage",
+    "OnHit",
+    "NonbootsMovement",
+    "AbilityHaste"
+  ],
+  "stats": {
+    "ability_power": 85.0,
+    "ability_haste": 15.0,
+    "move_speed_bonus": 0.08
+  },
+  "description": "",
+  "passives": []
+}

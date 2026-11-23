@@ -1,0 +1,19 @@
+{
+  "name": "Seeker's Armguard",
+  "cost": 1000,
+  "rarity": "epic",
+  "from": [
+    "amplifying_tome",
+    "cloth_armor"
+  ],
+  "tags": [
+    "Armor",
+    "SpellDamage"
+  ],
+  "stats": {
+    "ability_power": 30.0,
+    "armor": 20.0
+  },
+  "description": "",
+  "passives": []
+}

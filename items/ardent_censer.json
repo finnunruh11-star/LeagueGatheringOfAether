@@ -1,0 +1,24 @@
+{
+  "name": "Ardent Censer",
+  "cost": 2100,
+  "rarity": "legendary",
+  "from": [
+    "aether_wisp",
+    "forbidden_idol"
+  ],
+  "tags": [
+    "AttackSpeed",
+    "SpellDamage",
+    "ManaRegen",
+    "OnHit",
+    "NonbootsMovement"
+  ],
+  "stats": {
+    "ability_power": 35.0,
+    "heal_power": 0.08,
+    "mana_regen_percent": 0.75,
+    "move_speed_bonus": 0.05
+  },
+  "description": "",
+  "passives": []
+}

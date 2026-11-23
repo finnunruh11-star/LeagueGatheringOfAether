@@ -1,0 +1,25 @@
+{
+  "name": "Rabadon's Deathcap",
+  "cost": 3600,
+  "rarity": "legendary",
+  "from": [
+    "needlessly_large_rod",
+    "needlessly_large_rod"
+  ],
+  "tags": [
+    "SpellDamage"
+  ],
+  "stats": {
+    "ability_power": 120.0
+  },
+  "description": "",
+  "passives": [
+    {
+      "name": "Magical Opus",
+      "description": "Increases your total ability power by 40%."
+    }
+  ],
+  "stats_mult": {
+    "ability_power": 1.4
+  }
+}

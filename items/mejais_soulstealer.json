@@ -1,0 +1,20 @@
+{
+  "name": "Mejai's Soulstealer",
+  "cost": 1600,
+  "rarity": "legendary",
+  "from": [
+    "dark_seal"
+  ],
+  "tags": [
+    "Health",
+    "SpellDamage",
+    "NonbootsMovement"
+  ],
+  "group": "glory",
+  "stats": {
+    "ability_power": 20.0,
+    "max_hp": 100.0
+  },
+  "description": "",
+  "passives": []
+}

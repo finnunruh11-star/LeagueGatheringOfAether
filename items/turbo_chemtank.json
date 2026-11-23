@@ -1,0 +1,27 @@
+{
+  "name": "Turbo Chemtank",
+  "cost": 2800,
+  "rarity": "legendary",
+  "from": [
+    "kindlegem",
+    "negatron_cloak",
+    "ruby_crystal"
+  ],
+  "tags": [
+    "Health",
+    "SpellBlock",
+    "Active",
+    "CooldownReduction",
+    "Slow",
+    "NonbootsMovement",
+    "MagicResist",
+    "AbilityHaste"
+  ],
+  "stats": {
+    "max_hp": 500.0,
+    "magic_resist": 50.0,
+    "ability_haste": 10.0
+  },
+  "description": "",
+  "passives": []
+}

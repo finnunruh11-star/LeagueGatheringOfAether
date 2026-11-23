@@ -1,0 +1,21 @@
+{
+  "name": "Mercury's Treads",
+  "cost": 1100,
+  "rarity": "boots",
+  "from": [
+    "boots",
+    "null_magic_mantle"
+  ],
+  "tags": [
+    "Boots",
+    "SpellBlock",
+    "Tenacity"
+  ],
+  "stats": {
+    "magic_resist": 25.0,
+    "move_speed": 45.0,
+    "tenacity": 0.3
+  },
+  "description": "",
+  "passives": []
+}

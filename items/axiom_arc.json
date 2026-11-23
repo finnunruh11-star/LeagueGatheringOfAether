@@ -1,0 +1,21 @@
+{
+  "name": "Axiom Arc",
+  "cost": 3000,
+  "rarity": "legendary",
+  "from": [
+    "serrated_dirk",
+    "caulfields_warhammer"
+  ],
+  "tags": [
+    "Damage",
+    "ArmorPenetration",
+    "AbilityHaste"
+  ],
+  "stats": {
+    "attack_damage": 55.0,
+    "lethality": 18.0,
+    "ability_haste": 25.0
+  },
+  "description": "",
+  "passives": []
+}

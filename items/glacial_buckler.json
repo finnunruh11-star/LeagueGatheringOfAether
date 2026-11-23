@@ -1,0 +1,22 @@
+{
+  "name": "Glacial Buckler",
+  "cost": 900,
+  "rarity": "epic",
+  "from": [
+    "sapphire_crystal",
+    "cloth_armor"
+  ],
+  "tags": [
+    "Armor",
+    "Mana",
+    "CooldownReduction",
+    "AbilityHaste"
+  ],
+  "stats": {
+    "armor": 20.0,
+    "max_mana": 250.0,
+    "ability_haste": 10.0
+  },
+  "description": "",
+  "passives": []
+}

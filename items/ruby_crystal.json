@@ -1,0 +1,13 @@
+{
+  "name": "Ruby Crystal",
+  "cost": 400,
+  "rarity": "basic",
+  "tags": [
+    "Health"
+  ],
+  "stats": {
+    "max_hp": 150.0
+  },
+  "description": "",
+  "passives": []
+}

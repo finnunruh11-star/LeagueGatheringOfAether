@@ -1,0 +1,40 @@
+{
+  "name": "Thornmail",
+  "cost": 2700,
+  "rarity": "legendary",
+  "from": [
+    "bramble_vest",
+    "giants_belt"
+  ],
+  "tags": [
+    "Health",
+    "Armor"
+  ],
+  "stats": {
+    "max_hp": 350.0,
+    "armor": 70.0
+  },
+  "description": "",
+  "passives": [
+    {
+      "name": "Thorns",
+      "description": "When hit by a basic attack, deal 10 + 25% bonus armor magic damage to the attacker and give champions 40% Grievous Wounds for 3s.",
+      "on": "attacked",
+      "effects": [
+        {
+          "type": "damage",
+          "amount": "10 + 0.25 * bonus_armor",
+          "damage_type": "magic",
+          "vfx": "spark",
+          "color": "#b8c8a0"
+        },
+        {
+          "type": "grievous",
+          "amount": 0.4,
+          "duration": 3,
+          "if": "t_champion"
+        }
+      ]
+    }
+  ]
+}

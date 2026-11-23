@@ -43,6 +43,14 @@ static func _make(sound: String) -> AudioStreamWAV:
 			s = _sweep(523.0, 523.0, 0.1, 6.0, true)
 			s.append_array(_sweep(659.0, 659.0, 0.1, 6.0, true))
 			s.append_array(_sweep(784.0, 784.0, 0.22, 6.0, true))
+		"coin":
+			s = _sweep(1568.0, 1568.0, 0.05, 25.0, false)
+			s.append_array(_sweep(2093.0, 2093.0, 0.12, 14.0, false))
+		"buy":
+			s = _sweep(880.0, 880.0, 0.06, 12.0, true)
+			s.append_array(_sweep(1320.0, 1320.0, 0.14, 10.0, true))
+		"error":
+			s = _sweep(220.0, 180.0, 0.16, 6.0, true)
 		_:
 			s = _sweep(440.0, 440.0, 0.1, 10.0, false)
 	var bytes := PackedByteArray()

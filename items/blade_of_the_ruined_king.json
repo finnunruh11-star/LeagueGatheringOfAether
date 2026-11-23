@@ -1,0 +1,25 @@
+{
+  "name": "Blade of The Ruined King",
+  "cost": 3300,
+  "rarity": "legendary",
+  "from": [
+    "vampiric_scepter",
+    "recurve_bow",
+    "pickaxe"
+  ],
+  "tags": [
+    "Damage",
+    "AttackSpeed",
+    "LifeSteal",
+    "Slow",
+    "OnHit",
+    "NonbootsMovement"
+  ],
+  "stats": {
+    "attack_damage": 40.0,
+    "bonus_attack_speed": 0.25,
+    "lifesteal": 0.08
+  },
+  "description": "",
+  "passives": []
+}

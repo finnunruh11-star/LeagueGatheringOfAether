@@ -1,0 +1,23 @@
+{
+  "name": "Liandry's Anguish",
+  "cost": 3200,
+  "rarity": "mythic",
+  "from": [
+    "lost_chapter",
+    "fiendish_codex"
+  ],
+  "tags": [
+    "SpellDamage",
+    "Mana",
+    "CooldownReduction",
+    "AbilityHaste"
+  ],
+  "stats": {
+    "ability_power": 80.0,
+    "max_mana": 600.0,
+    "ability_haste": 20.0
+  },
+  "mythic_stats": {},
+  "description": "",
+  "passives": []
+}

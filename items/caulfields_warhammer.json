@@ -1,0 +1,20 @@
+{
+  "name": "Caulfield's Warhammer",
+  "cost": 1100,
+  "rarity": "epic",
+  "from": [
+    "long_sword",
+    "long_sword"
+  ],
+  "tags": [
+    "Damage",
+    "CooldownReduction",
+    "AbilityHaste"
+  ],
+  "stats": {
+    "attack_damage": 25.0,
+    "ability_haste": 10.0
+  },
+  "description": "",
+  "passives": []
+}

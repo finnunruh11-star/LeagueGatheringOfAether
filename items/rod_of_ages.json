@@ -1,0 +1,27 @@
+{
+  "name": "Rod of Ages",
+  "cost": 2800,
+  "rarity": "legendary",
+  "from": [
+    "blasting_wand",
+    "catalyst_of_aeons",
+    "amplifying_tome"
+  ],
+  "tags": [
+    "Health",
+    "HealthRegen",
+    "SpellDamage",
+    "Mana",
+    "ManaRegen",
+    "CooldownReduction",
+    "AbilityHaste"
+  ],
+  "group": "eternity",
+  "stats": {
+    "ability_power": 60.0,
+    "max_hp": 400.0,
+    "max_mana": 400.0
+  },
+  "description": "",
+  "passives": []
+}

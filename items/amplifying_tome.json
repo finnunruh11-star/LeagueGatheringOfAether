@@ -1,0 +1,13 @@
+{
+  "name": "Amplifying Tome",
+  "cost": 435,
+  "rarity": "basic",
+  "tags": [
+    "SpellDamage"
+  ],
+  "stats": {
+    "ability_power": 20.0
+  },
+  "description": "",
+  "passives": []
+}

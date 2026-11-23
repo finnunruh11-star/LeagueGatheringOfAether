@@ -1,0 +1,21 @@
+{
+  "name": "Hearthbound Axe",
+  "cost": 1100,
+  "rarity": "epic",
+  "from": [
+    "long_sword",
+    "dagger",
+    "long_sword"
+  ],
+  "tags": [
+    "Damage",
+    "AttackSpeed",
+    "NonbootsMovement"
+  ],
+  "stats": {
+    "attack_damage": 20.0,
+    "bonus_attack_speed": 0.15
+  },
+  "description": "",
+  "passives": []
+}

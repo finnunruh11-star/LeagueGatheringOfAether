@@ -1,0 +1,17 @@
+{
+  "name": "Bramble Vest",
+  "cost": 800,
+  "rarity": "epic",
+  "from": [
+    "cloth_armor",
+    "cloth_armor"
+  ],
+  "tags": [
+    "Armor"
+  ],
+  "stats": {
+    "armor": 30.0
+  },
+  "description": "",
+  "passives": []
+}

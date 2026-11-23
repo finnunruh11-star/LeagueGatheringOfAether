@@ -1,0 +1,19 @@
+{
+  "name": "Chalice of Blessing",
+  "cost": 950,
+  "rarity": "epic",
+  "from": [
+    "ruby_crystal",
+    "faerie_charm"
+  ],
+  "tags": [
+    "Health",
+    "ManaRegen"
+  ],
+  "stats": {
+    "max_hp": 200.0,
+    "mana_regen_percent": 0.5
+  },
+  "description": "",
+  "passives": []
+}

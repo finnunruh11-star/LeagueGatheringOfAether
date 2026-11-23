@@ -36,21 +36,40 @@ Lines starting with `//` are treated as comments.
 A string ability (`"w": "fireball"`) loads `abilities/fireball.json`.
 
 ### Stats
-`max_hp` 650, `hp_regen` 3 (per second), `move_speed` 330, `attack_damage` 60,
-`attack_speed` 0.8 (attacks/second), `attack_range` 125 (melee ~70-125, ranged ~450-550),
-`armor` 20 (reduces non-true damage: 100 armor = half damage), `ability_power` 0,
-`lifesteal` 0 (0.2 = heal 20% of damage dealt), `size` 1 (scales body and hitbox),
-`damage_mult` 1, `damage_taken_mult` 1, `cooldown_mult` 1 (0.5 = half cooldowns).
-All of these can be changed temporarily with the `buff` effect.
+Percent stats are fractions (`0.3` = 30%). Regen is per second.
+
+| stat | default | notes |
+|---|---|---|
+| `max_hp`, `hp_regen` | 650, 1.5 | `hp_regen_percent` adds a % of base regen (items) |
+| `max_mana`, `mana_regen` | 0, 0 | **0 mana = manaless**: abilities are free. `mana_regen_percent` like above |
+| `attack_damage`, `ability_power` | 60, 0 | |
+| `attack_speed` | 0.8 | base attacks/second. `bonus_attack_speed` (items, 0.3 = +30%) multiplies it; capped at `attack_speed_cap` 2.5 |
+| `attack_range` | 125 | melee ~70-125, ranged ~450-550 |
+| `move_speed` / `move_speed_bonus` | 330 / 0 | flat / percent (soft-capped above 415) |
+| `armor`, `magic_resist` | 20, 30 | reduce physical / magic damage (100 = half). True damage ignores both |
+| `crit_chance`, `crit_damage` | 0, 1.75 | basic attacks crit for 175% damage |
+| `ability_haste` | 0 | cooldown = base × 100 / (100 + haste) |
+| `lethality`, `armor_pen` | 0, 0 | flat (60-100% effective by level) / percent armor ignored |
+| `magic_pen`, `magic_pen_percent` | 0, 0 | flat / percent magic resist ignored |
+| `lifesteal`, `omnivamp` | 0, 0 | heal % of basic-attack (and on-hit) damage / of all damage |
+| `heal_power`, `heal_received` | 0, 0 | boosts heals & shields you give / receive |
+| `tenacity`, `slow_resist` | 0, 0 | shortens stuns/roots/silences/slows / weakens slows |
+| `size`, `damage_mult`, `damage_taken_mult`, `cooldown_mult` | 1 | fun multipliers (0.5 cooldown_mult = half cooldowns) |
+
+`per_level` stats are added every level (defaults: +75 HP, +3.5 AD, +2 armor, +1 MR, +0.12 regen,
++8 AP, +2.5% attack speed). Champions level up to **21**; levels 19-21 only give stats.
+All stats can be changed temporarily with the `buff` effect.
 
 ### Abilities
 ```jsonc
 {
   "name": "Fireball", "description": "...", "icon": "fireball.png",
-  "cooldown": 5,              // number or expression, e.g. "10 - 0.3 * level"
-  "targeting": "direction",   // direction | point | self | unit | ally
+  "cooldown": [8, 7.5, 7, 6.5, 6],   // number, per-rank list, or expression
+  "cost": [50, 55, 60, 65, 70],      // mana (ignored for manaless champions)
+  "cost_type": "mana",               // or "health" (pay HP instead)
+  "targeting": "direction",          // direction | point | self | unit | ally
   "range": 900,
-  "cast_time": 0,             // optional wind-up (you stand still)
+  "cast_time": 0,                    // optional wind-up (you stand still)
   "effects": [ ... ]
 }
 ```
@@ -61,6 +80,17 @@ All of these can be changed temporarily with the `buff` effect.
 
 Players hold Q/W/E/R to see the range indicator and release to cast.
 
+#### Ranks (leveling abilities)
+Everything starts at rank 0 (not castable). You get one skill point per level up to 18 and spend it
+with **Ctrl+Q/W/E/R** or the **+** buttons. Q/W/E go to rank 5 (rank N needs level 2N-1, like
+LoL), R to rank 3 at levels 6/11/16. Per ability you can change `max_rank` and `unlock_levels`
+(e.g. `[1, 2, 3, 4, 5]`).
+
+Any number can be a **per-rank list**: `"amount": [60, 95, 130, 165, 200]` (rank 1..5), and
+expressions can use `rank`: `"amount": "[60, 95, 130][rank - 1] + 0.7 * ap"`.
+Abilities that use no lists and no `rank` get stronger automatically instead: +25% damage/heal/shield
+per rank (+50% for R) and slightly shorter cooldowns. Set `"auto_rank": false` to turn that off.
+
 ## Effects
 
 Every effect is `{"type": "...", ...}`. Effects nest: projectiles, areas, zones, traps,
@@ -69,36 +99,66 @@ dashes, delays and repeats contain their own effect lists. Any effect may also h
 - `"if": "t_hp < 0.3 * t_max_hp"` - only happens when the expression is true
 
 ### Numbers can be expressions
-`"amount": "60 + 0.8 * ap + 0.1 * t_max_hp"`. Variables:
+`"amount": "60 + 0.8 * ap + 0.1 * t_max_hp"`. Variables (`t_` = the current target):
 
 | variable | meaning |
 |---|---|
-| `ad`, `ap`, `level`, `hp`, `max_hp`, `missing_hp`, `armor`, `speed`, `size` | your stats |
-| `t_hp`, `t_max_hp`, `t_missing_hp`, `t_armor` | the target's stats |
-| `dist` | distance between you and the target |
-| `ally` | 1 if the target is on your team, else 0 |
-| `i` | repeat index / passive trigger count |
-| `time` | match time in seconds |
+| `ad`, `ap`, `level`, `hp`, `max_hp`, `missing_hp`, `armor`, `mr`, `speed`/`ms`, `size`, `mana`, `max_mana` | your stats |
+| `as`, `bonus_as`, `crit`, `ah`, `lethality` | attack speed, bonus attack speed, crit chance, ability haste, lethality |
+| `bonus_ad`, `base_ad`, `bonus_hp`, `base_hp`, `bonus_armor`, `bonus_mr` | from items/buffs vs. base (incl. level growth) |
+| `ranged`, `melee` | 1 if your basic attack is ranged / melee |
+| `t_hp`, `t_max_hp`, `t_missing_hp`, `t_armor`, `t_mr`, `t_mana`, `t_max_mana`, `t_bonus_hp`, `t_ms`, `t_level` | the target's stats |
+| `t_champion`, `t_minion`, `t_structure`, `t_ranged` | 1/0 target type |
+| `rank` | ability rank (for item/passive triggers: your level) |
+| `dist`, `ally`, `i`, `time` | distance to target; 1 if target is an ally; repeat index / trigger count; match time |
+| `in_combat`, `combat_time`, `since_hit`, `since_combat` | champion-combat state (seconds) |
+| `gold`, `kills`, `deaths`, `assists`, `energy`, `legendaries` | your score, Energize stacks (0-100), legendary item count |
+| `dmg`, `dtype`, `crit_hit`, `is_attack`, `is_ability`, `is_dot`, `is_aoe` | inside damage triggers: the hit |
+| `slot` | inside `cast`/`rank_up` triggers: which ability ("q"... compare with `slot == 'r'`) |
+| `amount` | inside `heal_ally`/`shield_ally` triggers: how much |
 
-Godot math functions work too: `min`, `max`, `clamp`, `pow`, `sqrt`, `randf()`, `randf_range(a, b)`...
+Functions: `has('id')` (you have a status/mark with that id or type), `t_has('id')` (target has it, from
+you - or any status of that type like `'stun'`), `t_has_any('id')`, `stacks('id')`, `t_stacks('id')`,
+`counter('id')`, `stat('name')`, `t_stat('name')`, `base('name')`, `bonus('name')`,
+`near_allies(r)`, `near_enemies(r)` (champions), `near_units(r)`, `cd('q')`, `has_item('id')`, `item_count('legendary')`.
+Godot math and logic work too: `min`, `max`, `clamp`, `pow`, `sqrt`, `randf()`, `and`, `or`, `not`,
+`a if cond else b`, `[10, 20, 30][rank - 1]`.
 
 ### On a unit (the current target, or yourself with `"target": "self"`)
 | type | keys (defaults) |
 |---|---|
-| `damage` | `amount` 50, `damage_type` "magic" / "physical" / "true" (true ignores armor) |
-| `heal` | `amount` 50 |
-| `shield` | `amount` 100, `duration` 3 |
-| `stun`, `root`, `silence`, `invulnerable` | `duration` 1 |
+| `damage` | `amount` 50, `damage_type` "magic" / "physical" / "true"; `can_crit` (rolls your crit), `attack` (counts as a basic attack: lifesteal, "attacked" triggers), `onhit` (lifesteal applies), `raw` (skips damage modifiers) |
+| `heal` | `amount` 50 (boosted by your `heal_power`) |
+| `shield` | `amount` 100, `duration` 3, `damage_type` "all" / "magic" / "physical" (only blocks that type) |
+| `stun`, `root`, `silence` | `duration` 1 (shortened by tenacity) |
+| `invulnerable`, `stasis`, `untargetable`, `stealth` | `duration` 1. Stasis = invulnerable + untargetable + can't act (Zhonya's) |
+| `spellshield` | blocks the next enemy ability hit; `duration` (default: until popped) |
+| `grievous` | healing reduction: `amount` 0.4, `duration` 3 |
 | `slow` | `amount` 0.3 (0-1), `duration` 2 |
-| `dot` / `hot` | `amount` per second 20, `duration` 3, `interval` 0.5 |
-| `buff` | `duration` 4, `add` {stat: value}, `multiply` {stat: factor} |
-| `cleanse` | removes stun/root/slow/silence/dot |
+| `dot` / `hot` | `amount` per second 20, `duration` 3, `interval` 0.5, `damage_type`, `raw` |
+| `buff` | `duration` 4, `add` {stat: value}, `multiply` {stat: factor}; stacking: `max_stacks` 5 (+`stacks` per application, `refresh` true) - each stack adds the values again |
+| `mark` | invisible stackable marker for bookkeeping: `id` (required), `duration` 5, `stacks` 1, `max_stacks` |
+| `remove` | removes your status with `id` from the target (`any_source`: from anyone), or `status`: "slow" (a whole type) |
+| `cleanse` | removes stun/root/slow/silence/dot/grievous |
 | `knockback` | `distance` 220, `duration` 0.25, `from` "origin" (center of the blast / projectile) or "self" |
 | `pull` | toward you; `distance` (default: all the way), `duration` 0.25 |
 | `swap` | you and the target swap places |
+| `mana` | restore `amount` mana (negative drains) |
 
 Repeated statuses from the same ability refresh instead of stacking. Add `"stack": true` to let
-them stack, or `"id": "burn"` to share one status between abilities.
+them stack, or `"id": "burn"` to share one status between abilities. Enemy spell shields block
+ability effects (not basic attacks or item effects).
+
+### You / your champion
+| type | keys |
+|---|---|
+| `gold` | `amount` - gives you gold (floating text for you) |
+| `counter` | permanent number on your champion (stacks like Mejai's): `id`, `add`, `set`, `mult`, `max`, `min`. Read with `counter('id')` |
+| `cooldown` | `slot` "q"/"w"/"e"/"r"/"basic" (q+w+e)/"all", `amount` seconds (or fraction of the remaining time with `"percent": true`), or `"reset": true` |
+| `item_cooldown` | `item` id or "all", `amount` / `reset` |
+| `attack_reset` | your next basic attack is ready immediately |
+| `modify_damage` | only inside `deal_damage_pre` / `take_damage_pre` triggers: `mult`, `add` change the incoming hit |
+| `transform` | only in item passives: replace this item with `into` (e.g. Manamune -> Muramana) |
 
 ### Movement (you)
 | type | keys |
@@ -110,7 +170,7 @@ them stack, or `"id": "burn"` to share one status between abilities.
 | type | keys |
 |---|---|
 | `projectile` | `speed` 900, `range` (ability range), `radius` 12, `color`, `sprite`, `count` 1, `spread` (degrees, 360 = ring), `pierce` false/true/number, `homing`, `returns` (boomerang), `through_walls`, `affects` "enemies"/"allies"/"all", `hits_structures`, `on_hit` [...], `on_end` [... when it stops] |
-| `area` | instant explosion. `at` "pos" (default) / "self" / "target", `radius` 150, `delay` (shows a warning circle first), `scatter` (random offset), `angle` (cone toward the aim, e.g. 70), `affects`, `hits_structures`, `color`, `effects` [... per unit inside] |
+| `area` | instant explosion. `at` "pos" (default) / "self" / "target", `radius` 150, `delay` (shows a warning circle first), `scatter` (random offset), `angle` (cone toward the aim, e.g. 70), `affects`, `hits_structures`, `color`, `show` (false = no blast visual, for auras), `filter` "champions"/"minions", `exclude_target`, `exclude_self`, `sort` "nearest"/"farthest"/"lowest_hp"/"lowest_hp_percent"/"champions_first"/"random", `max_targets`, `effects` [... per unit inside] |
 | `beam` | instant line from you. `length` (ability range), `width` 70, `delay`, `affects`, `effects` [...] |
 | `zone` | lingering circle. `radius` 160, `duration` 4, `interval` 0.5, `follow` (true = aura around you), `affects`, `effects` [... each tick], `on_expire` [...] |
 | `trap` | `radius` 60, `duration` 30, `arm_time` 0.6, `hidden` true, `effects` [... on the unit that steps on it] |
@@ -136,8 +196,8 @@ lime, c2 red, c3 violet, c4 orange, c5 cyan), and `none`. They come from `assets
 | `delay` | `time` 1, `effects` [...] |
 | `repeat` | `count` 3, `interval` 0.25, `effects` [...] |
 | `random` | `options`: [effect or [effects], ...] - one is picked |
-| `cooldown` | `slot` "q"/"w"/"e"/"r"/"all", `amount` seconds to reduce, or `"reset": true` |
 | `text` | floating text: `text`, `color`, `size` 28, `at` "target" |
+| `vfx` | a visual only: `kind` "ring" (`at`, `radius`) / "blast" (`at`, `radius`, `vfx`) / "line" or "beam" (`from`, `to`, `width`) |
 | `sound` | `file` (.wav/.ogg in your folder), `volume` (dB), `at` "self" |
 
 ## Passive triggers
@@ -148,10 +208,91 @@ lime, c2 red, c3 violet, c4 orange, c5 cyan), and `none`. They come from `assets
   { "on": "lethal", "cooldown": 90, "effects": [ {"type": "heal", "amount": 300} ] }
 ]
 ```
-Events: `attack` (target = unit hit), `cast` (after you cast), `damaged` (target = attacker),
-`low_health` (`threshold` 0.3), `kill`, `champion_kill`, `interval`, `spawn`, `level_up`,
-`lethal` (you would die: effects run and you survive with at least 1 HP - give it a cooldown!).
-Triggers also accept `chance`, `cooldown` and `if`.
+Triggers accept `every`, `chance`, `cooldown` (number/expression/per-level list) and `if`.
+Inside a trigger, `rank` is your level, so `[..18 values..]` lists scale with level.
+
+| event | when / the target |
+|---|---|
+| `attack` | your basic attack hit something (target = victim; `crit_hit`) |
+| `attack_launch` | you started a basic attack (before it lands) |
+| `energized` | an attack hit when Energize was full (100 stacks from moving/attacking; it resets) |
+| `cast` | you cast an ability (`slot`) |
+| `deal_damage_pre` | you are about to damage something (`dmg`, use `modify_damage`) |
+| `deal_damage` | you damaged something (`dmg`, `dtype`, `is_attack`, `is_ability`, `is_dot`, `is_aoe`, `crit_hit`). Damage from triggers/items doesn't fire it again unless the trigger has `"procs": true` |
+| `take_damage_pre` | you are about to take damage (target = attacker, `modify_damage`) |
+| `take_damage` / `damaged` | you took damage (target = attacker) |
+| `attacked` | an enemy basic attack hit you (target = attacker) |
+| `low_health` | you got hit below `threshold` (0.3) of max HP |
+| `lethal` | you would die: effects run and you survive with at least 1 HP - give it a cooldown! |
+| `kill`, `champion_kill` | you got the kill (target = victim) |
+| `takedown` | you killed or assisted on a champion (`amount` 1 = kill, 0 = assist) |
+| `death` | you died |
+| `heal_ally`, `shield_ally` | you healed/shielded another champion (target = ally, `amount`) |
+| `cc_applied` | you stunned/rooted/slowed/silenced/knocked back an enemy champion |
+| `spellshield_pop` | your spell shield blocked something |
+| `interval` | every `interval` seconds |
+| `spawn`, `level_up`, `rank_up`, `buy`, `item_used` | as named |
+
+**Triggers on statuses**: a `buff` or `mark` can carry `"triggers": [...]` that work while it lasts
+(any event except `interval`). They run as whoever applied the status, aimed at the event's target.
+Extra keys: `"consume": true` (status ends after firing) or `"charges": 3`. Example - an ability
+that makes your next 3 attacks burn:
+```jsonc
+{"type": "buff", "target": "self", "id": "hot_hands", "duration": 6, "triggers": [
+  {"on": "attack", "charges": 3, "effects": [{"type": "dot", "amount": 20, "duration": 2}]}
+]}
+```
+
+# Items
+
+Every `.json` file in `items/` (subfolders allowed) is an item; the file name is its id. The host
+sends its items to everyone, like characters. Press **P** (or the Shop button) to shop - in your
+fountain or while dead (anywhere in Practice / the Training Arena). Keys **1-6** use item actives
+(hold to aim, release to use). Selling refunds 70%.
+
+```jsonc
+{
+  "name": "Kraken Slayer",
+  "cost": 3000,                    // TOTAL cost; owned components are subtracted automatically
+  "rarity": "legendary",           // basic | epic | legendary | mythic | boots | starter | consumable | jungle | transform
+  "from": ["noonquiver", "cloak_of_agility", "recurve_bow"],   // recipe (item ids)
+  "tags": ["Damage", "CriticalStrike", "AttackSpeed"],          // shop categories / bot builds
+  "group": "lifeline",             // optional: only one item per group (string or list)
+  "stack": 5,                      // optional: how many fit in one slot (potions)
+  "limit": 1,                      // optional: max owned (default 1 for legendary/mythic/boots/jungle, else unlimited)
+  "buyable": true,                 // false = can only be obtained via "transform"
+  "stats": {"attack_damage": 40, "bonus_attack_speed": 0.3, "crit_chance": 0.2},
+  "stats_mult": {"ability_power": 1.4},        // multiplies your total stat (Rabadon's)
+  "mythic_stats": {"magic_pen": 5},            // mythic only: per other legendary item you own
+  "description": "Extra rules text shown in the shop (optional).",
+  "passives": [ { "name": "Bring It Down", "description": "...", "on": "attack", "every": 3, "effects": [ ... ] } ],
+  "active": { "name": "Stasis", "description": "...", "cooldown": 120, "targeting": "self", "range": 600,
+              "consume": false, "effects": [ ... ] },
+  "short": "KS", "color": "#4fd6ff", "icon": "icons/kraken.png"   // optional looks (default: letters on a colored badge)
+}
+```
+- You can own only **one mythic**. Mythic items' `mythic_stats` are granted per other legendary.
+- Only one item of each `group`, and one pair of `boots` (rarity boots).
+- Stats may be expressions, re-evaluated 4 times a second: `"ability_power": "5 * counter('glory')"`.
+- `passives` are triggers (see Passive triggers) plus `name`/`description`. A passive without `on` is
+  just text. Passives with the same `"unique": "name"` don't stack (default: per item, so two copies
+  of one item don't double up). Inside them `rank` = your level, so 18-entry lists scale by level.
+- `active` works like an ability (targeting, range, indicator) and is used with keys 1-6.
+  Consumables (`"consume": true`, default for rarity consumable) lose one charge per use.
+- `{"type": "transform", "into": "muramana"}` inside a passive upgrades the item in place.
+
+Examples in `items/`: `sheen.json` (Spellblade with marks), `kraken_slayer.json` (every 3rd attack,
+per-target ramp), `thornmail.json` (`attacked`), `ludens_tempest.json` (`deal_damage` + chained area),
+`rabadons_deathcap.json` (`stats_mult`), `zhonyas_hourglass.json` / `health_potion.json` (actives).
+
+## Testing items
+```
+godot --headless --path . -- --auto=practice --map=arena --itemtest=kraken_slayer,sheen
+    [--char=gizmo] [--enemy=sir_bonk] [--enemy_items=thornmail] [--level=11]
+    [--steps=attack:4,cast:q,item:0,hurt:300,hurtm:300,enemy_attack:3,lowhp,kill,move:400,buy:boots,wait:2,stats]
+```
+prints every damage/heal/status/proc with the item that caused it. In a Practice match you can
+also press **F1** (level up), **F2** (+1000 gold), **F3** (reset cooldowns, refill mana), **F4** (max ranks).
 
 ## Sprites
 Without a sprite you get a colored circle. Options:

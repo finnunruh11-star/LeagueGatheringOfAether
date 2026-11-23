@@ -1,0 +1,26 @@
+{
+  "name": "Duskblade of Draktharr",
+  "cost": 3100,
+  "rarity": "mythic",
+  "from": [
+    "serrated_dirk",
+    "caulfields_warhammer"
+  ],
+  "tags": [
+    "Damage",
+    "Stealth",
+    "CooldownReduction",
+    "Slow",
+    "NonbootsMovement",
+    "ArmorPenetration",
+    "AbilityHaste"
+  ],
+  "stats": {
+    "attack_damage": 60.0,
+    "lethality": 18.0,
+    "ability_haste": 15.0
+  },
+  "mythic_stats": {},
+  "description": "",
+  "passives": []
+}

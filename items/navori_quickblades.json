@@ -1,0 +1,26 @@
+{
+  "name": "Navori Quickblades",
+  "cost": 3400,
+  "rarity": "mythic",
+  "from": [
+    "b_f_sword",
+    "caulfields_warhammer",
+    "cloak_of_agility"
+  ],
+  "tags": [
+    "Damage",
+    "CriticalStrike",
+    "CooldownReduction",
+    "OnHit",
+    "AbilityHaste"
+  ],
+  "group": "haste_capstone",
+  "stats": {
+    "attack_damage": 65.0,
+    "crit_chance": 0.2,
+    "ability_haste": 15.0
+  },
+  "mythic_stats": {},
+  "description": "",
+  "passives": []
+}

@@ -1,0 +1,22 @@
+{
+  "name": "Bloodthirster",
+  "cost": 3400,
+  "rarity": "legendary",
+  "from": [
+    "b_f_sword",
+    "cloak_of_agility",
+    "vampiric_scepter"
+  ],
+  "tags": [
+    "Damage",
+    "CriticalStrike",
+    "LifeSteal"
+  ],
+  "stats": {
+    "attack_damage": 55.0,
+    "crit_chance": 0.2,
+    "lifesteal": 0.18
+  },
+  "description": "",
+  "passives": []
+}

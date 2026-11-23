@@ -1,0 +1,23 @@
+{
+  "name": "Frozen Heart",
+  "cost": 2700,
+  "rarity": "legendary",
+  "from": [
+    "wardens_mail",
+    "glacial_buckler"
+  ],
+  "tags": [
+    "Armor",
+    "Mana",
+    "Aura",
+    "CooldownReduction",
+    "AbilityHaste"
+  ],
+  "stats": {
+    "armor": 90.0,
+    "max_mana": 400.0,
+    "ability_haste": 20.0
+  },
+  "description": "",
+  "passives": []
+}

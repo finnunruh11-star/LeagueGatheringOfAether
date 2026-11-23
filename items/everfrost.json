@@ -1,0 +1,28 @@
+{
+  "name": "Everfrost",
+  "cost": 2800,
+  "rarity": "mythic",
+  "from": [
+    "kindlegem",
+    "lost_chapter",
+    "amplifying_tome"
+  ],
+  "tags": [
+    "Health",
+    "SpellDamage",
+    "Mana",
+    "Active",
+    "CooldownReduction",
+    "Slow",
+    "AbilityHaste"
+  ],
+  "stats": {
+    "ability_power": 70.0,
+    "max_hp": 250.0,
+    "max_mana": 600.0,
+    "ability_haste": 20.0
+  },
+  "mythic_stats": {},
+  "description": "",
+  "passives": []
+}

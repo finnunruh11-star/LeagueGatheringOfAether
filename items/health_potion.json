@@ -1,0 +1,30 @@
+{
+  "name": "Health Potion",
+  "cost": 50,
+  "rarity": "consumable",
+  "tags": [
+    "HealthRegen",
+    "Consumable",
+    "Jungle"
+  ],
+  "group": "potion",
+  "stack": 5,
+  "stats": {},
+  "description": "",
+  "passives": [],
+  "active": {
+    "name": "Drink",
+    "description": "Restore 120 health over 15 seconds.",
+    "cooldown": 0.5,
+    "targeting": "self",
+    "effects": [
+      {
+        "type": "hot",
+        "amount": 8,
+        "duration": 15,
+        "interval": 0.5,
+        "id": "health_potion"
+      }
+    ]
+  }
+}

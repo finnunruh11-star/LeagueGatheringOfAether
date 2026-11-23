@@ -1,0 +1,13 @@
+{
+  "name": "Needlessly Large Rod",
+  "cost": 1250,
+  "rarity": "basic",
+  "tags": [
+    "SpellDamage"
+  ],
+  "stats": {
+    "ability_power": 60.0
+  },
+  "description": "",
+  "passives": []
+}

@@ -1,0 +1,23 @@
+{
+  "name": "Warmog's Armor",
+  "cost": 3000,
+  "rarity": "legendary",
+  "from": [
+    "giants_belt",
+    "kindlegem",
+    "crystalline_bracer"
+  ],
+  "tags": [
+    "Health",
+    "HealthRegen",
+    "CooldownReduction",
+    "AbilityHaste"
+  ],
+  "stats": {
+    "max_hp": 800.0,
+    "ability_haste": 10.0,
+    "hp_regen_percent": 2.0
+  },
+  "description": "",
+  "passives": []
+}

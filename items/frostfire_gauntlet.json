@@ -1,0 +1,28 @@
+{
+  "name": "Frostfire Gauntlet",
+  "cost": 2800,
+  "rarity": "mythic",
+  "from": [
+    "everfrost",
+    "chain_vest",
+    "ruby_crystal"
+  ],
+  "tags": [
+    "Health",
+    "SpellBlock",
+    "Armor",
+    "Aura",
+    "CooldownReduction",
+    "Slow",
+    "AbilityHaste"
+  ],
+  "stats": {
+    "max_hp": 450.0,
+    "armor": 25.0,
+    "magic_resist": 25.0,
+    "ability_haste": 20.0
+  },
+  "mythic_stats": {},
+  "description": "",
+  "passives": []
+}

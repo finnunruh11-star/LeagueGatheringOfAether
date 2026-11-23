@@ -1,0 +1,23 @@
+{
+  "name": "Dead Man's Plate",
+  "cost": 2900,
+  "rarity": "legendary",
+  "from": [
+    "winged_moonplate",
+    "ruby_crystal",
+    "chain_vest"
+  ],
+  "tags": [
+    "Health",
+    "Armor",
+    "Slow",
+    "NonbootsMovement"
+  ],
+  "stats": {
+    "max_hp": 300.0,
+    "armor": 45.0,
+    "move_speed_bonus": 0.05
+  },
+  "description": "",
+  "passives": []
+}

@@ -15,6 +15,7 @@ var mode := "attack"
 var source = null
 var target = null
 var damage := 0.0
+var crit := false
 var speed := 1000.0
 var effect := {}
 var ctx := {}
@@ -48,13 +49,14 @@ func setup(d: Dictionary) -> void:
 	rotation = dir.angle()
 
 
-func init_attack(src, tgt, dmg: float, spd: float) -> void:
+func init_attack(src, tgt, dmg: float, spd: float, is_crit := false) -> void:
 	mode = "attack"
 	source = src
 	team = src.team
 	target = tgt
 	damage = dmg
 	speed = spd
+	crit = is_crit
 
 
 func init_ability(e: Dictionary, c: Dictionary, d: Vector2, homing_target) -> void:
@@ -141,9 +143,9 @@ func _attack_step(delta: float) -> void:
 	var step := speed * delta
 	if to.length() <= step + target.radius * 0.5:
 		if is_instance_valid(source):
-			source.land_attack(target, damage)
+			source.land_attack(target, damage, crit)
 		else:
-			target.take_damage(damage, null, "physical")
+			target.take_damage(damage, null, "physical", {"attack": true})
 		world.despawn(self)
 		return
 	dir = to.normalized()

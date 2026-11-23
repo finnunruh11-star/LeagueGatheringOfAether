@@ -1,0 +1,13 @@
+{
+  "name": "Long Sword",
+  "cost": 350,
+  "rarity": "basic",
+  "tags": [
+    "Damage"
+  ],
+  "stats": {
+    "attack_damage": 10.0
+  },
+  "description": "",
+  "passives": []
+}

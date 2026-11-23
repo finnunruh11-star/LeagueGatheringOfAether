@@ -1,0 +1,16 @@
+{
+  "name": "Negatron Cloak",
+  "cost": 900,
+  "rarity": "epic",
+  "from": [
+    "null_magic_mantle"
+  ],
+  "tags": [
+    "SpellBlock"
+  ],
+  "stats": {
+    "magic_resist": 50.0
+  },
+  "description": "",
+  "passives": []
+}

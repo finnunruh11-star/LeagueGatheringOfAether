@@ -1,0 +1,13 @@
+{
+  "name": "Faerie Charm",
+  "cost": 250,
+  "rarity": "basic",
+  "tags": [
+    "ManaRegen"
+  ],
+  "stats": {
+    "mana_regen_percent": 0.5
+  },
+  "description": "",
+  "passives": []
+}

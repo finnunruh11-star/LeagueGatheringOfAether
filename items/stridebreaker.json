@@ -1,0 +1,29 @@
+{
+  "name": "Stridebreaker",
+  "cost": 3300,
+  "rarity": "mythic",
+  "from": [
+    "ironspike_whip",
+    "hearthbound_axe",
+    "kindlegem"
+  ],
+  "tags": [
+    "Health",
+    "Damage",
+    "AttackSpeed",
+    "Active",
+    "CooldownReduction",
+    "Slow",
+    "NonbootsMovement",
+    "AbilityHaste"
+  ],
+  "stats": {
+    "attack_damage": 45.0,
+    "bonus_attack_speed": 0.2,
+    "max_hp": 200.0,
+    "ability_haste": 20.0
+  },
+  "mythic_stats": {},
+  "description": "",
+  "passives": []
+}

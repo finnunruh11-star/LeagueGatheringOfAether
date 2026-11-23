@@ -1,0 +1,17 @@
+{
+  "name": "Warden's Mail",
+  "cost": 1000,
+  "rarity": "epic",
+  "from": [
+    "cloth_armor",
+    "cloth_armor"
+  ],
+  "tags": [
+    "Armor"
+  ],
+  "stats": {
+    "armor": 40.0
+  },
+  "description": "",
+  "passives": []
+}

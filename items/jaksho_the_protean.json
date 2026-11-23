@@ -1,0 +1,27 @@
+{
+  "name": "Jak'Sho, The Protean",
+  "cost": 3200,
+  "rarity": "mythic",
+  "from": [
+    "aegis_of_the_legion",
+    "kindlegem",
+    "ruby_crystal"
+  ],
+  "tags": [
+    "Health",
+    "SpellBlock",
+    "Armor",
+    "CooldownReduction",
+    "MagicResist",
+    "AbilityHaste"
+  ],
+  "stats": {
+    "max_hp": 400.0,
+    "armor": 30.0,
+    "magic_resist": 30.0,
+    "ability_haste": 20.0
+  },
+  "mythic_stats": {},
+  "description": "",
+  "passives": []
+}

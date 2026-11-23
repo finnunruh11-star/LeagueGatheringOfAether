@@ -1,0 +1,17 @@
+{
+  "name": "Recurve Bow",
+  "cost": 700,
+  "rarity": "epic",
+  "from": [
+    "dagger"
+  ],
+  "tags": [
+    "AttackSpeed",
+    "OnHit"
+  ],
+  "stats": {
+    "bonus_attack_speed": 0.15
+  },
+  "description": "",
+  "passives": []
+}

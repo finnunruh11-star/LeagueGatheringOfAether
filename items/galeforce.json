@@ -1,0 +1,26 @@
+{
+  "name": "Galeforce",
+  "cost": 3400,
+  "rarity": "mythic",
+  "from": [
+    "b_f_sword",
+    "zeal",
+    "long_sword"
+  ],
+  "tags": [
+    "Damage",
+    "CriticalStrike",
+    "AttackSpeed",
+    "Active",
+    "NonbootsMovement"
+  ],
+  "stats": {
+    "attack_damage": 50.0,
+    "bonus_attack_speed": 0.15,
+    "crit_chance": 0.2,
+    "move_speed_bonus": 0.07
+  },
+  "mythic_stats": {},
+  "description": "",
+  "passives": []
+}

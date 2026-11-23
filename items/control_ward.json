@@ -1,0 +1,15 @@
+{
+  "name": "Control Ward",
+  "cost": 75,
+  "rarity": "consumable",
+  "tags": [
+    "Consumable",
+    "Stealth",
+    "Vision"
+  ],
+  "group": "control_ward",
+  "stack": 2,
+  "stats": {},
+  "description": "",
+  "passives": []
+}

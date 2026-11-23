@@ -35,6 +35,7 @@ func _ready() -> void:
 			continue
 		pid += 1
 		var c: Champion = world.spawn("champion", {"peer": pid, "team": 0, "character": id, "name": "Test", "pos": Vector2(850, 750)})
+		c.max_ranks()
 		var real_local := world.local_champion
 		world.local_champion = c
 		await get_tree().create_timer(0.3).timeout
@@ -54,6 +55,7 @@ func _ready() -> void:
 			c.teleport(start)
 			c.dead = false
 			c.hp = c.stats.max_hp
+			c.mana = c.stats.max_mana
 			c.cooldowns[slot] = 0.0
 			c.statuses.clear()
 			before = dummy.total_taken

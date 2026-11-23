@@ -10,17 +10,39 @@
     "attack_speed": 0.7,
     "attack_range": 480,
     "armor": 14,
-    "ability_power": 40
+    "ability_power": 40,
+    "max_mana": 420,
+    "mana_regen": 1.6
   },
-  "per_level": {"max_hp": 70, "attack_damage": 2.5, "ability_power": 12},
-  "attack": {"ranged": true, "projectile_speed": 950, "projectile_color": "#ffb347", "projectile_size": 7, "hit_vfx": "fire"},
+  "per_level": {
+    "max_hp": 70,
+    "attack_damage": 2.5,
+    "ability_power": 12,
+    "max_mana": 25,
+    "mana_regen": 0.12
+  },
+  "attack": {
+    "ranged": true,
+    "projectile_speed": 950,
+    "projectile_color": "#ffb347",
+    "projectile_size": 7,
+    "hit_vfx": "fire"
+  },
   "passive": {
     "name": "Kindling",
     "description": "Basic attacks set enemies ablaze for 2s (8 + 10% AP damage per second).",
     "triggers": [
-      {"on": "attack", "effects": [
-        {"type": "dot", "amount": "8 + 0.1 * ap", "duration": 2, "id": "burn"}
-      ]}
+      {
+        "on": "attack",
+        "effects": [
+          {
+            "type": "dot",
+            "amount": "8 + 0.1 * ap",
+            "duration": 2,
+            "id": "burn"
+          }
+        ]
+      }
     ]
   },
   "abilities": {
@@ -28,23 +50,62 @@
     "w": {
       "name": "Flame Field",
       "description": "Ignite the ground for 4s. Enemies inside burn and are slowed.",
-      "cooldown": 11,
+      "cooldown": [
+        12,
+        11.5,
+        11,
+        10.5,
+        10
+      ],
       "targeting": "point",
       "range": 700,
       "effects": [
-        {"type": "zone", "radius": 170, "duration": 4, "interval": 0.5, "color": "#ff5a1f", "effects": [
-          {"type": "damage", "amount": "14 + 0.12 * ap"},
-          {"type": "slow", "amount": 0.3, "duration": 0.6}
-        ]}
+        {
+          "type": "zone",
+          "radius": 170,
+          "duration": 4,
+          "interval": 0.5,
+          "color": "#ff5a1f",
+          "effects": [
+            {
+              "type": "damage",
+              "amount": "[14, 20, 26, 32, 38][rank - 1] + 0.12 * ap"
+            },
+            {
+              "type": "slow",
+              "amount": 0.3,
+              "duration": 0.6
+            }
+          ]
+        }
+      ],
+      "cost": [
+        70,
+        75,
+        80,
+        85,
+        90
       ]
     },
     "e": {
       "name": "Flicker",
       "description": "Teleport a short distance.",
-      "cooldown": 10,
+      "cooldown": [
+        14,
+        13,
+        12,
+        11,
+        10
+      ],
       "targeting": "point",
       "range": 430,
-      "effects": [{"type": "teleport", "color": "#ffb347"}]
+      "effects": [
+        {
+          "type": "teleport",
+          "color": "#ffb347"
+        }
+      ],
+      "cost": 60
     },
     "r": "meteor_shower"
   }

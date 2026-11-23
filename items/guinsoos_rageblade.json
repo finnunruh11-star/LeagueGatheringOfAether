@@ -1,0 +1,25 @@
+{
+  "name": "Guinsoo's Rageblade",
+  "cost": 3200,
+  "rarity": "mythic",
+  "from": [
+    "amplifying_tome",
+    "rageknife",
+    "pickaxe"
+  ],
+  "tags": [
+    "CriticalStrike",
+    "AttackSpeed",
+    "OnHit",
+    "MagicPenetration",
+    "ArmorPenetration"
+  ],
+  "stats": {
+    "attack_damage": 30.0,
+    "ability_power": 30.0,
+    "bonus_attack_speed": 0.25
+  },
+  "mythic_stats": {},
+  "description": "",
+  "passives": []
+}

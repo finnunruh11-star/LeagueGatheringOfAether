@@ -1,0 +1,22 @@
+{
+  "name": "Lord Dominik's Regards",
+  "cost": 3000,
+  "rarity": "legendary",
+  "from": [
+    "last_whisper",
+    "cloak_of_agility"
+  ],
+  "tags": [
+    "Damage",
+    "CriticalStrike",
+    "ArmorPenetration"
+  ],
+  "group": "last_whisper",
+  "stats": {
+    "attack_damage": 35.0,
+    "crit_chance": 0.2,
+    "armor_pen": 0.3
+  },
+  "description": "",
+  "passives": []
+}

@@ -1,0 +1,22 @@
+{
+  "name": "Infinity Edge",
+  "cost": 3400,
+  "rarity": "mythic",
+  "from": [
+    "b_f_sword",
+    "pickaxe",
+    "cloak_of_agility"
+  ],
+  "tags": [
+    "CriticalStrike",
+    "Damage"
+  ],
+  "stats": {
+    "attack_damage": 65.0,
+    "crit_chance": 0.2,
+    "crit_damage": 0.45
+  },
+  "mythic_stats": {},
+  "description": "",
+  "passives": []
+}

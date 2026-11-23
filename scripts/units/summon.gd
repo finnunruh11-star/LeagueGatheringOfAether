@@ -26,6 +26,7 @@ func setup(d: Dictionary) -> void:
 	base_stats.attack_range = 400.0 if ranged else 70.0
 	base_stats.move_speed = 0.0 if stationary else 340.0
 	base_stats.armor = 10.0
+	base_stats.magic_resist = 10.0
 	base_stats.hp_regen = 0.0
 	var st = d.get("stats", {})
 	if st is Dictionary:

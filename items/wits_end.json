@@ -1,0 +1,24 @@
+{
+  "name": "Wit's End",
+  "cost": 3200,
+  "rarity": "legendary",
+  "from": [
+    "hearthbound_axe",
+    "null_magic_mantle",
+    "recurve_bow"
+  ],
+  "tags": [
+    "SpellBlock",
+    "Damage",
+    "AttackSpeed",
+    "OnHit",
+    "NonbootsMovement"
+  ],
+  "stats": {
+    "attack_damage": 40.0,
+    "bonus_attack_speed": 0.4,
+    "magic_resist": 40.0
+  },
+  "description": "",
+  "passives": []
+}

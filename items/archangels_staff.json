@@ -1,0 +1,29 @@
+{
+  "name": "Archangel's Staff",
+  "cost": 3000,
+  "rarity": "legendary",
+  "from": [
+    "tear_of_the_goddess",
+    "kindlegem",
+    "needlessly_large_rod"
+  ],
+  "tags": [
+    "Health",
+    "SpellDamage",
+    "Mana",
+    "Active",
+    "AbilityHaste"
+  ],
+  "group": [
+    "lifeline",
+    "tear"
+  ],
+  "stats": {
+    "ability_power": 70.0,
+    "max_mana": 500.0,
+    "max_hp": 200.0,
+    "ability_haste": 10.0
+  },
+  "description": "",
+  "passives": []
+}

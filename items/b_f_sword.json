@@ -1,0 +1,13 @@
+{
+  "name": "B. F. Sword",
+  "cost": 1300,
+  "rarity": "basic",
+  "tags": [
+    "Damage"
+  ],
+  "stats": {
+    "attack_damage": 40.0
+  },
+  "description": "",
+  "passives": []
+}

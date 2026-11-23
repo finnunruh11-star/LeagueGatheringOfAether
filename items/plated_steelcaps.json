@@ -1,0 +1,19 @@
+{
+  "name": "Plated Steelcaps",
+  "cost": 1100,
+  "rarity": "boots",
+  "from": [
+    "boots",
+    "cloth_armor"
+  ],
+  "tags": [
+    "Armor",
+    "Boots"
+  ],
+  "stats": {
+    "armor": 20.0,
+    "move_speed": 45.0
+  },
+  "description": "",
+  "passives": []
+}

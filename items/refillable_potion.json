@@ -1,0 +1,15 @@
+{
+  "name": "Refillable Potion",
+  "cost": 150,
+  "rarity": "consumable",
+  "tags": [
+    "HealthRegen",
+    "Consumable",
+    "Active",
+    "Jungle"
+  ],
+  "group": "potion",
+  "stats": {},
+  "description": "",
+  "passives": []
+}

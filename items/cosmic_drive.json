@@ -1,0 +1,23 @@
+{
+  "name": "Cosmic Drive",
+  "cost": 3000,
+  "rarity": "legendary",
+  "from": [
+    "fiendish_codex",
+    "aether_wisp",
+    "amplifying_tome"
+  ],
+  "tags": [
+    "SpellDamage",
+    "CooldownReduction",
+    "NonbootsMovement",
+    "AbilityHaste"
+  ],
+  "stats": {
+    "ability_power": 100.0,
+    "ability_haste": 30.0,
+    "move_speed_bonus": 0.05
+  },
+  "description": "",
+  "passives": []
+}

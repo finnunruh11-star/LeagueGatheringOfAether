@@ -1,0 +1,19 @@
+{
+  "name": "Verdant Barrier",
+  "cost": 1000,
+  "rarity": "epic",
+  "from": [
+    "null_magic_mantle",
+    "amplifying_tome"
+  ],
+  "tags": [
+    "SpellBlock",
+    "SpellDamage"
+  ],
+  "stats": {
+    "ability_power": 20.0,
+    "magic_resist": 25.0
+  },
+  "description": "",
+  "passives": []
+}

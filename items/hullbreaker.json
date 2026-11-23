@@ -1,0 +1,25 @@
+{
+  "name": "Hullbreaker",
+  "cost": 3000,
+  "rarity": "legendary",
+  "from": [
+    "pickaxe",
+    "phage",
+    "winged_moonplate"
+  ],
+  "tags": [
+    "Health",
+    "SpellBlock",
+    "Armor",
+    "Damage",
+    "NonbootsMovement"
+  ],
+  "stats": {
+    "attack_damage": 60.0,
+    "max_hp": 400.0,
+    "hp_regen_percent": 1.5,
+    "move_speed_bonus": 0.05
+  },
+  "description": "",
+  "passives": []
+}

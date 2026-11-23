@@ -1,0 +1,20 @@
+{
+  "name": "Demonic Embrace",
+  "cost": 3000,
+  "rarity": "legendary",
+  "from": [
+    "blasting_wand",
+    "giants_belt",
+    "amplifying_tome"
+  ],
+  "tags": [
+    "Health",
+    "SpellDamage"
+  ],
+  "stats": {
+    "ability_power": 75.0,
+    "max_hp": 350.0
+  },
+  "description": "",
+  "passives": []
+}

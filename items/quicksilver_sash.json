@@ -1,0 +1,18 @@
+{
+  "name": "Quicksilver Sash",
+  "cost": 1300,
+  "rarity": "epic",
+  "from": [
+    "null_magic_mantle"
+  ],
+  "tags": [
+    "Active",
+    "SpellBlock"
+  ],
+  "group": "quicksilver",
+  "stats": {
+    "magic_resist": 30.0
+  },
+  "description": "",
+  "passives": []
+}

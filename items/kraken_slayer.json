@@ -1,0 +1,44 @@
+{
+  "name": "Kraken Slayer",
+  "cost": 3000,
+  "rarity": "legendary",
+  "from": [
+    "noonquiver",
+    "cloak_of_agility",
+    "recurve_bow"
+  ],
+  "tags": [
+    "Damage",
+    "CriticalStrike",
+    "AttackSpeed"
+  ],
+  "stats": {
+    "attack_damage": 40.0,
+    "bonus_attack_speed": 0.3,
+    "crit_chance": 0.2
+  },
+  "description": "",
+  "passives": [
+    {
+      "name": "Bring It Down",
+      "description": "Every third basic attack deals 35 (rising after level 8) + 65% AD bonus physical damage. Hitting the same target again within 6s makes it 50% stronger, up to twice.",
+      "on": "attack",
+      "every": 3,
+      "effects": [
+        {
+          "type": "damage",
+          "damage_type": "physical",
+          "amount": "(35 + 5 * max(0, level - 8) + 0.65 * ad + 0.6 * ap) * (1 + 0.5 * t_stacks('kraken_amp'))",
+          "vfx": "claw",
+          "color": "#4fd6ff"
+        },
+        {
+          "type": "mark",
+          "id": "kraken_amp",
+          "duration": 6,
+          "max_stacks": 2
+        }
+      ]
+    }
+  ]
+}

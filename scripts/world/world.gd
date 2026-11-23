@@ -6,6 +6,9 @@ extends Node2D
 const SNAP_EVERY := 3
 const SNAP_DT := SNAP_EVERY / 60.0
 const XP_RANGE := 1300.0
+const KILL_GOLD := 300.0
+const ASSIST_GOLD := 150.0
+const TOWER_GOLD := 150.0
 
 var config := {}
 var online := false
@@ -139,13 +142,16 @@ func begin() -> void:
 	for s in map.structures:
 		spawn("tower", s)
 	var per_team := [0, 0]
+	var start_gold := float(map.data.get("start_gold", 500.0))
 	for pid in config.players:
 		var p: Dictionary = config.players[pid]
 		var t := clampi(int(p.team), 0, 1)
 		var off := Vector2(0, 70).rotated(per_team[t] * 2.1) if per_team[t] > 0 else Vector2.ZERO
 		var gone: bool = online and pid != 1 and not bool(p.get("bot", false)) and not Game.players.has(pid)
-		spawn("champion", {"peer": pid, "team": t, "character": p.character, "name": p.name,
+		var c = spawn("champion", {"peer": pid, "team": t, "character": p.character, "name": p.name, "gold": start_gold,
 			"bot": bool(p.get("bot", false)) or gone, "pos": map.spawn_point(t) + off, "lane": per_team[t]})
+		for k in int(map.data.get("start_level", 1)) - 1:
+			c.cheat("level")
 		per_team[t] += 1
 	for dpos in map.dummies:
 		spawn("dummy", {"pos": dpos})
@@ -313,6 +319,26 @@ func _play_fx(kind: String, data: Dictionary) -> void:
 	if kind == "sound":
 		_play_sound(data)
 		return
+	match kind:
+		"notice":
+			if int(data.get("peer", 0)) == local_peer:
+				hud.notice(str(data.get("text", "")))
+				_sfx("error", null, -12.0)
+			return
+		"gold":
+			if int(data.get("peer", 0)) == local_peer:
+				var g := Fx.new()
+				g.setup("text", {"pos": Vector2(data.p) + Vector2(randf_range(-12, 12), -46), "text": "+%d" % int(data.a),
+					"color": Color(1.0, 0.85, 0.25), "size": 18, "dur": 0.9})
+				fx_layer.add_child(g)
+				_sfx("coin", data.p, -16.0)
+			return
+		"buy", "rankup":
+			if local_champion != null and int(data.get("v", 0)) == local_champion.net_id:
+				_sfx("buy" if kind == "buy" else "pop", null, -10.0)
+				if kind == "rankup":
+					hud.flash_slot(str(data.get("s", "")))
+			return
 	if kind == "announce":
 		hud.announce(str(data.text), data.get("color", Color.WHITE))
 		var txt := str(data.text)
@@ -497,6 +523,7 @@ func _fountain(delta: float) -> void:
 				continue
 			if c.team == t:
 				c.heal(c.stats.max_hp * 0.07, null, false)
+				c.restore_mana(c.stats.max_mana * 0.07)
 			elif map.lane_count() > 0:
 				c.take_damage(300.0, null, "true", {"vfx": "star", "col": Game.TEAM_COLORS[t]})
 				fx("beam", {"from": map.spawn_point(t), "to": c.global_position, "color": Game.TEAM_COLORS[t], "width": 18.0})
@@ -506,8 +533,32 @@ func _trickle(delta: float) -> void:
 	_trickle_t += delta
 	if _trickle_t >= 1.0:
 		_trickle_t -= 1.0
+		var g := float(map.data.get("gold_per_second", 2.5))
 		for c in champions.values():
 			c.gain_xp(3.0)
+			c.gold += g
+
+
+## Practice matches (and maps with "cheats": true) allow F1-F4 cheats and shopping anywhere.
+func cheats_allowed() -> bool:
+	return not online or bool(map.data.get("cheats", false))
+
+
+## Whether `u` can be seen by `viewer_team` (stealth; fog of war hooks in here too).
+func can_see(u: Unit, viewer_team: int) -> bool:
+	if u.team == viewer_team:
+		return true
+	if u.flags & Unit.F_STEALTH and not _revealed(u, viewer_team):
+		return false
+	return true
+
+
+## Stealthed units are revealed when an enemy champion is very close.
+func _revealed(u: Unit, viewer_team: int) -> bool:
+	for c in champions.values():
+		if c.team == viewer_team and not c.dead and c.global_position.distance_to(u.global_position) < 250.0:
+			return true
+	return false
 
 
 func respawn_time(level: int) -> float:
@@ -534,6 +585,16 @@ func is_protected(t: Tower) -> bool:
 
 
 func on_damage(victim: Unit, amount: float, src, dtype: String, hit := {}) -> void:
+	if Game.debug_log:
+		var fl := PackedStringArray()
+		for k in ["attack", "crit", "onhit", "dot", "aoe", "proc", "raw"]:
+			if hit.get(k, false):
+				fl.append(k)
+		if str(hit.get("ability", "")) != "":
+			fl.append("ab:" + str(hit.ability))
+		if str(hit.get("item", "")) != "":
+			fl.append("item:" + str(hit.item))
+		print("[dmg] t=%.2f %s -> %s %.1f %s %s" % [time, src.display_name if src != null else "-", victim.display_name, amount, dtype, " ".join(fl)])
 	if amount >= 1.0:
 		fx("hit", {"p": victim.global_position, "v": victim.net_id, "a": amount, "t": dtype, "x": str(hit.get("vfx", "spark")),
 			"c": hit.get("col", Color.WHITE), "r": float(hit.get("dir", randf() * TAU)), "s": src.net_id if src != null else 0})
@@ -553,18 +614,33 @@ func on_unit_died(u: Unit, killer) -> void:
 			ck = u.last_champion_hit
 		if u.team <= 1:
 			kills[1 - u.team] += 1
+		var helpers := []
+		for id in u.damagers:
+			var h = entities.get(id)
+			if h is Champion and h != ck and h.team != u.team and time - float(u.damagers[id]) < 10.0:
+				helpers.append(h)
 		if ck != null:
 			ck.kills += 1
+			ck.add_gold(KILL_GOLD, u.global_position)
 			ck.on_kill(u)
+			ck.on_takedown(u, false)
+		for h in helpers:
+			h.add_gold(ASSIST_GOLD / helpers.size(), u.global_position)
+			h.on_takedown(u, true)
 		fx("kill", {"k": ck.net_id if ck != null else 0, "v": u.net_id})
 		_give_xp(u.global_position, u.team, 90.0 + 30.0 * u.level, ck)
 	else:
 		if is_instance_valid(credit) and credit is Champion:
+			if u.gold_value > 0.0:
+				credit.add_gold(u.gold_value, u.global_position)
 			credit.on_kill(u)
 		if u.xp_value > 0.0:
 			_give_xp(u.global_position, u.team, u.xp_value, null)
 	if u is Tower:
 		fx("announce", {"text": "%s %s destroyed!" % [Game.TEAM_NAMES[u.team], u.display_name], "color": Game.TEAM_COLORS[1 - u.team]})
+		for c in champions.values():
+			if c.team != u.team:
+				c.add_gold(TOWER_GOLD, u.global_position if c.global_position.distance_to(u.global_position) < 1200.0 else null)
 		if not u.is_nexus:
 			fx("kill", {"k": 0, "v": u.net_id, "tower": true, "t": u.team})
 		if u.is_nexus:
@@ -701,8 +777,16 @@ func _unhandled_input(event: InputEvent) -> void:
 			KEY_W: slot = "w"
 			KEY_E: slot = "e"
 			KEY_R: slot = "r"
+			KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6: slot = "i%d" % (k.keycode - KEY_1)
 		if slot != "":
+			if k.pressed and (k.ctrl_pressed or k.alt_pressed) and not slot.begins_with("i"):
+				send_command("rank_up", [slot])
+				return
 			if k.pressed:
+				var ab = aim_ability(slot)
+				if slot.begins_with("i") and (ab == null or ab.targeting == "self"):
+					_cast(slot)
+					return
 				aim_slot = slot
 				amove_armed = false
 			elif aim_slot == slot:
@@ -721,17 +805,34 @@ func _unhandled_input(event: InputEvent) -> void:
 				send_command("stop")
 			KEY_B:
 				send_command("recall")
+			KEY_P:
+				hud.toggle_shop()
 			KEY_Y, KEY_Z:
 				cam_locked = not cam_locked
 			KEY_SPACE:
 				if local_champion != null:
 					camera.global_position = local_champion.global_position
+			KEY_F1, KEY_F2, KEY_F3, KEY_F4:
+				if cheats_allowed():
+					send_command("cheat", [["level", "gold", "cd", "ranks"][k.keycode - KEY_F1]])
 			KEY_ESCAPE:
 				if aim_slot != "" or amove_armed:
 					aim_slot = ""
 					amove_armed = false
+				elif hud.shop_open():
+					hud.toggle_shop()
 				else:
 					hud.toggle_menu()
+
+
+## The ability (or item active) bound to an aim slot: q/w/e/r or i0..i5.
+func aim_ability(slot: String):
+	if local_champion == null:
+		return null
+	if slot.begins_with("i"):
+		var it = local_champion.item_def(int(slot.substr(1)))
+		return it.active if it != null else null
+	return local_champion.def.abilities.get(slot)
 
 
 func _right_click(with_fx: bool) -> void:
@@ -752,9 +853,10 @@ func _right_click(with_fx: bool) -> void:
 
 
 func _cast(slot: String) -> void:
-	if local_champion == null or local_champion.dead or ended:
+	var c := local_champion
+	if c == null or c.dead or ended:
 		return
-	var ab = local_champion.def.abilities.get(slot)
+	var ab = aim_ability(slot)
 	if ab == null:
 		return
 	var m := get_global_mouse_position()
@@ -763,9 +865,21 @@ func _cast(slot: String) -> void:
 		var t := pick_unit(m, local_team, ab.targeting == "unit", 70.0, false)
 		if t != null:
 			tid = t.net_id
+	if slot.begins_with("i"):
+		var i := int(slot.substr(1))
+		if c.items[i] != null and c.items[i].cd <= 0.0:
+			send_command("item", [i, m, tid])
+			_sfx("cast", c.global_position, -14.0)
+		return
+	if int(c.ranks.get(slot, 0)) <= 0:
+		hud.notice("%s isn't learned yet - Ctrl+%s (or the + button) to level it up" % [ab.name, slot.to_upper()])
+		return
+	if c.cooldowns.get(slot, 0.0) <= 0.0 and c.mana < c.ability_cost(ab):
+		hud.notice("Not enough mana")
+		return
 	send_command("cast", [slot, m, tid])
-	if local_champion.cooldowns.get(slot, 0.0) <= 0.0:
-		_sfx("cast", local_champion.global_position, -14.0)
+	if c.cooldowns.get(slot, 0.0) <= 0.0:
+		_sfx("cast", c.global_position, -14.0)
 
 
 func _process(delta: float) -> void:
@@ -820,12 +934,13 @@ func _draw_indicator(n: Node2D) -> void:
 		n.draw_arc(p, c.stats.attack_range + c.radius, 0, TAU, 64, Color(1, 0.35, 0.3, 0.7), 2.0, true)
 	if aim_slot == "":
 		return
-	var ab = c.def.abilities.get(aim_slot)
+	var ab = aim_ability(aim_slot)
 	if ab == null:
 		return
 	var ind: Dictionary = ab.get("indicator", {})
-	var rng := Effects.num(ab.range, {"caster": c}, 700.0)
-	var col := Color(0.6, 0.6, 0.6) if c.cooldowns.get(aim_slot, 0.0) > 0.0 else Color(0.45, 0.82, 1.0)
+	var rng := Effects.num(ab.range, {"caster": c, "rank": maxi(int(c.ranks.get(aim_slot, 1)), 1)}, 700.0)
+	var on_cd: bool = c.cooldowns.get(aim_slot, 0.0) > 0.0 if not aim_slot.begins_with("i") else c.items[int(aim_slot.substr(1))] != null and c.items[int(aim_slot.substr(1))].cd > 0.0
+	var col := Color(0.6, 0.6, 0.6) if on_cd else Color(0.45, 0.82, 1.0)
 	var m: Vector2 = test_aim if test_aim != null else get_global_mouse_position()
 	var to := m - p
 	var dir := to.normalized() if to.length() > 1.0 else Vector2(c.facing, 0)

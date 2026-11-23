@@ -1,0 +1,23 @@
+{
+  "name": "Stormrazor",
+  "cost": 3000,
+  "rarity": "legendary",
+  "from": [
+    "noonquiver",
+    "cloak_of_agility",
+    "kircheis_shard"
+  ],
+  "tags": [
+    "Damage",
+    "CriticalStrike",
+    "AttackSpeed",
+    "NonbootsMovement"
+  ],
+  "stats": {
+    "attack_damage": 55.0,
+    "bonus_attack_speed": 0.15,
+    "crit_chance": 0.2
+  },
+  "description": "",
+  "passives": []
+}

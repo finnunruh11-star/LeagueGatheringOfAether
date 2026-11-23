@@ -1,0 +1,13 @@
+{
+  "name": "Blasting Wand",
+  "cost": 850,
+  "rarity": "basic",
+  "tags": [
+    "SpellDamage"
+  ],
+  "stats": {
+    "ability_power": 40.0
+  },
+  "description": "",
+  "passives": []
+}

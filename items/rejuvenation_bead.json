@@ -1,0 +1,13 @@
+{
+  "name": "Rejuvenation Bead",
+  "cost": 300,
+  "rarity": "basic",
+  "tags": [
+    "HealthRegen"
+  ],
+  "stats": {
+    "hp_regen_percent": 1.0
+  },
+  "description": "",
+  "passives": []
+}

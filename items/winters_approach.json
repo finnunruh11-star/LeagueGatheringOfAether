@@ -1,0 +1,23 @@
+{
+  "name": "Winter's Approach",
+  "cost": 2600,
+  "rarity": "legendary",
+  "from": [
+    "tear_of_the_goddess",
+    "kindlegem",
+    "ruby_crystal"
+  ],
+  "tags": [
+    "Health",
+    "Mana",
+    "AbilityHaste"
+  ],
+  "group": "tear",
+  "stats": {
+    "max_hp": 400.0,
+    "max_mana": 500.0,
+    "ability_haste": 15.0
+  },
+  "description": "",
+  "passives": []
+}

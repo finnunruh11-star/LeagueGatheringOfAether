@@ -1,0 +1,21 @@
+{
+  "name": "Maw of Malmortius",
+  "cost": 2800,
+  "rarity": "legendary",
+  "from": [
+    "pickaxe",
+    "hexdrinker",
+    "long_sword"
+  ],
+  "tags": [
+    "SpellBlock",
+    "Damage"
+  ],
+  "group": "lifeline",
+  "stats": {
+    "attack_damage": 65.0,
+    "magic_resist": 50.0
+  },
+  "description": "",
+  "passives": []
+}

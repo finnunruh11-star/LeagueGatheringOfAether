@@ -1,0 +1,21 @@
+{
+  "name": "Randuin's Omen",
+  "cost": 2700,
+  "rarity": "legendary",
+  "from": [
+    "wardens_mail",
+    "giants_belt"
+  ],
+  "tags": [
+    "Health",
+    "Armor",
+    "Active",
+    "Slow"
+  ],
+  "stats": {
+    "max_hp": 400.0,
+    "armor": 60.0
+  },
+  "description": "",
+  "passives": []
+}

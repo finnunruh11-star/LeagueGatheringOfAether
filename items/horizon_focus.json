@@ -1,0 +1,21 @@
+{
+  "name": "Horizon Focus",
+  "cost": 3000,
+  "rarity": "legendary",
+  "from": [
+    "hextech_alternator",
+    "fiendish_codex"
+  ],
+  "tags": [
+    "Health",
+    "SpellDamage",
+    "AbilityHaste"
+  ],
+  "stats": {
+    "ability_power": 100.0,
+    "max_hp": 150.0,
+    "ability_haste": 15.0
+  },
+  "description": "",
+  "passives": []
+}

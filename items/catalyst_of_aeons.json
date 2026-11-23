@@ -1,0 +1,22 @@
+{
+  "name": "Catalyst of Aeons",
+  "cost": 1300,
+  "rarity": "epic",
+  "from": [
+    "ruby_crystal",
+    "sapphire_crystal"
+  ],
+  "tags": [
+    "Health",
+    "HealthRegen",
+    "Mana",
+    "ManaRegen"
+  ],
+  "group": "eternity",
+  "stats": {
+    "max_hp": 300.0,
+    "max_mana": 300.0
+  },
+  "description": "",
+  "passives": []
+}

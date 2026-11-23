@@ -1,0 +1,21 @@
+{
+  "name": "Muramana",
+  "cost": 3000,
+  "rarity": "transform",
+  "tags": [
+    "Damage",
+    "Mana",
+    "CooldownReduction",
+    "OnHit",
+    "ArmorPenetration"
+  ],
+  "group": "tear",
+  "buyable": false,
+  "stats": {
+    "attack_damage": 35.0,
+    "max_mana": 860.0,
+    "ability_haste": 15.0
+  },
+  "description": "",
+  "passives": []
+}

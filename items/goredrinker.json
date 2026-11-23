@@ -1,0 +1,28 @@
+{
+  "name": "Goredrinker",
+  "cost": 3200,
+  "rarity": "mythic",
+  "from": [
+    "ironspike_whip",
+    "phage",
+    "kindlegem"
+  ],
+  "tags": [
+    "Health",
+    "Damage",
+    "LifeSteal",
+    "Active",
+    "CooldownReduction",
+    "SpellVamp",
+    "AbilityHaste"
+  ],
+  "stats": {
+    "attack_damage": 55.0,
+    "max_hp": 400.0,
+    "ability_haste": 20.0,
+    "omnivamp": 0.08
+  },
+  "mythic_stats": {},
+  "description": "",
+  "passives": []
+}

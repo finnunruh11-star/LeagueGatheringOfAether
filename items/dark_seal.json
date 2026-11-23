@@ -1,0 +1,16 @@
+{
+  "name": "Dark Seal",
+  "cost": 350,
+  "rarity": "starter",
+  "tags": [
+    "Health",
+    "SpellDamage"
+  ],
+  "group": "glory",
+  "stats": {
+    "ability_power": 15.0,
+    "max_hp": 50.0
+  },
+  "description": "",
+  "passives": []
+}

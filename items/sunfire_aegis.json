@@ -1,0 +1,21 @@
+{
+  "name": "Sunfire Aegis",
+  "cost": 2700,
+  "rarity": "legendary",
+  "from": [
+    "bamis_cinder",
+    "chain_vest"
+  ],
+  "tags": [
+    "Health",
+    "Armor",
+    "Aura"
+  ],
+  "group": "immolate",
+  "stats": {
+    "max_hp": 500.0,
+    "armor": 50.0
+  },
+  "description": "",
+  "passives": []
+}

@@ -1,0 +1,13 @@
+{
+  "name": "Boots",
+  "cost": 300,
+  "rarity": "boots",
+  "tags": [
+    "Boots"
+  ],
+  "stats": {
+    "move_speed": 25.0
+  },
+  "description": "",
+  "passives": []
+}

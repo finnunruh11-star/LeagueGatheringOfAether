@@ -11,7 +11,10 @@ class DrawControl extends Control:
 
 
 const SLOT_KEYS := ["p", "q", "w", "e", "r"]
-const HELP := "RMB move/attack   QWER hold to aim, release to cast   A+LMB attack-move   S stop   B recall   Y camera lock   Space center   Tab scores   Esc menu"
+const HELP := "RMB move/attack   QWER cast (hold to aim)   Ctrl+QWER level up   1-6 items   P shop   A+LMB attack-move   S stop   B recall   Y camera   Tab scores   Esc menu"
+const BAR_W := 860.0
+const SLOT_X := 262.0
+const ITEM_X := 618.0
 
 var world: World
 var font: Font
@@ -21,6 +24,11 @@ var _feed_dirty := false
 var center_label: Label
 var bar: DrawControl
 var slot_boxes := {}
+var item_boxes: Array = []
+var plus_buttons := {}
+var shop: Shop
+var notice_label: Label
+var _notice_t := 9.0
 var minimap: DrawControl
 var scores: DrawControl
 var end_panel: PanelContainer
@@ -28,6 +36,8 @@ var end_label: Label
 var menu_panel: PanelContainer
 var feed: Array = []
 var _tooltips_for := ""
+var _tooltip_key := ""
+var _items_key := ""
 var _last_hp := -1.0
 var vignette: TextureRect
 var hurt_rect: TextureRect
@@ -101,17 +111,54 @@ func _ready() -> void:
 
 	bar = DrawControl.new()
 	bar.draw_func = _draw_bar
-	_place(bar, 0.5, 1.0, -300, -152, 600, 120)
+	_place(bar, 0.5, 1.0, -BAR_W * 0.5, -168, BAR_W, 136)
 	root.add_child(bar)
 	for i in SLOT_KEYS.size():
 		var s := DrawControl.new()
 		var key: String = SLOT_KEYS[i]
 		s.draw_func = func(c): _draw_slot(c, key)
-		s.position = Vector2(112 + i * 72, 10)
+		s.position = Vector2(SLOT_X + i * 70, 12)
 		s.size = Vector2(64, 64)
 		s.clip_contents = true
 		bar.add_child(s)
 		slot_boxes[key] = s
+		if key != "p":
+			var b := Button.new()
+			b.text = "+"
+			b.add_theme_font_size_override("font_size", 18)
+			b.position = Vector2(SLOT_X + i * 70 + 16, -30)
+			b.size = Vector2(32, 26)
+			b.focus_mode = Control.FOCUS_NONE
+			b.tooltip_text = "Level up (Ctrl+%s)" % key.to_upper()
+			b.pressed.connect(func(): world.send_command("rank_up", [key]))
+			b.visible = false
+			bar.add_child(b)
+			plus_buttons[key] = b
+	for i in 6:
+		var s := DrawControl.new()
+		var idx := i
+		s.draw_func = func(c): _draw_item_slot(c, idx)
+		s.position = Vector2(ITEM_X + (i % 3) * 50, 12 + (i / 3) * 50)
+		s.size = Vector2(44, 44)
+		s.gui_input.connect(func(ev): _item_slot_input(ev, idx))
+		bar.add_child(s)
+		item_boxes.append(s)
+	var shop_btn := Button.new()
+	shop_btn.text = "Shop (P)"
+	shop_btn.focus_mode = Control.FOCUS_NONE
+	shop_btn.position = Vector2(ITEM_X + 152, 70)
+	shop_btn.size = Vector2(84, 36)
+	shop_btn.pressed.connect(toggle_shop)
+	bar.add_child(shop_btn)
+
+	notice_label = _label(root, 20, HORIZONTAL_ALIGNMENT_CENTER)
+	_place(notice_label, 0.5, 1.0, -400, -232, 800, 30)
+	notice_label.add_theme_color_override("font_color", Color(1, 0.7, 0.55))
+
+	shop = Shop.new()
+	shop.world = world
+	root.add_child(shop)
+	shop.set_anchors_and_offsets_preset(Control.PRESET_CENTER)
 
 	minimap = DrawControl.new()
 	minimap.draw_func = _draw_minimap
@@ -125,7 +172,7 @@ func _ready() -> void:
 	scores.draw_func = _draw_scores
 	scores.visible = false
 	scores.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	_place(scores, 0.5, 0.5, -360, -220, 720, 440)
+	_place(scores, 0.5, 0.5, -380, -260, 760, 520)
 	root.add_child(scores)
 
 	end_panel = _panel(root)
@@ -234,6 +281,24 @@ func toggle_menu() -> void:
 	menu_panel.visible = not menu_panel.visible and not end_panel.visible
 
 
+func toggle_shop() -> void:
+	shop.toggle()
+
+
+func shop_open() -> bool:
+	return shop.is_open()
+
+
+## Short message above the ability bar (e.g. "Not enough mana").
+func notice(text: String) -> void:
+	notice_label.text = text
+	_notice_t = 0.0
+
+
+func flash_slot(slot: String) -> void:
+	_ready_flash[slot] = 1.0
+
+
 func show_scores(on: bool) -> void:
 	scores.visible = on
 
@@ -281,13 +346,36 @@ func _process(_delta: float) -> void:
 	if ch != null and _tooltips_for != ch.char_id:
 		_tooltips_for = ch.char_id
 		_build_tooltips(ch)
+	if ch != null:
+		_update_rank_ui(ch)
 	_update_effects(_delta, ch)
+	_notice_t += _delta
+	notice_label.modulate.a = clampf(2.5 - _notice_t, 0.0, 1.0)
 	bar.queue_redraw()
 	for s in slot_boxes.values():
+		s.queue_redraw()
+	for s in item_boxes:
 		s.queue_redraw()
 	minimap.queue_redraw()
 	if scores.visible:
 		scores.queue_redraw()
+
+
+func _update_rank_ui(ch: Champion) -> void:
+	for slot in plus_buttons:
+		plus_buttons[slot].visible = ch.can_rank_up(slot)
+	var key := "%s|%s|%d" % [str(ch.ranks), str(ch.level), int(ch.stats.ability_haste)]
+	if key != _tooltip_key:
+		_tooltip_key = key
+		_build_tooltips(ch)
+	var ik := ""
+	for inst in ch.items:
+		ik += (inst.id if inst != null else "-") + ","
+	if ik != _items_key:
+		_items_key = ik
+		for i in 6:
+			var it = ch.item_def(i)
+			item_boxes[i].tooltip_text = ItemUI.describe(it) if it != null else "Empty item slot %d" % (i + 1)
 
 
 func _update_effects(delta: float, ch: Champion) -> void:
@@ -321,8 +409,32 @@ func _build_tooltips(ch: Champion) -> void:
 		if ab == null:
 			slot_boxes[slot].tooltip_text = "(no ability)"
 			continue
-		slot_boxes[slot].tooltip_text = "%s - %s\nCooldown: %s   Range: %s   Targeting: %s\n%s" % [
-			slot.to_upper(), ab.name, str(ab.cooldown), str(ab.range), ab.targeting, ab.description]
+		var r := int(ch.ranks.get(slot, 0))
+		var cost := ch.ability_cost(ab)
+		var lines := PackedStringArray()
+		lines.append("%s - %s   (rank %d/%d)" % [slot.to_upper(), ab.name, r, int(ab.max_rank)])
+		var meta := "Cooldown: %.1fs" % ch.ability_cooldown(ab)
+		if cost > 0.0:
+			meta += "   Cost: %d %s" % [int(cost), "health" if ab.cost_type == "health" else "mana"]
+		meta += "   Range: %d" % int(Effects.num(ab.range, {"caster": ch, "rank": maxi(r, 1)}, 700.0))
+		lines.append(meta)
+		lines.append(str(ab.description))
+		if r == 0:
+			lines.append("Not learned yet: press Ctrl+%s or the + button when you have a skill point." % slot.to_upper())
+		elif ab.get("auto_rank", false) and r < int(ab.max_rank):
+			lines.append("Next rank: +%d%% damage/healing, shorter cooldown." % (50 if slot == "r" else 25))
+		slot_boxes[slot].tooltip_text = "\n".join(lines)
+
+
+func _item_slot_input(ev: InputEvent, i: int) -> void:
+	if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
+		var ab = world.aim_ability("i%d" % i)
+		if ab == null:
+			return
+		if ab.targeting == "self":
+			world._cast("i%d" % i)
+		else:
+			world.aim_slot = "i%d" % i
 
 
 # ---------------------------------------------------------------- drawing ---
@@ -333,30 +445,112 @@ func _draw_bar(c: Control) -> void:
 	var ch := world.local_champion
 	if ch == null:
 		return
-	var pr := Rect2(10, 10, 90, 90)
+	# Stats panel
+	var st: Dictionary = ch.stats
+	var rows := [
+		["AD", "%d" % int(st.attack_damage), "AP", "%d" % int(st.ability_power)],
+		["ARM", "%d" % int(st.armor), "MR", "%d" % int(st.get("magic_resist", 0.0))],
+		["AS", "%.2f" % st.get("attack_speed", 0.0), "CRIT", "%d%%" % int(round(st.get("crit_chance", 0.0) * 100.0))],
+		["AH", "%d" % int(st.get("ability_haste", 0.0)), "MS", "%d" % int(st.move_speed)],
+		["RNG", "%d" % int(st.attack_range), "VAMP", "%d%%" % int(round((st.get("lifesteal", 0.0) + st.get("omnivamp", 0.0)) * 100.0))],
+	]
+	for i in rows.size():
+		var y := 26.0 + i * 22.0
+		for j in 2:
+			var x := 10.0 + j * 72.0
+			c.draw_string(font, Vector2(x, y), rows[i][j * 2], HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.6, 0.63, 0.7))
+			c.draw_string(font, Vector2(x + 30, y), rows[i][j * 2 + 1], HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.92, 0.93, 0.96))
+	var pen := PackedStringArray()
+	if st.get("lethality", 0.0) > 0.0:
+		pen.append("Leth %d" % int(st.lethality))
+	if st.get("armor_pen", 0.0) > 0.0:
+		pen.append("ArPen %d%%" % int(st.armor_pen * 100.0))
+	if st.get("magic_pen", 0.0) > 0.0 or st.get("magic_pen_percent", 0.0) > 0.0:
+		pen.append("MPen %d|%d%%" % [int(st.get("magic_pen", 0.0)), int(st.get("magic_pen_percent", 0.0) * 100.0)])
+	if not pen.is_empty():
+		c.draw_string(font, Vector2(10, 128), "  ".join(pen), HORIZONTAL_ALIGNMENT_LEFT, 145, 11, Color(1, 0.75, 0.55))
+	# Portrait
+	var pr := Rect2(160, 10, 92, 92)
 	if ch.def.get("portrait") != null:
 		c.draw_texture_rect(ch.def.portrait, pr, false)
 	else:
 		c.draw_rect(pr, ch.color.darkened(0.2))
 		c.draw_string(font, Vector2(pr.position.x, pr.position.y + 58), ch.display_name.substr(0, 2), HORIZONTAL_ALIGNMENT_CENTER, pr.size.x, 34)
 	c.draw_rect(pr, ch.team_color(), false, 3.0)
-	c.draw_circle(Vector2(98, 98), 14.0, Color(0.1, 0.1, 0.12))
-	c.draw_arc(Vector2(98, 98), 14.0, 0, TAU, 24, Color(1, 0.85, 0.4), 2.0)
-	c.draw_string(font, Vector2(84, 104), str(ch.level), HORIZONTAL_ALIGNMENT_CENTER, 28, 15, Color(1, 0.9, 0.5))
-	var hb := Rect2(112, 80, 352, 18)
+	c.draw_circle(Vector2(250, 100), 14.0, Color(0.1, 0.1, 0.12))
+	c.draw_arc(Vector2(250, 100), 14.0, 0, TAU, 24, Color(1, 0.85, 0.4), 2.0)
+	c.draw_string(font, Vector2(236, 106), str(ch.level), HORIZONTAL_ALIGNMENT_CENTER, 28, 15, Color(1, 0.9, 0.5))
+	var xb := Rect2(160, 110, 92, 6)
+	c.draw_rect(xb, Color(0.1, 0.1, 0.15))
+	c.draw_rect(Rect2(xb.position, Vector2(xb.size.x * clampf(ch.xp_frac, 0.0, 1.0), xb.size.y)), Color(0.6, 0.4, 1.0))
+	if ch.skill_points > 0:
+		c.draw_string_outline(font, Vector2(160, 130), "%d skill point%s" % [ch.skill_points, "s" if ch.skill_points > 1 else ""], HORIZONTAL_ALIGNMENT_CENTER, 92, 12, 3, Color.BLACK)
+		c.draw_string(font, Vector2(160, 130), "%d skill point%s" % [ch.skill_points, "s" if ch.skill_points > 1 else ""], HORIZONTAL_ALIGNMENT_CENTER, 92, 12, Color(1, 0.9, 0.4))
+	# Health and mana
+	var bw := 4 * 70.0 + 64.0
+	for i in 4:
+		var s: String = ["q", "w", "e", "r"][i]
+		var ab = ch.def.abilities.get(s)
+		if ab == null:
+			continue
+		var n := int(ab.max_rank)
+		var x0 := SLOT_X + (i + 1) * 70.0
+		var pw := (64.0 - (n - 1) * 3.0) / n
+		for k in n:
+			var on := k < int(ch.ranks.get(s, 0))
+			c.draw_rect(Rect2(x0 + k * (pw + 3.0), 80, pw, 6), Color(1, 0.82, 0.35) if on else Color(0.22, 0.23, 0.27))
+	var hb := Rect2(SLOT_X, 92, bw, 17)
 	var total := maxf(ch.stats.max_hp, ch.hp + ch.shield)
 	c.draw_rect(hb, Color(0.18, 0.06, 0.06))
 	c.draw_rect(Rect2(hb.position, Vector2(hb.size.x * ch.hp / total, hb.size.y)), Color(0.25, 0.75, 0.3))
 	if ch.shield > 0.0:
 		c.draw_rect(Rect2(hb.position + Vector2(hb.size.x * ch.hp / total, 0), Vector2(hb.size.x * ch.shield / total, hb.size.y)), Color(0.9, 0.9, 0.95))
-	c.draw_string(font, hb.position + Vector2(0, 14), "%d / %d" % [int(ch.hp), int(ch.stats.max_hp)], HORIZONTAL_ALIGNMENT_CENTER, hb.size.x, 13)
-	var xb := Rect2(112, 102, 352, 7)
-	c.draw_rect(xb, Color(0.1, 0.1, 0.15))
-	c.draw_rect(Rect2(xb.position, Vector2(xb.size.x * clampf(ch.xp_frac, 0.0, 1.0), xb.size.y)), Color(0.6, 0.4, 1.0))
-	var lines := ["AD  %d" % int(ch.stats.attack_damage), "AP  %d" % int(ch.stats.ability_power),
-		"MS  %d" % int(ch.stats.move_speed), "RNG %d" % int(ch.stats.attack_range)]
-	for i in lines.size():
-		c.draw_string(font, Vector2(476, 28 + i * 22), lines[i], HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(0.85, 0.87, 0.92))
+	c.draw_string(font, hb.position + Vector2(0, 13), "%d / %d" % [int(ch.hp), int(ch.stats.max_hp)], HORIZONTAL_ALIGNMENT_CENTER, hb.size.x, 13)
+	c.draw_string(font, hb.position + Vector2(0, 13), "+%.1f " % ch.stats.get("hp_regen", 0.0), HORIZONTAL_ALIGNMENT_RIGHT, hb.size.x, 11, Color(0.8, 1, 0.8, 0.8))
+	var mb := Rect2(SLOT_X, 112, bw, 13)
+	if ch.stats.max_mana > 0.0:
+		c.draw_rect(mb, Color(0.06, 0.08, 0.2))
+		c.draw_rect(Rect2(mb.position, Vector2(mb.size.x * clampf(ch.mana / ch.stats.max_mana, 0.0, 1.0), mb.size.y)), Color(0.3, 0.55, 1.0))
+		c.draw_string(font, mb.position + Vector2(0, 11), "%d / %d" % [int(ch.mana), int(ch.stats.max_mana)], HORIZONTAL_ALIGNMENT_CENTER, mb.size.x, 11)
+	else:
+		c.draw_rect(mb, Color(0.12, 0.12, 0.14))
+		c.draw_string(font, mb.position + Vector2(0, 11), "no mana", HORIZONTAL_ALIGNMENT_CENTER, mb.size.x, 11, Color(0.6, 0.6, 0.65))
+	# Gold
+	var gx := ITEM_X + 152
+	c.draw_circle(Vector2(gx + 10, 32), 8.0, Color(1, 0.8, 0.2))
+	c.draw_circle(Vector2(gx + 10, 32), 5.0, Color(0.85, 0.6, 0.1))
+	c.draw_string(font, Vector2(gx + 22, 38), str(int(ch.gold)), HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color(1, 0.88, 0.4))
+	if ch.can_shop():
+		c.draw_string(font, Vector2(gx, 60), "can shop", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.6, 1, 0.6, 0.8))
+
+
+func _draw_item_slot(c: Control, i: int) -> void:
+	var r := Rect2(Vector2.ZERO, c.size)
+	c.draw_rect(r, Color(0.08, 0.09, 0.12))
+	var ch := world.local_champion
+	if ch == null:
+		return
+	var it = ch.item_def(i)
+	if it == null:
+		c.draw_rect(r, Color(0.25, 0.27, 0.32), false, 1.0)
+	else:
+		ItemUI.draw_icon(c, r.grow(-2), it)
+		var inst: Dictionary = ch.items[i]
+		if inst.cd > 0.0:
+			var frac := clampf(inst.cd / maxf(inst.cd_total, 0.01), 0.0, 1.0)
+			c.draw_rect(Rect2(0, c.size.y * (1.0 - frac), c.size.x, c.size.y * frac), Color(0, 0, 0, 0.65))
+			var txt := ("%.1f" % inst.cd) if inst.cd < 1.0 else str(ceili(inst.cd))
+			c.draw_string_outline(font, Vector2(0, 29), txt, HORIZONTAL_ALIGNMENT_CENTER, c.size.x, 16, 4, Color.BLACK)
+			c.draw_string(font, Vector2(0, 29), txt, HORIZONTAL_ALIGNMENT_CENTER, c.size.x, 16)
+		if int(inst.n) > 1:
+			c.draw_string_outline(font, Vector2(0, c.size.y - 3), str(inst.n), HORIZONTAL_ALIGNMENT_RIGHT, c.size.x - 3, 13, 3, Color.BLACK)
+			c.draw_string(font, Vector2(0, c.size.y - 3), str(inst.n), HORIZONTAL_ALIGNMENT_RIGHT, c.size.x - 3, 13)
+		if world.aim_slot == "i%d" % i:
+			c.draw_rect(r, Color(0.45, 0.8, 1.0), false, 3.0)
+		elif it.active != null and inst.cd <= 0.0:
+			c.draw_rect(r, Color(0.9, 0.8, 0.45, 0.8), false, 1.5)
+	c.draw_string_outline(font, Vector2(3, 12), str(i + 1), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, 3, Color.BLACK)
+	c.draw_string(font, Vector2(3, 12), str(i + 1), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1, 0.95, 0.8))
 
 
 func _draw_slot(c: Control, slot: String) -> void:
@@ -376,6 +570,7 @@ func _draw_slot(c: Control, slot: String) -> void:
 			icon = ab.icon
 			nm = ab.name
 	var cd: float = ch.cooldowns.get(slot, 0.0) if slot != "p" else 0.0
+	var learned: bool = slot == "p" or int(ch.ranks.get(slot, 0)) > 0
 	if icon != null:
 		c.draw_texture_rect(icon, r.grow(-3), false)
 	elif nm != "":
@@ -399,15 +594,27 @@ func _draw_slot(c: Control, slot: String) -> void:
 		var txt := ("%.1f" % cd) if cd < 1.0 else str(ceili(cd))
 		c.draw_string_outline(font, Vector2(0, 42), txt, HORIZONTAL_ALIGNMENT_CENTER, c.size.x, 22, 5, Color.BLACK)
 		c.draw_string(font, Vector2(0, 42), txt, HORIZONTAL_ALIGNMENT_CENTER, c.size.x, 22)
-	elif slot != "p" and (ch.dead or ch.flags & (Unit.F_STUN | Unit.F_SILENCE)):
+	elif slot != "p" and (ch.dead or ch.flags & (Unit.F_STUN | Unit.F_SILENCE | Unit.F_STASIS)):
 		c.draw_rect(r, Color(0, 0, 0, 0.55))
+	if not learned:
+		c.draw_rect(r, Color(0.02, 0.02, 0.04, 0.72))
+		if ch.can_rank_up(slot):
+			c.draw_string(font, Vector2(0, 42), "+", HORIZONTAL_ALIGNMENT_CENTER, c.size.x, 26, Color(1, 0.85, 0.4))
+	elif slot != "p":
+		var ab = ch.def.abilities.get(slot)
+		var cost := ch.ability_cost(ab) if ab != null else 0.0
+		if cost > 0.0:
+			if ch.mana < cost and cd <= 0.0:
+				c.draw_rect(r, Color(0.05, 0.1, 0.45, 0.55))
+			c.draw_string_outline(font, Vector2(0, c.size.y - 4), str(int(cost)), HORIZONTAL_ALIGNMENT_CENTER, c.size.x, 12, 3, Color.BLACK)
+			c.draw_string(font, Vector2(0, c.size.y - 4), str(int(cost)), HORIZONTAL_ALIGNMENT_CENTER, c.size.x, 12, Color(0.55, 0.75, 1.0))
 	var fl: float = _ready_flash.get(slot, 0.0)
 	if fl > 0.0:
 		c.draw_rect(r, Color(1, 1, 1, 0.45 * fl))
 	var border := Color(0.35, 0.37, 0.42)
 	if world.aim_slot == slot:
 		border = Color(0.45, 0.8, 1.0)
-	elif slot != "p" and cd <= 0.0 and ch.def.abilities.has(slot):
+	elif slot != "p" and cd <= 0.0 and learned and ch.def.abilities.has(slot):
 		border = Color(0.85, 0.75, 0.45).lerp(Color.WHITE, fl)
 	c.draw_rect(r, border, false, 2.0 + 2.0 * fl)
 	c.draw_rect(Rect2(2, 2, 18, 17), Color(0, 0, 0, 0.6))
@@ -463,7 +670,14 @@ func _draw_scores(c: Control) -> void:
 		for ch in world.champions.values():
 			if ch.team != t:
 				continue
-			var line := "%s  -  %s     Lv %d     %d / %d" % [ch.player_name, ch.display_name, ch.level, ch.kills, ch.deaths]
+			var line := "%s  -  %s     Lv %d     %d / %d / %d" % [ch.player_name, ch.display_name, ch.level, ch.kills, ch.deaths, ch.assists]
 			c.draw_string(font, Vector2(40, y), line, HORIZONTAL_ALIGNMENT_LEFT, -1, 18)
-			y += 28.0
-		y += 24.0
+			for i in 6:
+				var it = ch.item_def(i)
+				var r := Rect2(470 + i * 36, y - 22, 32, 32)
+				if it != null:
+					ItemUI.draw_icon(c, r, it)
+				else:
+					c.draw_rect(r, Color(0.2, 0.21, 0.25), false, 1.0)
+			y += 40.0
+		y += 20.0

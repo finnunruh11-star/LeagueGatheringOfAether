@@ -1,0 +1,20 @@
+{
+  "name": "Phage",
+  "cost": 1100,
+  "rarity": "epic",
+  "from": [
+    "ruby_crystal",
+    "long_sword"
+  ],
+  "tags": [
+    "Health",
+    "HealthRegen",
+    "Damage"
+  ],
+  "stats": {
+    "attack_damage": 15.0,
+    "max_hp": 200.0
+  },
+  "description": "",
+  "passives": []
+}

@@ -1,0 +1,17 @@
+{
+  "name": "Winged Moonplate",
+  "cost": 800,
+  "rarity": "epic",
+  "from": [
+    "ruby_crystal"
+  ],
+  "tags": [
+    "Health",
+    "NonbootsMovement"
+  ],
+  "stats": {
+    "max_hp": 150.0
+  },
+  "description": "",
+  "passives": []
+}

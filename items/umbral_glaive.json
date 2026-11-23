@@ -1,0 +1,24 @@
+{
+  "name": "Umbral Glaive",
+  "cost": 2300,
+  "rarity": "legendary",
+  "from": [
+    "long_sword",
+    "serrated_dirk",
+    "long_sword"
+  ],
+  "tags": [
+    "Damage",
+    "Vision",
+    "CooldownReduction",
+    "ArmorPenetration",
+    "AbilityHaste"
+  ],
+  "stats": {
+    "attack_damage": 50.0,
+    "lethality": 13.0,
+    "ability_haste": 15.0
+  },
+  "description": "",
+  "passives": []
+}

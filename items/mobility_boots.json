@@ -1,0 +1,14 @@
+{
+  "name": "Mobility Boots",
+  "cost": 1000,
+  "rarity": "boots",
+  "from": [
+    "boots"
+  ],
+  "tags": [
+    "Boots"
+  ],
+  "stats": {},
+  "description": "",
+  "passives": []
+}

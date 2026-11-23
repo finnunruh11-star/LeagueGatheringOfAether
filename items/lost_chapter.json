@@ -1,0 +1,23 @@
+{
+  "name": "Lost Chapter",
+  "cost": 1100,
+  "rarity": "epic",
+  "from": [
+    "amplifying_tome",
+    "sapphire_crystal"
+  ],
+  "tags": [
+    "SpellDamage",
+    "Mana",
+    "ManaRegen",
+    "CooldownReduction",
+    "AbilityHaste"
+  ],
+  "stats": {
+    "ability_power": 40.0,
+    "max_mana": 300.0,
+    "ability_haste": 10.0
+  },
+  "description": "",
+  "passives": []
+}

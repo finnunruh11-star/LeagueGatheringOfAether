@@ -1,0 +1,13 @@
+{
+  "name": "Cloak of Agility",
+  "cost": 600,
+  "rarity": "basic",
+  "tags": [
+    "CriticalStrike"
+  ],
+  "stats": {
+    "crit_chance": 0.15
+  },
+  "description": "",
+  "passives": []
+}

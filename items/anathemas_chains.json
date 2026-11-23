@@ -1,0 +1,21 @@
+{
+  "name": "Anathema's Chains",
+  "cost": 2500,
+  "rarity": "legendary",
+  "from": [
+    "kindlegem",
+    "giants_belt"
+  ],
+  "tags": [
+    "Health",
+    "Active",
+    "CooldownReduction",
+    "AbilityHaste"
+  ],
+  "stats": {
+    "max_hp": 650.0,
+    "ability_haste": 20.0
+  },
+  "description": "",
+  "passives": []
+}

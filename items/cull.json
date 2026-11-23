@@ -1,0 +1,14 @@
+{
+  "name": "Cull",
+  "cost": 450,
+  "rarity": "starter",
+  "tags": [
+    "Damage",
+    "OnHit"
+  ],
+  "stats": {
+    "attack_damage": 7.0
+  },
+  "description": "",
+  "passives": []
+}

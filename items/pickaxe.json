@@ -1,0 +1,13 @@
+{
+  "name": "Pickaxe",
+  "cost": 875,
+  "rarity": "basic",
+  "tags": [
+    "Damage"
+  ],
+  "stats": {
+    "attack_damage": 25.0
+  },
+  "description": "",
+  "passives": []
+}

@@ -1,0 +1,19 @@
+{
+  "name": "Berserker's Greaves",
+  "cost": 1100,
+  "rarity": "boots",
+  "from": [
+    "boots",
+    "dagger"
+  ],
+  "tags": [
+    "AttackSpeed",
+    "Boots"
+  ],
+  "stats": {
+    "bonus_attack_speed": 0.35,
+    "move_speed": 45.0
+  },
+  "description": "",
+  "passives": []
+}

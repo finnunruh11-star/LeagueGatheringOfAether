@@ -1,0 +1,25 @@
+{
+  "name": "Manamune",
+  "cost": 2900,
+  "rarity": "legendary",
+  "from": [
+    "tear_of_the_goddess",
+    "caulfields_warhammer",
+    "long_sword"
+  ],
+  "tags": [
+    "Damage",
+    "Mana",
+    "CooldownReduction",
+    "OnHit",
+    "AbilityHaste"
+  ],
+  "group": "tear",
+  "stats": {
+    "attack_damage": 35.0,
+    "max_mana": 500.0,
+    "ability_haste": 15.0
+  },
+  "description": "",
+  "passives": []
+}

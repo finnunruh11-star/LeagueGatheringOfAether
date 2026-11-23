@@ -1,0 +1,24 @@
+{
+  "name": "Echoes of Helia",
+  "cost": 2300,
+  "rarity": "mythic",
+  "from": [
+    "chalice_of_blessing",
+    "bandleglass_mirror"
+  ],
+  "tags": [
+    "Health",
+    "SpellDamage",
+    "ManaRegen",
+    "CooldownReduction"
+  ],
+  "stats": {
+    "ability_power": 30.0,
+    "max_hp": 200.0,
+    "ability_haste": 15.0,
+    "mana_regen_percent": 1.25
+  },
+  "mythic_stats": {},
+  "description": "",
+  "passives": []
+}

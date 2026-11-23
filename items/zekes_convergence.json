@@ -1,0 +1,25 @@
+{
+  "name": "Zeke's Convergence",
+  "cost": 2200,
+  "rarity": "legendary",
+  "from": [
+    "lifewell_pendant",
+    "glacial_buckler"
+  ],
+  "tags": [
+    "Health",
+    "Armor",
+    "Active",
+    "CooldownReduction",
+    "OnHit",
+    "AbilityHaste"
+  ],
+  "stats": {
+    "max_hp": 200.0,
+    "max_mana": 250.0,
+    "armor": 45.0,
+    "ability_haste": 15.0
+  },
+  "description": "",
+  "passives": []
+}

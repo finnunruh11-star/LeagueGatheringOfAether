@@ -1,0 +1,20 @@
+{
+  "name": "Hexdrinker",
+  "cost": 1300,
+  "rarity": "epic",
+  "from": [
+    "long_sword",
+    "null_magic_mantle"
+  ],
+  "tags": [
+    "Damage",
+    "SpellBlock"
+  ],
+  "group": "lifeline",
+  "stats": {
+    "attack_damage": 25.0,
+    "magic_resist": 35.0
+  },
+  "description": "",
+  "passives": []
+}

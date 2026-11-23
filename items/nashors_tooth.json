@@ -1,0 +1,23 @@
+{
+  "name": "Nashor's Tooth",
+  "cost": 3200,
+  "rarity": "legendary",
+  "from": [
+    "recurve_bow",
+    "blasting_wand",
+    "fiendish_codex"
+  ],
+  "tags": [
+    "AttackSpeed",
+    "SpellDamage",
+    "OnHit",
+    "AbilityHaste"
+  ],
+  "stats": {
+    "ability_power": 100.0,
+    "bonus_attack_speed": 0.5,
+    "ability_haste": 15.0
+  },
+  "description": "",
+  "passives": []
+}

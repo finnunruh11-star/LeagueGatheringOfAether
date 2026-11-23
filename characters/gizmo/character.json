@@ -9,17 +9,38 @@
     "attack_damage": 58,
     "attack_speed": 0.9,
     "attack_range": 520,
-    "armor": 12
+    "armor": 12,
+    "max_mana": 340,
+    "mana_regen": 1.4
   },
-  "per_level": {"max_hp": 72, "attack_damage": 4.5},
-  "attack": {"ranged": true, "projectile_speed": 1400, "projectile_color": "#bff7ef", "projectile_size": 5},
+  "per_level": {
+    "max_hp": 72,
+    "attack_damage": 4.5,
+    "max_mana": 30,
+    "mana_regen": 0.12
+  },
+  "attack": {
+    "ranged": true,
+    "projectile_speed": 1400,
+    "projectile_color": "#bff7ef",
+    "projectile_size": 5
+  },
   "passive": {
     "name": "Overclock",
     "description": "After casting an ability, gain 40% attack speed for 3 seconds.",
     "triggers": [
-      {"on": "cast", "effects": [
-        {"type": "buff", "duration": 3, "multiply": {"attack_speed": 1.4}}
-      ]}
+      {
+        "on": "cast",
+        "effects": [
+          {
+            "type": "buff",
+            "duration": 3,
+            "add": {
+              "bonus_attack_speed": 0.4
+            }
+          }
+        ]
+      }
     ]
   },
   "abilities": {
@@ -30,10 +51,23 @@
       "targeting": "direction",
       "range": 1000,
       "effects": [
-        {"type": "projectile", "speed": 1500, "radius": 14, "color": "#7ff0e0", "pierce": true, "on_hit": [
-          {"type": "damage", "amount": "60 + 0.9 * ad", "damage_type": "physical", "vfx": "streaks"}
-        ]}
-      ]
+        {
+          "type": "projectile",
+          "speed": 1500,
+          "radius": 14,
+          "color": "#7ff0e0",
+          "pierce": true,
+          "on_hit": [
+            {
+              "type": "damage",
+              "amount": "60 + 0.9 * ad",
+              "damage_type": "physical",
+              "vfx": "streaks"
+            }
+          ]
+        }
+      ],
+      "cost": 40
     },
     "w": {
       "name": "Bear Trap",
@@ -42,12 +76,31 @@
       "targeting": "point",
       "range": 600,
       "effects": [
-        {"type": "trap", "radius": 55, "duration": 30, "color": "#c0c8d0", "effects": [
-          {"type": "root", "duration": 1.5},
-          {"type": "damage", "amount": "60 + 0.4 * ad", "damage_type": "physical", "vfx": "claw"},
-          {"type": "text", "text": "SNAP!", "color": "#ffffff"}
-        ]}
-      ]
+        {
+          "type": "trap",
+          "radius": 55,
+          "duration": 30,
+          "color": "#c0c8d0",
+          "effects": [
+            {
+              "type": "root",
+              "duration": 1.5
+            },
+            {
+              "type": "damage",
+              "amount": "60 + 0.4 * ad",
+              "damage_type": "physical",
+              "vfx": "claw"
+            },
+            {
+              "type": "text",
+              "text": "SNAP!",
+              "color": "#ffffff"
+            }
+          ]
+        }
+      ],
+      "cost": 50
     },
     "e": {
       "name": "Rocket Jump",
@@ -56,12 +109,30 @@
       "targeting": "direction",
       "range": 380,
       "effects": [
-        {"type": "area", "at": "self", "radius": 190, "color": "#ffd27f", "effects": [
-          {"type": "damage", "amount": 50},
-          {"type": "knockback", "distance": 200}
-        ]},
-        {"type": "dash", "to": "back", "distance": 380, "speed": 1300}
-      ]
+        {
+          "type": "area",
+          "at": "self",
+          "radius": 190,
+          "color": "#ffd27f",
+          "effects": [
+            {
+              "type": "damage",
+              "amount": 50
+            },
+            {
+              "type": "knockback",
+              "distance": 200
+            }
+          ]
+        },
+        {
+          "type": "dash",
+          "to": "back",
+          "distance": 380,
+          "speed": 1300
+        }
+      ],
+      "cost": 60
     },
     "r": {
       "name": "Sentry Turret",
@@ -70,9 +141,24 @@
       "targeting": "point",
       "range": 500,
       "effects": [
-        {"type": "summon", "name": "Turret", "stationary": true, "ranged": true, "size": 0.9, "duration": 15, "color": "#5fd4c4",
-          "stats": {"max_hp": 500, "attack_damage": "25 + 0.35 * ad", "attack_speed": 1.6, "attack_range": 560, "armor": 30}}
-      ]
+        {
+          "type": "summon",
+          "name": "Turret",
+          "stationary": true,
+          "ranged": true,
+          "size": 0.9,
+          "duration": 15,
+          "color": "#5fd4c4",
+          "stats": {
+            "max_hp": 500,
+            "attack_damage": "25 + 0.35 * ad",
+            "attack_speed": 1.6,
+            "attack_range": 560,
+            "armor": 30
+          }
+        }
+      ],
+      "cost": 100
     }
   }
 }

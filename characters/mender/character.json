@@ -10,19 +10,46 @@
     "attack_speed": 0.7,
     "attack_range": 450,
     "armor": 18,
-    "ability_power": 35
+    "ability_power": 35,
+    "max_mana": 400,
+    "mana_regen": 2.0
   },
-  "per_level": {"max_hp": 80, "attack_damage": 2.5, "ability_power": 10},
-  "attack": {"ranged": true, "projectile_speed": 1000, "projectile_color": "#d6ffc4", "projectile_size": 6},
+  "per_level": {
+    "max_hp": 80,
+    "attack_damage": 2.5,
+    "ability_power": 10,
+    "max_mana": 30,
+    "mana_regen": 0.15
+  },
+  "attack": {
+    "ranged": true,
+    "projectile_speed": 1000,
+    "projectile_color": "#d6ffc4",
+    "projectile_size": 6
+  },
   "passive": {
     "name": "Soothing Presence",
     "description": "Every 5 seconds, heal yourself and nearby allies for 15 + 4 per level.",
     "triggers": [
-      {"on": "interval", "interval": 5, "effects": [
-        {"type": "area", "at": "self", "radius": 450, "affects": "allies", "color": "#8fe07a", "effects": [
-          {"type": "heal", "amount": "15 + 4 * level"}
-        ]}
-      ]}
+      {
+        "on": "interval",
+        "interval": 5,
+        "effects": [
+          {
+            "type": "area",
+            "at": "self",
+            "radius": 450,
+            "affects": "allies",
+            "color": "#8fe07a",
+            "effects": [
+              {
+                "type": "heal",
+                "amount": "15 + 4 * level"
+              }
+            ]
+          }
+        ]
+      }
     ]
   },
   "abilities": {
@@ -33,12 +60,34 @@
       "targeting": "direction",
       "range": 850,
       "effects": [
-        {"type": "projectile", "speed": 1000, "radius": 15, "color": "#b7ff9e", "affects": "all", "on_hit": [
-          {"type": "heal", "amount": "60 + 0.6 * ap", "if": "ally"},
-          {"type": "damage", "amount": "60 + 0.6 * ap", "if": "ally == 0", "vfx": "twinkle"},
-          {"type": "slow", "amount": 0.35, "duration": 1.5, "if": "ally == 0"}
-        ]}
-      ]
+        {
+          "type": "projectile",
+          "speed": 1000,
+          "radius": 15,
+          "color": "#b7ff9e",
+          "affects": "all",
+          "on_hit": [
+            {
+              "type": "heal",
+              "amount": "60 + 0.6 * ap",
+              "if": "ally"
+            },
+            {
+              "type": "damage",
+              "amount": "60 + 0.6 * ap",
+              "if": "ally == 0",
+              "vfx": "twinkle"
+            },
+            {
+              "type": "slow",
+              "amount": 0.35,
+              "duration": 1.5,
+              "if": "ally == 0"
+            }
+          ]
+        }
+      ],
+      "cost": 50
     },
     "w": {
       "name": "Lifeline Hook",
@@ -47,12 +96,29 @@
       "targeting": "direction",
       "range": 900,
       "effects": [
-        {"type": "projectile", "speed": 1500, "radius": 14, "color": "#e0e0e0", "on_hit": [
-          {"type": "damage", "amount": "50 + 0.5 * ap", "vfx": "claw"},
-          {"type": "pull", "duration": 0.3},
-          {"type": "stun", "duration": 0.6}
-        ]}
-      ]
+        {
+          "type": "projectile",
+          "speed": 1500,
+          "radius": 14,
+          "color": "#e0e0e0",
+          "on_hit": [
+            {
+              "type": "damage",
+              "amount": "50 + 0.5 * ap",
+              "vfx": "claw"
+            },
+            {
+              "type": "pull",
+              "duration": 0.3
+            },
+            {
+              "type": "stun",
+              "duration": 0.6
+            }
+          ]
+        }
+      ],
+      "cost": 70
     },
     "e": {
       "name": "Sanctuary",
@@ -61,10 +127,22 @@
       "targeting": "point",
       "range": 600,
       "effects": [
-        {"type": "zone", "radius": 220, "duration": 4, "interval": 0.5, "affects": "allies", "color": "#8fe07a", "effects": [
-          {"type": "heal", "amount": "12 + 0.1 * ap"}
-        ]}
-      ]
+        {
+          "type": "zone",
+          "radius": 220,
+          "duration": 4,
+          "interval": 0.5,
+          "affects": "allies",
+          "color": "#8fe07a",
+          "effects": [
+            {
+              "type": "heal",
+              "amount": "12 + 0.1 * ap"
+            }
+          ]
+        }
+      ],
+      "cost": 80
     },
     "r": {
       "name": "Guardian Spirits",
@@ -72,12 +150,29 @@
       "cooldown": 60,
       "targeting": "self",
       "effects": [
-        {"type": "area", "at": "self", "radius": 1200, "affects": "allies", "color": "#c8ffb5", "effects": [
-          {"type": "cleanse"},
-          {"type": "heal", "amount": "100 + 0.5 * ap"},
-          {"type": "shield", "amount": "150 + 1.0 * ap", "duration": 4}
-        ]}
-      ]
+        {
+          "type": "area",
+          "at": "self",
+          "radius": 1200,
+          "affects": "allies",
+          "color": "#c8ffb5",
+          "effects": [
+            {
+              "type": "cleanse"
+            },
+            {
+              "type": "heal",
+              "amount": "100 + 0.5 * ap"
+            },
+            {
+              "type": "shield",
+              "amount": "150 + 1.0 * ap",
+              "duration": 4
+            }
+          ]
+        }
+      ],
+      "cost": 100
     }
   }
 }

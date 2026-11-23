@@ -1,0 +1,23 @@
+{
+  "name": "Chempunk Chainsword",
+  "cost": 2800,
+  "rarity": "legendary",
+  "from": [
+    "executioners_calling",
+    "ruby_crystal",
+    "caulfields_warhammer"
+  ],
+  "tags": [
+    "Health",
+    "Damage",
+    "CooldownReduction",
+    "AbilityHaste"
+  ],
+  "stats": {
+    "attack_damage": 55.0,
+    "max_hp": 250.0,
+    "ability_haste": 25.0
+  },
+  "description": "",
+  "passives": []
+}

@@ -1,0 +1,25 @@
+{
+  "name": "Silvermere Dawn",
+  "cost": 3000,
+  "rarity": "legendary",
+  "from": [
+    "quicksilver_sash",
+    "pickaxe",
+    "ruby_crystal"
+  ],
+  "tags": [
+    "Health",
+    "SpellBlock",
+    "Damage",
+    "Active",
+    "Tenacity"
+  ],
+  "group": "quicksilver",
+  "stats": {
+    "attack_damage": 40.0,
+    "max_hp": 300.0,
+    "magic_resist": 40.0
+  },
+  "description": "",
+  "passives": []
+}

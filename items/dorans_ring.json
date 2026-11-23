@@ -1,0 +1,17 @@
+{
+  "name": "Doran's Ring",
+  "cost": 400,
+  "rarity": "starter",
+  "tags": [
+    "Health",
+    "ManaRegen",
+    "SpellDamage"
+  ],
+  "group": "dorans",
+  "stats": {
+    "ability_power": 18.0,
+    "max_hp": 90.0
+  },
+  "description": "",
+  "passives": []
+}

@@ -1,0 +1,20 @@
+{
+  "name": "Shadowflame",
+  "cost": 3000,
+  "rarity": "legendary",
+  "from": [
+    "hextech_alternator",
+    "needlessly_large_rod"
+  ],
+  "tags": [
+    "Health",
+    "SpellDamage",
+    "MagicPenetration"
+  ],
+  "stats": {
+    "ability_power": 100.0,
+    "max_hp": 200.0
+  },
+  "description": "",
+  "passives": []
+}

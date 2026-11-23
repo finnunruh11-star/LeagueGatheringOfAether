@@ -1,0 +1,27 @@
+{
+  "name": "Shurelya's Battlesong",
+  "cost": 2300,
+  "rarity": "mythic",
+  "from": [
+    "kindlegem",
+    "bandleglass_mirror"
+  ],
+  "tags": [
+    "Health",
+    "SpellDamage",
+    "ManaRegen",
+    "Active",
+    "CooldownReduction",
+    "NonbootsMovement",
+    "AbilityHaste"
+  ],
+  "stats": {
+    "ability_power": 35.0,
+    "max_hp": 200.0,
+    "ability_haste": 20.0,
+    "mana_regen_percent": 1.0
+  },
+  "mythic_stats": {},
+  "description": "",
+  "passives": []
+}

@@ -1,0 +1,43 @@
+{
+  "name": "Zhonya's Hourglass",
+  "cost": 3000,
+  "rarity": "legendary",
+  "from": [
+    "seekers_armguard",
+    "fiendish_codex",
+    "stopwatch"
+  ],
+  "tags": [
+    "Armor",
+    "SpellDamage",
+    "Active",
+    "CooldownReduction",
+    "AbilityHaste"
+  ],
+  "stats": {
+    "ability_power": 80.0,
+    "armor": 45.0,
+    "ability_haste": 15.0
+  },
+  "description": "",
+  "passives": [],
+  "active": {
+    "name": "Stasis",
+    "description": "Become invulnerable and untargetable for 2.5 seconds, but you can't do anything.",
+    "cooldown": 120,
+    "targeting": "self",
+    "effects": [
+      {
+        "type": "stasis",
+        "duration": 2.5
+      },
+      {
+        "type": "text",
+        "text": "Stasis!",
+        "at": "self",
+        "color": "#ffd84d",
+        "size": 24
+      }
+    ]
+  }
+}

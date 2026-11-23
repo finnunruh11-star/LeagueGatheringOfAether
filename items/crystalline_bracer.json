@@ -1,0 +1,19 @@
+{
+  "name": "Crystalline Bracer",
+  "cost": 800,
+  "rarity": "epic",
+  "from": [
+    "ruby_crystal",
+    "rejuvenation_bead"
+  ],
+  "tags": [
+    "Health",
+    "HealthRegen"
+  ],
+  "stats": {
+    "max_hp": 200.0,
+    "hp_regen_percent": 1.0
+  },
+  "description": "",
+  "passives": []
+}

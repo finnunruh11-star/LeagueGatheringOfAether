@@ -4,9 +4,9 @@ extends Unit
 
 const TYPES := {
 	"melee": {"max_hp": 430.0, "attack_damage": 14.0, "attack_speed": 1.0, "attack_range": 50.0, "move_speed": 270.0,
-		"armor": 10.0, "radius": 15.0, "xp": 32.0, "ranged": false},
+		"armor": 10.0, "magic_resist": 0.0, "radius": 15.0, "xp": 32.0, "gold": 22.0, "ranged": false},
 	"ranged": {"max_hp": 280.0, "attack_damage": 24.0, "attack_speed": 0.75, "attack_range": 360.0, "move_speed": 270.0,
-		"armor": 0.0, "radius": 13.0, "xp": 26.0, "ranged": true},
+		"armor": 0.0, "magic_resist": 0.0, "radius": 13.0, "xp": 26.0, "gold": 16.0, "ranged": true},
 }
 
 var lane := PackedVector2Array()
@@ -21,7 +21,7 @@ func setup(d: Dictionary) -> void:
 	minion_type = str(d.get("type", "melee"))
 	var t: Dictionary = TYPES.get(minion_type, TYPES.melee)
 	var sc := float(d.get("scale", 1.0))
-	for k in ["max_hp", "attack_damage", "attack_speed", "attack_range", "move_speed", "armor"]:
+	for k in ["max_hp", "attack_damage", "attack_speed", "attack_range", "move_speed", "armor", "magic_resist"]:
 		base_stats[k] = t[k]
 	var ov = world.map.data.get("minion_stats", {})
 	if ov is Dictionary and ov.get(minion_type) is Dictionary:
@@ -32,6 +32,7 @@ func setup(d: Dictionary) -> void:
 	base_stats.hp_regen = 0.0
 	base_radius = t.radius
 	xp_value = t.xp
+	gold_value = t.gold
 	color = Game.TEAM_COLORS[team].lerp(Color.WHITE, 0.15)
 	attack_def = {"ranged": t.ranged, "speed": 900.0, "color": color.lightened(0.4), "size": 5.0, "sprite": "", "char": "", "on_hit": []}
 	separate = true

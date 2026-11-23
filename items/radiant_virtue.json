@@ -1,0 +1,26 @@
+{
+  "name": "Radiant Virtue",
+  "cost": 2700,
+  "rarity": "mythic",
+  "from": [
+    "aegis_of_the_legion",
+    "giants_belt"
+  ],
+  "tags": [
+    "Health",
+    "SpellBlock",
+    "Armor",
+    "Aura",
+    "CooldownReduction",
+    "AbilityHaste"
+  ],
+  "stats": {
+    "max_hp": 350.0,
+    "armor": 30.0,
+    "magic_resist": 30.0,
+    "ability_haste": 10.0
+  },
+  "mythic_stats": {},
+  "description": "",
+  "passives": []
+}

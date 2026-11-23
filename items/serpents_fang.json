@@ -1,0 +1,19 @@
+{
+  "name": "Serpent's Fang",
+  "cost": 2600,
+  "rarity": "legendary",
+  "from": [
+    "serrated_dirk",
+    "pickaxe"
+  ],
+  "tags": [
+    "Damage",
+    "ArmorPenetration"
+  ],
+  "stats": {
+    "attack_damage": 55.0,
+    "lethality": 15.0
+  },
+  "description": "",
+  "passives": []
+}

@@ -1,0 +1,22 @@
+{
+  "name": "Chemtech Putrifier",
+  "cost": 2100,
+  "rarity": "legendary",
+  "from": [
+    "oblivion_orb",
+    "forbidden_idol"
+  ],
+  "tags": [
+    "SpellDamage",
+    "ManaRegen",
+    "AbilityHaste"
+  ],
+  "stats": {
+    "ability_power": 35.0,
+    "heal_power": 0.1,
+    "mana_regen_percent": 0.75,
+    "ability_haste": 15.0
+  },
+  "description": "",
+  "passives": []
+}

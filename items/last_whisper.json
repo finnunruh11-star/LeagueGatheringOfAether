@@ -1,0 +1,20 @@
+{
+  "name": "Last Whisper",
+  "cost": 1450,
+  "rarity": "epic",
+  "from": [
+    "long_sword",
+    "long_sword"
+  ],
+  "tags": [
+    "ArmorPenetration",
+    "Damage"
+  ],
+  "group": "last_whisper",
+  "stats": {
+    "attack_damage": 20.0,
+    "armor_pen": 0.18
+  },
+  "description": "",
+  "passives": []
+}

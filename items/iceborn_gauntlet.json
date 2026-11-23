@@ -1,0 +1,26 @@
+{
+  "name": "Iceborn Gauntlet",
+  "cost": 3000,
+  "rarity": "mythic",
+  "from": [
+    "sheen",
+    "kindlegem",
+    "chain_vest"
+  ],
+  "tags": [
+    "Health",
+    "Armor",
+    "CooldownReduction",
+    "Slow",
+    "OnHit",
+    "AbilityHaste"
+  ],
+  "stats": {
+    "max_hp": 400.0,
+    "armor": 50.0,
+    "ability_haste": 20.0
+  },
+  "mythic_stats": {},
+  "description": "",
+  "passives": []
+}

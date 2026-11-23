@@ -19,8 +19,16 @@ const F_CAST := 512
 const F_AIR := 1024
 const F_HOT := 2048
 const F_PROTECTED := 4096
+const F_STASIS := 8192
+const F_STEALTH := 16384
+const F_SPELLSHIELD := 32768
+const F_GRIEVOUS := 65536
+const F_ENERGIZED := 131072
+const F_UNTARGETABLE := 262144
 const NET_BASE := 9
-const HARD_CC := ["stun", "root", "slow", "silence", "dot"]
+const HARD_CC := ["stun", "root", "slow", "silence", "dot", "grievous"]
+const CC_TYPES := ["stun", "root", "slow", "silence"]
+const COMBAT_TIME := 3.0
 
 var world: World
 var net_id := 0
@@ -34,10 +42,12 @@ var is_structure := false
 var is_champion := false
 var separate := false
 var xp_value := 0.0
+var gold_value := 0.0
 
 var base_stats := Content.DEFAULT_STATS.duplicate()
 var stats := Content.DEFAULT_STATS.duplicate()
 var hp := 100.0
+var mana := 0.0
 var shield := 0.0
 var flags := 0
 var dead := false
@@ -45,6 +55,10 @@ var statuses: Array = []
 var stats_dirty := true
 var base_radius := 20.0
 var radius := 20.0
+var combat_t := -100.0      # last time this unit dealt/took champion damage
+var combat_start := -100.0
+var hurt_t := -100.0        # last time this unit took any damage
+var damagers := {}          # champion net_id -> last time it damaged this unit (assists)
 
 var move_goal = null
 var attack_target = null
@@ -107,6 +121,7 @@ func _ready() -> void:
 	net_to = global_position
 	recompute_stats()
 	hp = stats.max_hp
+	mana = stats.max_mana
 
 
 # ------------------------------------------------------------ simulation ---
@@ -123,7 +138,9 @@ func _physics_process(delta: float) -> void:
 		return
 	if stats_dirty:
 		recompute_stats()
-	hp = minf(hp + stats.hp_regen * delta, stats.max_hp)
+	hp = minf(hp + stats.hp_regen * (1.0 + stats.hp_regen_percent) * delta, stats.max_hp)
+	if stats.max_mana > 0.0:
+		mana = minf(mana + stats.mana_regen * (1.0 + stats.mana_regen_percent) * delta, stats.max_mana)
 	attack_cd = maxf(attack_cd - delta, 0.0)
 	anim_lock = maxf(anim_lock - delta, 0.0)
 	_think(delta)
@@ -205,11 +222,18 @@ func attack_reach(t) -> float:
 
 
 func valid_target(t) -> bool:
-	return is_instance_valid(t) and not t.dead and t.team != team and t.targetable()
+	return is_instance_valid(t) and not t.dead and t.team != team and t.targetable() and t.visible_to(team)
 
 
 func targetable() -> bool:
-	return not dead
+	return not dead and flags & (F_STASIS | F_UNTARGETABLE) == 0
+
+
+## Stealthed units (and, with fog of war, unseen ones) can't be clicked or auto-targeted by enemies.
+func visible_to(t: int) -> bool:
+	if t == team or world == null:
+		return true
+	return world.can_see(self, t)
 
 
 func face(p: Vector2) -> void:
@@ -232,16 +256,46 @@ func has_status(t: String) -> bool:
 	return false
 
 
+## A status applied by an effect with this "id" (optionally only from `src`).
+func find_status(id: String, src = null) -> Dictionary:
+	for s in statuses:
+		if (s.get("id", "") == id or s.type == id) and (src == null or s.source == src):
+			return s
+	return {}
+
+
+func remove_status_id(id: String, src = null) -> void:
+	var before := statuses.size()
+	statuses = statuses.filter(func(s): return not (s.get("id", "") == id and (src == null or s.source == src)))
+	if statuses.size() != before:
+		stats_dirty = true
+
+
 func can_move() -> bool:
-	return not dead and not is_structure and forced == null and stats.move_speed > 0.0 and not has_status("stun") and not has_status("root")
+	return not dead and not is_structure and forced == null and stats.move_speed > 0.0 and not has_status("stun") \
+		and not has_status("root") and not has_status("stasis")
 
 
 func can_attack() -> bool:
-	return not dead and forced == null and stats.attack_damage > 0.0 and not has_status("stun")
+	return not dead and forced == null and stats.attack_damage > 0.0 and not has_status("stun") and not has_status("stasis")
 
 
 func can_cast() -> bool:
-	return not dead and forced == null and not has_status("stun") and not has_status("silence")
+	return not dead and forced == null and not has_status("stun") and not has_status("silence") and not has_status("stasis")
+
+
+func trigger(_event: String, _target = null, _pos = null, _extra := {}, _only := "") -> bool:
+	return false
+
+
+func in_combat() -> bool:
+	return world != null and world.time - combat_t < COMBAT_TIME
+
+
+func enter_combat() -> void:
+	if not in_combat():
+		combat_start = world.time
+	combat_t = world.time
 
 
 # ---------------------------------------------------------------- attacks ---
@@ -250,14 +304,18 @@ func perform_attack(t: Unit) -> void:
 	attack_cd = 1.0 / maxf(stats.attack_speed, 0.05)
 	set_anim_lock(ANIM_ATTACK, minf(0.3, attack_cd * 0.8))
 	var dmg := attack_damage_against(t)
+	var crit: bool = stats.crit_chance > 0.0 and randf() < stats.crit_chance
+	if crit:
+		dmg *= stats.crit_damage
+	trigger("attack_launch", t, null, {"crit_hit": crit})
 	if attack_def.ranged:
 		var p = world.spawn("projectile", {
 			"pos": muzzle(), "dir": (t.global_position - global_position).normalized(),
-			"radius": attack_def.size, "color": attack_def.color, "sprite": attack_def.sprite, "char": attack_def.char,
+			"radius": attack_def.size * (1.4 if crit else 1.0), "color": attack_def.color, "sprite": attack_def.sprite, "char": attack_def.char,
 		})
-		p.init_attack(self, t, dmg, attack_def.speed)
+		p.init_attack(self, t, dmg, attack_def.speed, crit)
 	else:
-		land_attack(t, dmg)
+		land_attack(t, dmg, crit)
 
 
 ## Where ranged attacks leave from.
@@ -281,23 +339,26 @@ func attack_hit_style() -> String:
 	return "slash" if is_champion or self is Summon else "spark"
 
 
-func land_attack(t, dmg: float) -> void:
+func land_attack(t, dmg: float, crit := false) -> void:
 	if not is_instance_valid(t) or t.dead:
 		return
 	var dir: Vector2 = t.global_position - global_position
-	t.take_damage(dmg, self, "physical", {"vfx": attack_hit_style(), "col": attack_def.color, "dir": dir.angle()})
+	t.take_damage(dmg, self, "physical", {"vfx": attack_hit_style(), "col": attack_def.color, "dir": dir.angle(), "attack": true, "crit": crit})
 	if not attack_def.on_hit.is_empty():
-		Effects.run(attack_def.on_hit, attack_ctx(t))
-	on_attack_hit(t)
+		var c := attack_ctx(t)
+		c.crit_hit = crit
+		c.onhit = true
+		Effects.run(attack_def.on_hit, c)
+	on_attack_hit(t, crit)
 
 
 func attack_ctx(t) -> Dictionary:
 	var tp: Vector2 = t.global_position if is_instance_valid(t) else global_position
-	return {"caster": self, "team": team, "target": t, "pos": tp, "origin": global_position,
+	return {"caster": self, "team": team, "target": t, "pos": tp, "origin": global_position, "src_slot": "attack",
 		"dir": (tp - global_position).normalized(), "ability": "attack", "char": char_id, "color": color, "range": stats.attack_range}
 
 
-func on_attack_hit(_t) -> void:
+func on_attack_hit(_t, _crit := false) -> void:
 	pass
 
 
@@ -311,38 +372,67 @@ func on_kill(_victim) -> void:
 
 # ------------------------------------------------------------ health/CC ---
 
+## Deals damage after resistances, shields and item/passive hooks. `hit` describes the hit:
+## vfx/col/dir (visuals) and flags attack, crit, ability (slot), item, dot, aoe, proc, onhit, raw.
 func take_damage(amount: float, source = null, dtype := "physical", hit := {}) -> float:
 	if dead or puppet or amount <= 0.0:
 		return 0.0
-	if has_status("invulnerable") or is_protected():
+	if flags & (F_STASIS | F_INVULN) or has_status("invulnerable") or has_status("stasis") or is_protected():
 		return 0.0
-	var src = source if is_instance_valid(source) else null
-	if src != null:
-		amount *= src.stats.get("damage_mult", 1.0)
-	amount *= stats.get("damage_taken_mult", 1.0)
-	if dtype != "true":
-		var armor: float = stats.armor
-		amount *= 100.0 / (100.0 + armor) if armor >= 0.0 else 2.0 - 100.0 / (100.0 - armor)
+	var src = source if is_instance_valid(source) and source != self else null
+	var raw := bool(hit.get("raw", false))
+	if not raw:
+		if src != null:
+			amount *= src.stats.get("damage_mult", 1.0)
+		amount *= stats.get("damage_taken_mult", 1.0)
+		var info := {"amount": amount}
+		var vars := _hit_vars(hit, amount, dtype)
+		vars["dmg_info"] = info
+		if src != null:
+			src.trigger("deal_damage_pre", self, null, vars)
+		vars.dmg = info.amount
+		trigger("take_damage_pre", src, null, vars)
+		amount = maxf(info.amount, 0.0)
+		if dtype == "physical":
+			amount *= _mitigation(stats.armor, src, true)
+		elif dtype == "magic":
+			amount *= _mitigation(stats.magic_resist, src, false)
 	if amount <= 0.0:
 		return 0.0
 	var dealt := amount
 	for s in statuses:
-		if s.type == "shield" and amount > 0.0:
+		if s.type == "shield" and amount > 0.0 and (str(s.get("dtype", "all")) == "all" or s.dtype == dtype):
 			var a := minf(s.amount, amount)
 			s.amount -= a
 			amount -= a
 	hp -= amount
 	flash = 0.12
+	hurt_t = world.time
+	var credit = src
 	if src != null:
-		if src.stats.get("lifesteal", 0.0) > 0.0:
-			src.heal(dealt * src.stats.lifesteal, src, false)
-		var credit = src
 		if src is Summon and is_instance_valid(src.owner_unit):
 			credit = src.owner_unit
+		var vamp: float = src.stats.get("omnivamp", 0.0)
+		if hit.get("attack", false) or hit.get("onhit", false):
+			vamp += src.stats.get("lifesteal", 0.0)
+		if vamp > 0.0 and not is_structure:
+			src.heal(dealt * vamp, src, false)
 		if credit.is_champion:
 			last_champion_hit = credit
 			last_champion_hit_time = world.time
+			damagers[credit.net_id] = world.time
+			if is_champion:
+				credit.enter_combat()
+				enter_combat()
 	world.on_damage(self, dealt, src, dtype, hit)
+	if src != null:
+		src.trigger("deal_damage", self, null, _hit_vars(hit, dealt, dtype))
+	if not dead:
+		trigger("take_damage", src, null, _hit_vars(hit, dealt, dtype))
+		if hit.get("attack", false) and src != null:
+			trigger("attacked", src, null, _hit_vars(hit, dealt, dtype))
+	if dead:
+		return dealt
 	if hp <= 0.0 and not _cheat_death():
 		die(src)
 	elif not dead:
@@ -350,17 +440,55 @@ func take_damage(amount: float, source = null, dtype := "physical", hit := {}) -
 	return dealt
 
 
+func _hit_vars(hit: Dictionary, amount: float, dtype: String) -> Dictionary:
+	var ab := str(hit.get("ability", ""))
+	return {"dmg": amount, "dtype": dtype, "crit_hit": bool(hit.get("crit", false)), "is_attack": bool(hit.get("attack", false)),
+		"is_ability": ab in ["q", "w", "e", "r"], "is_dot": bool(hit.get("dot", false)), "is_aoe": bool(hit.get("aoe", false)),
+		"is_proc": bool(hit.get("proc", false)), "hit_item": str(hit.get("item", "")), "onhit": bool(hit.get("onhit", false))}
+
+
+## Damage multiplier from armor / magic resist after the attacker's penetration.
+func _mitigation(resist: float, src, physical: bool) -> float:
+	var r := resist
+	if src != null and r > 0.0:
+		if physical:
+			r *= 1.0 - clampf(src.stats.get("armor_pen", 0.0), 0.0, 1.0)
+			var leth: float = src.stats.get("lethality", 0.0)
+			if leth > 0.0:
+				r = maxf(r - leth * (0.6 + 0.4 * minf(src.get_level(), 18) / 18.0), 0.0)
+		else:
+			r *= 1.0 - clampf(src.stats.get("magic_pen_percent", 0.0), 0.0, 1.0)
+			r = maxf(r - src.stats.get("magic_pen", 0.0), 0.0)
+	return 100.0 / (100.0 + r) if r >= 0.0 else 2.0 - 100.0 / (100.0 - r)
+
+
 func _cheat_death() -> bool:
 	return false
 
 
-func heal(amount: float, _source = null, show := true) -> void:
+## Heals after healing modifiers (heal_received, grievous wounds). Returns the amount healed.
+func heal(amount: float, _source = null, show := true) -> float:
 	if dead or puppet or amount <= 0.0:
-		return
+		return 0.0
+	amount *= 1.0 + stats.get("heal_received", 0.0)
+	var g := 0.0
+	for s in statuses:
+		if s.type == "grievous":
+			g = maxf(g, s.amount)
+	amount *= 1.0 - clampf(g, 0.0, 1.0)
 	var before := hp
 	hp = minf(hp + amount, stats.max_hp)
+	if Game.debug_log and amount >= 1.0:
+		print("[heal] t=%.2f %s +%.1f (raw %.1f)" % [world.time, display_name, hp - before, amount])
 	if show and hp - before >= 1.0 and (is_champion or self is Summon):
 		world.fx("heal", {"p": global_position, "a": hp - before, "v": net_id, "r": radius})
+	return hp - before
+
+
+func restore_mana(amount: float) -> void:
+	if dead or puppet or stats.max_mana <= 0.0:
+		return
+	mana = clampf(mana + amount, 0.0, stats.max_mana)
 
 
 func die(killer = null) -> void:
@@ -380,6 +508,7 @@ func die(killer = null) -> void:
 		collision_layer = 0
 	world.fx("death", {"p": global_position, "r": radius, "c": color, "k": kind, "v": net_id})
 	world.on_unit_died(self, killer if is_instance_valid(killer) else null)
+	damagers.clear()
 	_on_death()
 
 
@@ -390,21 +519,44 @@ func _on_death() -> void:
 func add_status(s: Dictionary, source = null, key := "") -> void:
 	if dead or puppet:
 		return
-	if is_structure and not s.type in ["shield", "buff", "hot"]:
+	if is_structure and not s.type in ["shield", "buff", "hot", "mark"]:
+		return
+	if s.type in CC_TYPES and (has_status("stasis") or has_status("invulnerable")) and source != self:
 		return
 	s["source"] = source if is_instance_valid(source) else null
 	s["key"] = key
 	stats_dirty = true
 	if key != "":
 		for i in statuses.size():
-			if statuses[i].key == key and statuses[i].type == s.type:
-				if s.has("tick") and statuses[i].has("tick"):
-					s.tick = minf(s.tick, statuses[i].tick)
+			var old: Dictionary = statuses[i]
+			if old.key == key and old.type == s.type:
+				if s.has("tick") and old.has("tick"):
+					s.tick = minf(s.tick, old.tick)
+				if s.has("max_stacks"):
+					s.stacks = mini(int(old.get("stacks", 0)) + int(s.get("add_stacks", 1)), int(s.max_stacks))
+					_apply_stacks(s)
+					if not bool(s.get("refresh", true)):
+						s.time = old.time
 				statuses[i] = s
 				return
+	if s.has("max_stacks"):
+		s.stacks = mini(int(s.get("add_stacks", 1)), int(s.max_stacks))
+		_apply_stacks(s)
 	statuses.append(s)
-	if s.type == "stun":
+	if s.type == "stun" or s.type == "stasis":
 		_interrupted()
+
+
+func _apply_stacks(s: Dictionary) -> void:
+	if s.type != "buff" or not s.has("per_add"):
+		return
+	var n := float(s.stacks)
+	s.add = {}
+	s.mult = {}
+	for k in s.per_add:
+		s.add[k] = s.per_add[k] * n
+	for k in s.per_mult:
+		s.mult[k] = 1.0 + (s.per_mult[k] - 1.0) * n
 
 
 func _interrupted() -> void:
@@ -427,7 +579,8 @@ func _update_statuses(delta: float) -> void:
 			if s.tick <= 0.0:
 				s.tick += s.interval
 				if s.type == "dot":
-					take_damage(s.amount * s.interval, s.source, s.dtype, {"vfx": "dot", "col": s.get("col", Color(1, 0.5, 0.2))})
+					take_damage(s.amount * s.interval, s.source, s.dtype, {"vfx": "dot", "col": s.get("col", Color(1, 0.5, 0.2)),
+						"dot": true, "ability": s.get("src_slot", ""), "item": s.get("item", ""), "raw": s.get("raw", false)})
 					if dead:
 						return
 				else:
@@ -442,9 +595,17 @@ func _update_statuses(delta: float) -> void:
 			shield += s.amount
 
 
+## Optional hook for subclasses to add flat stats (into st) and multipliers (into mult).
+func _extra_stats(_st: Dictionary, _mult: Dictionary) -> void:
+	pass
+
+
 func recompute_stats() -> void:
 	var old_max: float = stats.get("max_hp", base_stats.max_hp)
+	var old_mana: float = stats.get("max_mana", 0.0)
 	var st := base_stats.duplicate()
+	var mult := {}
+	_extra_stats(st, mult)
 	var slow := 0.0
 	for s in statuses:
 		if s.type == "buff":
@@ -453,16 +614,28 @@ func recompute_stats() -> void:
 	for s in statuses:
 		if s.type == "buff":
 			for k in s.mult:
-				st[k] = float(st.get(k, 0.0)) * s.mult[k]
+				mult[k] = float(mult.get(k, 1.0)) * s.mult[k]
 		elif s.type == "slow":
 			slow = maxf(slow, s.amount)
-	st.move_speed = maxf(st.move_speed * (1.0 - slow), 0.0)
+	for k in mult:
+		st[k] = float(st.get(k, 0.0)) * mult[k]
+	st.attack_speed = minf(st.attack_speed * maxf(1.0 + st.bonus_attack_speed, 0.1), st.attack_speed_cap)
+	slow *= 1.0 - clampf(st.slow_resist, 0.0, 1.0)
+	var ms: float = st.move_speed * maxf(1.0 + st.move_speed_bonus, 0.0) * (1.0 - slow)
+	if ms > 490.0:
+		ms = 475.0 + (ms - 490.0) * 0.5
+	elif ms > 415.0:
+		ms = 415.0 + (ms - 415.0) * 0.8
+	st.move_speed = maxf(ms, 0.0)
 	st.max_hp = maxf(st.max_hp, 1.0)
 	st.size = clampf(st.size, 0.2, 6.0)
 	stats = st
 	if st.max_hp > old_max and not dead:
 		hp += st.max_hp - old_max
 	hp = minf(hp, st.max_hp)
+	if st.max_mana > old_mana and not dead:
+		mana += st.max_mana - old_mana
+	mana = clampf(mana, 0.0, st.max_mana)
 	set_radius(base_radius * st.size)
 	stats_dirty = false
 
@@ -485,6 +658,11 @@ func _compute_flags() -> int:
 			"buff": f |= F_BUFF
 			"dot": f |= F_DOT
 			"hot": f |= F_HOT
+			"stasis": f |= F_STASIS | F_INVULN
+			"stealth": f |= F_STEALTH
+			"spellshield": f |= F_SPELLSHIELD
+			"grievous": f |= F_GRIEVOUS
+			"untargetable": f |= F_UNTARGETABLE
 	if forced != null and not forced.dash:
 		f |= F_AIR
 	if dead:

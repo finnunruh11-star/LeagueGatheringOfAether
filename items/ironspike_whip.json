@@ -1,0 +1,17 @@
+{
+  "name": "Ironspike Whip",
+  "cost": 1100,
+  "rarity": "epic",
+  "from": [
+    "pickaxe"
+  ],
+  "tags": [
+    "Damage",
+    "Active"
+  ],
+  "stats": {
+    "attack_damage": 30.0
+  },
+  "description": "",
+  "passives": []
+}

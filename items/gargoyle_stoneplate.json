@@ -1,0 +1,24 @@
+{
+  "name": "Gargoyle Stoneplate",
+  "cost": 3200,
+  "rarity": "legendary",
+  "from": [
+    "cloth_armor",
+    "aegis_of_the_legion",
+    "null_magic_mantle"
+  ],
+  "tags": [
+    "SpellBlock",
+    "Armor",
+    "Active",
+    "CooldownReduction",
+    "AbilityHaste"
+  ],
+  "stats": {
+    "armor": 60.0,
+    "magic_resist": 60.0,
+    "ability_haste": 15.0
+  },
+  "description": "",
+  "passives": []
+}

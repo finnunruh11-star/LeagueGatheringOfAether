@@ -1,0 +1,20 @@
+{
+  "name": "Void Staff",
+  "cost": 2800,
+  "rarity": "legendary",
+  "from": [
+    "blighting_jewel",
+    "blasting_wand"
+  ],
+  "tags": [
+    "MagicPenetration",
+    "SpellDamage"
+  ],
+  "group": "void_pen",
+  "stats": {
+    "ability_power": 65.0,
+    "magic_pen_percent": 0.4
+  },
+  "description": "",
+  "passives": []
+}
