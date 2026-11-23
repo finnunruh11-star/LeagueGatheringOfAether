@@ -1,0 +1,83 @@
+{
+  "name": "Honk Lord",
+  "title": "Menace of the Village",
+  "description": "An absolutely unhinged goose. Honks. Summons goslings. Becomes enormous.",
+  "color": "#f2f2f2",
+  "stats": {
+    "max_hp": 650,
+    "move_speed": 355,
+    "attack_damage": 55,
+    "attack_speed": 1.0,
+    "attack_range": 100,
+    "armor": 22
+  },
+  "per_level": {"max_hp": 85, "attack_damage": 4},
+  "attack": {"ranged": false},
+  "passive": {
+    "name": "Agent of Chaos",
+    "description": "Basic attacks have a 25% chance to do something random: stun, slow, knock back or bonus true damage.",
+    "triggers": [
+      {"on": "attack", "chance": 0.25, "effects": [
+        {"type": "text", "text": "HONK!", "color": "#ffdd55"},
+        {"type": "random", "options": [
+          {"type": "stun", "duration": 0.75},
+          {"type": "slow", "amount": 0.6, "duration": 1.5},
+          {"type": "knockback", "distance": 220, "from": "self"},
+          {"type": "damage", "amount": "40 + 0.5 * ad", "damage_type": "true"}
+        ]}
+      ]}
+    ]
+  },
+  "abilities": {
+    "q": {
+      "name": "HONK",
+      "description": "Honk in a cone, damaging enemies and blasting them away.",
+      "cooldown": 7,
+      "targeting": "direction",
+      "range": 380,
+      "effects": [
+        {"type": "area", "at": "self", "radius": 380, "angle": 70, "color": "#fff3a0", "effects": [
+          {"type": "damage", "amount": "55 + 0.5 * ad"},
+          {"type": "knockback", "distance": 260, "duration": 0.3}
+        ]},
+        {"type": "text", "text": "HOOOONK", "at": "self", "color": "#ffdd55", "size": 30}
+      ]
+    },
+    "w": {
+      "name": "Goslings",
+      "description": "Summon 3 angry goslings for 10 seconds.",
+      "cooldown": 16,
+      "targeting": "self",
+      "effects": [
+        {"type": "summon", "name": "Gosling", "count": 3, "duration": 10, "size": 0.5, "color": "#ffe680", "at": "self",
+          "stats": {"max_hp": "120 + 15 * level", "attack_damage": "10 + 2 * level", "attack_speed": 1.2, "move_speed": 390}}
+      ]
+    },
+    "e": {
+      "name": "Egg Bomb",
+      "description": "Lob an egg that lands after 0.7s, damaging and slowing enemies.",
+      "cooldown": 9,
+      "targeting": "point",
+      "range": 750,
+      "effects": [
+        {"type": "area", "radius": 170, "delay": 0.7, "color": "#fff8dc", "effects": [
+          {"type": "damage", "amount": "80 + 0.4 * ad"},
+          {"type": "slow", "amount": 0.5, "duration": 1.5}
+        ]}
+      ]
+    },
+    "r": {
+      "name": "GOOSE MODE",
+      "description": "Become an enormous goose for 7s: bigger, stronger, faster, with a damaging honk aura.",
+      "cooldown": 55,
+      "targeting": "self",
+      "effects": [
+        {"type": "buff", "duration": 7, "multiply": {"size": 1.9, "attack_damage": 1.5, "move_speed": 1.25, "max_hp": 1.3}},
+        {"type": "zone", "follow": true, "radius": 230, "duration": 7, "interval": 0.5, "color": "#ffffff", "effects": [
+          {"type": "damage", "amount": "15 + 0.1 * ad"}
+        ]},
+        {"type": "text", "text": "GOOSE MODE", "at": "self", "color": "#ffdd55", "size": 36}
+      ]
+    }
+  }
+}

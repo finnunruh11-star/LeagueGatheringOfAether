@@ -1,0 +1,78 @@
+{
+  "name": "Gizmo",
+  "title": "Gadgeteer",
+  "description": "Marksman with traps, rocket boots and a pocket turret. Keep your distance!",
+  "color": "#5fd4c4",
+  "stats": {
+    "max_hp": 540,
+    "move_speed": 335,
+    "attack_damage": 58,
+    "attack_speed": 0.9,
+    "attack_range": 520,
+    "armor": 12
+  },
+  "per_level": {"max_hp": 72, "attack_damage": 4.5},
+  "attack": {"ranged": true, "projectile_speed": 1400, "projectile_color": "#bff7ef", "projectile_size": 5},
+  "passive": {
+    "name": "Overclock",
+    "description": "After casting an ability, gain 40% attack speed for 3 seconds.",
+    "triggers": [
+      {"on": "cast", "effects": [
+        {"type": "buff", "duration": 3, "multiply": {"attack_speed": 1.4}}
+      ]}
+    ]
+  },
+  "abilities": {
+    "q": {
+      "name": "Piercing Bolt",
+      "description": "Fire a bolt that pierces through every enemy in a line.",
+      "cooldown": 6,
+      "targeting": "direction",
+      "range": 1000,
+      "effects": [
+        {"type": "projectile", "speed": 1500, "radius": 14, "color": "#7ff0e0", "pierce": true, "on_hit": [
+          {"type": "damage", "amount": "60 + 0.9 * ad", "damage_type": "physical"}
+        ]}
+      ]
+    },
+    "w": {
+      "name": "Bear Trap",
+      "description": "Place a hidden trap (lasts 30s). The first enemy to step on it is rooted for 1.5s and takes damage.",
+      "cooldown": 9,
+      "targeting": "point",
+      "range": 600,
+      "effects": [
+        {"type": "trap", "radius": 55, "duration": 30, "color": "#c0c8d0", "effects": [
+          {"type": "root", "duration": 1.5},
+          {"type": "damage", "amount": "60 + 0.4 * ad", "damage_type": "physical"},
+          {"type": "text", "text": "SNAP!", "color": "#ffffff"}
+        ]}
+      ]
+    },
+    "e": {
+      "name": "Rocket Jump",
+      "description": "Blast nearby enemies away and rocket-jump backwards (away from the cursor).",
+      "cooldown": 12,
+      "targeting": "direction",
+      "range": 380,
+      "effects": [
+        {"type": "area", "at": "self", "radius": 190, "color": "#ffd27f", "effects": [
+          {"type": "damage", "amount": 50},
+          {"type": "knockback", "distance": 200}
+        ]},
+        {"type": "dash", "to": "back", "distance": 380, "speed": 1300}
+      ]
+    },
+    "r": {
+      "name": "Sentry Turret",
+      "description": "Deploy a turret for 15s that shoots enemies in range.",
+      "cooldown": 40,
+      "targeting": "point",
+      "range": 500,
+      "effects": [
+        {"type": "summon", "name": "Turret", "stationary": true, "ranged": true, "size": 0.9, "duration": 15, "color": "#5fd4c4",
+          "stats": {"max_hp": 500, "attack_damage": "25 + 0.35 * ad", "attack_speed": 1.6, "attack_range": 560, "armor": 30}}
+      ]
+    }
+  }
+}

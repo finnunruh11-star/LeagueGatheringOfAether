@@ -1,0 +1,82 @@
+{
+  "name": "Sir Bonk",
+  "title": "Knight of the Round Hammer",
+  "description": "Tanky melee bruiser. Charges in, bonks things, refuses to elaborate.",
+  "color": "#c9a36b",
+  "stats": {
+    "max_hp": 760,
+    "hp_regen": 4,
+    "move_speed": 340,
+    "attack_damage": 64,
+    "attack_speed": 0.85,
+    "attack_range": 70,
+    "armor": 32
+  },
+  "per_level": {"max_hp": 95, "attack_damage": 4, "armor": 3},
+  "attack": {"ranged": false},
+  "passive": {
+    "name": "Bonk Rhythm",
+    "description": "Every 3rd basic attack stuns for 0.6s and deals 30 + 30% AD bonus damage.",
+    "triggers": [
+      {"on": "attack", "every": 3, "effects": [
+        {"type": "damage", "amount": "30 + 0.3 * ad", "damage_type": "physical"},
+        {"type": "stun", "duration": 0.6},
+        {"type": "text", "text": "BONK!", "color": "#ffd34d"}
+      ]}
+    ]
+  },
+  "abilities": {
+    "q": {
+      "name": "Charge",
+      "description": "Dash toward the cursor, damaging and slowing everyone you run through.",
+      "cooldown": 7,
+      "targeting": "direction",
+      "range": 420,
+      "effects": [
+        {"type": "dash", "distance": 420, "speed": 1500, "on_hit": [
+          {"type": "damage", "amount": "70 + 0.6 * ad", "damage_type": "physical"},
+          {"type": "slow", "amount": 0.4, "duration": 1.5}
+        ]}
+      ]
+    },
+    "w": {
+      "name": "Bulwark",
+      "description": "Gain a shield (120 + 8% max HP) for 3s and 25% move speed for 2s.",
+      "cooldown": 12,
+      "targeting": "self",
+      "effects": [
+        {"type": "shield", "amount": "120 + 0.08 * max_hp", "duration": 3},
+        {"type": "buff", "duration": 2, "multiply": {"move_speed": 1.25}}
+      ]
+    },
+    "e": {
+      "name": "Whirlwind",
+      "description": "Spin, damaging nearby enemies and knocking them back.",
+      "cooldown": 8,
+      "targeting": "self",
+      "effects": [
+        {"type": "area", "radius": 200, "color": "#e8d8b0", "effects": [
+          {"type": "damage", "amount": "60 + 0.5 * ad", "damage_type": "physical"},
+          {"type": "knockback", "distance": 150, "duration": 0.2}
+        ]}
+      ]
+    },
+    "r": {
+      "name": "Hammer Time",
+      "description": "Leap to a location and SMASH: big damage and a 1.2s stun around the landing spot.",
+      "cooldown": 50,
+      "targeting": "point",
+      "range": 650,
+      "cast_time": 0.25,
+      "effects": [
+        {"type": "dash", "to": "aim", "distance": 650, "speed": 1700, "on_end": [
+          {"type": "area", "radius": 270, "color": "#ffcf5a", "effects": [
+            {"type": "damage", "amount": "180 + 1.0 * ad", "damage_type": "physical"},
+            {"type": "stun", "duration": 1.2}
+          ]},
+          {"type": "text", "text": "SMASH!", "at": "self", "color": "#ffcf5a", "size": 34}
+        ]}
+      ]
+    }
+  }
+}

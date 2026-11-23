@@ -1,0 +1,272 @@
+class_name GameMap
+extends Node2D
+## Map built from a JSON file in maps/. Handles walls, lanes, structures,
+## grid pathfinding (AStarGrid2D) and drawing. "mirror": true copies the blue
+## half (walls/towers/spawn/nexus) onto the red side.
+
+const CELL := 32.0
+const MARGIN := 18.0
+
+var data := {}
+var size := Vector2(2400, 1600)
+var walls: Array[Rect2] = []
+var spawns: Array[Vector2] = [Vector2(200, 800), Vector2(2200, 800)]
+var lanes: Array = []
+var structures: Array = []
+var dummies: Array = []
+var wave_interval := 30.0
+var first_wave := 10.0
+var wave_melee := 3
+var wave_ranged := 2
+var fountain_radius := 280.0
+var ground := Color("2e4a2f")
+var lane_color := Color("6e5f45")
+var wall_color := Color("4a505c")
+var astar := AStarGrid2D.new()
+var cols := 1
+var rows := 1
+
+
+func build(d: Dictionary) -> void:
+	data = d
+	size = _v(d.get("size"), size)
+	var mirror := bool(d.get("mirror", true))
+	ground = Content.parse_color(d.get("ground_color"), ground)
+	lane_color = Content.parse_color(d.get("lane_color"), lane_color)
+	wall_color = Content.parse_color(d.get("wall_color"), wall_color)
+	for w in d.get("walls", []):
+		if not (w is Array and w.size() == 4):
+			continue
+		var r := Rect2(w[0], w[1], w[2], w[3]).abs()
+		walls.append(r)
+		if mirror:
+			var m := Rect2(size.x - r.position.x - r.size.x, r.position.y, r.size.x, r.size.y)
+			if not m.is_equal_approx(r):
+				walls.append(m)
+	spawns = _pair(d.get("spawn"), Vector2(220, size.y * 0.5), mirror)
+	if d.has("nexus"):
+		var nx := _pair(d.get("nexus"), Vector2(450, size.y * 0.5), mirror)
+		for t in 2:
+			structures.append({"kind": "nexus", "team": t, "lane": -1, "order": 99, "pos": nx[t]})
+	for l in d.get("lanes", []):
+		var pts := PackedVector2Array()
+		if l is Array:
+			for p in l:
+				pts.append(_v(p, Vector2.ZERO))
+		if pts.size() >= 2:
+			lanes.append(pts)
+	for t in d.get("towers", []):
+		if not (t is Dictionary):
+			continue
+		var pos := _v(t.get("pos"), Vector2.ZERO)
+		var team := int(t.get("team", 0))
+		var info := {"kind": "tower", "team": team, "lane": int(t.get("lane", 0)), "order": int(t.get("order", 0)), "pos": pos}
+		structures.append(info)
+		if mirror and team == 0:
+			var m := info.duplicate()
+			m.team = 1
+			m.pos = Vector2(size.x - pos.x, pos.y)
+			structures.append(m)
+	for p in d.get("dummies", []):
+		dummies.append(_v(p, size * 0.5))
+	var wv = d.get("waves", {})
+	if wv is Dictionary:
+		wave_interval = float(wv.get("interval", wave_interval))
+		first_wave = float(wv.get("first", first_wave))
+		wave_melee = int(wv.get("melee", wave_melee))
+		wave_ranged = int(wv.get("ranged", wave_ranged))
+	fountain_radius = float(d.get("fountain_radius", fountain_radius))
+	_build_bodies()
+	_build_grid()
+	queue_redraw()
+
+
+func _v(v, fallback: Vector2) -> Vector2:
+	if v is Array and v.size() >= 2:
+		return Vector2(float(v[0]), float(v[1]))
+	return fallback
+
+
+func _pair(v, fallback: Vector2, mirror: bool) -> Array[Vector2]:
+	if v is Array and v.size() == 2 and v[0] is Array:
+		return [_v(v[0], fallback), _v(v[1], fallback)]
+	var a := _v(v, fallback)
+	return [a, Vector2(size.x - a.x, a.y) if mirror else a]
+
+
+func lane_count() -> int:
+	return lanes.size()
+
+
+func lane(team: int, i: int) -> PackedVector2Array:
+	if i < 0 or i >= lanes.size():
+		return PackedVector2Array()
+	var l: PackedVector2Array = lanes[i].duplicate()
+	if team == 1:
+		l.reverse()
+	return l
+
+
+func spawn_point(team: int) -> Vector2:
+	return spawns[clampi(team, 0, 1)]
+
+
+# ------------------------------------------------------- collision & grid ---
+
+func _build_bodies() -> void:
+	var body := StaticBody2D.new()
+	body.collision_layer = 1
+	body.collision_mask = 0
+	add_child(body)
+	var th := 400.0
+	var all := walls.duplicate()
+	all.append(Rect2(-th, -th, size.x + 2 * th, th))
+	all.append(Rect2(-th, size.y, size.x + 2 * th, th))
+	all.append(Rect2(-th, 0, th, size.y))
+	all.append(Rect2(size.x, 0, th, size.y))
+	for r in all:
+		var cs := CollisionShape2D.new()
+		var sh := RectangleShape2D.new()
+		sh.size = r.size
+		cs.shape = sh
+		cs.position = r.get_center()
+		body.add_child(cs)
+
+
+func _build_grid() -> void:
+	cols = int(ceil(size.x / CELL))
+	rows = int(ceil(size.y / CELL))
+	astar.region = Rect2i(0, 0, cols, rows)
+	astar.cell_size = Vector2(CELL, CELL)
+	astar.offset = Vector2(CELL, CELL) * 0.5
+	astar.diagonal_mode = AStarGrid2D.DIAGONAL_MODE_ONLY_IF_NO_OBSTACLES
+	astar.default_compute_heuristic = AStarGrid2D.HEURISTIC_OCTILE
+	astar.default_estimate_heuristic = AStarGrid2D.HEURISTIC_OCTILE
+	astar.update()
+	for r in walls:
+		_fill(r.grow(MARGIN))
+	for s in structures:
+		var rad: float = (62.0 if s.kind == "nexus" else 38.0) * 0.8
+		_fill(Rect2(s.pos - Vector2(rad, rad), Vector2(rad, rad) * 2.0))
+	for x in cols:
+		astar.set_point_solid(Vector2i(x, 0), true)
+		astar.set_point_solid(Vector2i(x, rows - 1), true)
+	for y in rows:
+		astar.set_point_solid(Vector2i(0, y), true)
+		astar.set_point_solid(Vector2i(cols - 1, y), true)
+
+
+func _fill(g: Rect2) -> void:
+	var x0 := clampi(int(floor(g.position.x / CELL)), 0, cols - 1)
+	var x1 := clampi(int(floor(g.end.x / CELL)), 0, cols - 1)
+	var y0 := clampi(int(floor(g.position.y / CELL)), 0, rows - 1)
+	var y1 := clampi(int(floor(g.end.y / CELL)), 0, rows - 1)
+	for x in range(x0, x1 + 1):
+		for y in range(y0, y1 + 1):
+			astar.set_point_solid(Vector2i(x, y), true)
+
+
+func cell_of(p: Vector2) -> Vector2i:
+	return Vector2i(clampi(int(p.x / CELL), 0, cols - 1), clampi(int(p.y / CELL), 0, rows - 1))
+
+
+func clamp_inside(p: Vector2) -> Vector2:
+	return p.clamp(Vector2(CELL, CELL), size - Vector2(CELL, CELL))
+
+
+func is_wall(p: Vector2) -> bool:
+	if p.x < 0 or p.y < 0 or p.x > size.x or p.y > size.y:
+		return true
+	for r in walls:
+		if r.has_point(p):
+			return true
+	return false
+
+
+func has_los(a: Vector2, b: Vector2) -> bool:
+	var steps := int(a.distance_to(b) / (CELL * 0.5)) + 1
+	for k in range(1, steps + 1):
+		if astar.is_point_solid(cell_of(a.lerp(b, float(k) / steps))):
+			return false
+	return true
+
+
+func _nearest_open_cell(c: Vector2i) -> Vector2i:
+	if not astar.is_point_solid(c):
+		return c
+	for r in range(1, 30):
+		var best := Vector2i(-1, -1)
+		var bd := INF
+		for x in range(c.x - r, c.x + r + 1):
+			for y in range(c.y - r, c.y + r + 1):
+				if absi(x - c.x) != r and absi(y - c.y) != r:
+					continue
+				var id := Vector2i(x, y)
+				if x < 0 or y < 0 or x >= cols or y >= rows or astar.is_point_solid(id):
+					continue
+				var dd := Vector2(id - c).length_squared()
+				if dd < bd:
+					bd = dd
+					best = id
+		if best.x >= 0:
+			return best
+	return c
+
+
+## Closest walkable position (used for teleports, summons and click targets).
+func nearest_open(p: Vector2) -> Vector2:
+	p = clamp_inside(p)
+	var c := cell_of(p)
+	if not astar.is_point_solid(c):
+		return p
+	return astar.get_point_position(_nearest_open_cell(c))
+
+
+func find_path(from: Vector2, to: Vector2) -> PackedVector2Array:
+	to = nearest_open(to)
+	if has_los(from, to):
+		return PackedVector2Array([to])
+	var fc := _nearest_open_cell(cell_of(from))
+	var tc := cell_of(to)
+	var pts := astar.get_point_path(fc, tc, true)
+	if pts.is_empty():
+		return PackedVector2Array([to])
+	pts[pts.size() - 1] = to
+	var out := PackedVector2Array()
+	var cur := from
+	var i := 0
+	while i < pts.size():
+		var j := pts.size() - 1
+		while j > i and not has_los(cur, pts[j]):
+			j -= 1
+		out.append(pts[j])
+		cur = pts[j]
+		i = j + 1
+	return out
+
+
+# ---------------------------------------------------------------- drawing ---
+
+func _draw() -> void:
+	draw_rect(Rect2(-2000, -2000, size.x + 4000, size.y + 4000), ground.darkened(0.6))
+	draw_rect(Rect2(Vector2.ZERO, size), ground)
+	var tile := 160.0
+	var alt := ground.darkened(0.07)
+	for x in int(ceil(size.x / tile)):
+		for y in int(ceil(size.y / tile)):
+			if (x + y) % 2 == 0:
+				draw_rect(Rect2(x * tile, y * tile, tile, tile).intersection(Rect2(Vector2.ZERO, size)), alt)
+	for l in lanes:
+		draw_polyline(l, lane_color, 150.0)
+		for p in l:
+			draw_circle(p, 75.0, lane_color)
+	for t in 2:
+		var tc: Color = Game.TEAM_COLORS[t]
+		draw_circle(spawns[t], fountain_radius, Color(tc, 0.16))
+		draw_arc(spawns[t], fountain_radius, 0, TAU, 96, Color(tc, 0.6), 4.0, true)
+		draw_circle(spawns[t], 40.0, Color(tc, 0.35))
+	for r in walls:
+		draw_rect(r, wall_color)
+		draw_rect(r.grow(-8), wall_color.lightened(0.08))
+		draw_rect(r, wall_color.darkened(0.4), false, 3.0)
+	draw_rect(Rect2(Vector2.ZERO, size), Color(0, 0, 0, 0.7), false, 10.0)

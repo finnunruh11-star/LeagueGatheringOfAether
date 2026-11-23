@@ -1,0 +1,15 @@
+{
+  "name": "Training Arena",
+  "description": "Small arena with training dummies. No minions or towers - just try things out.",
+  "size": [2400, 1500],
+  "mirror": true,
+  "spawn": [230, 750],
+  "fountain_radius": 220,
+  "walls": [
+    [640, 260, 120, 120],
+    [640, 1120, 120, 120],
+    [1150, 180, 100, 180],
+    [1150, 1140, 100, 180]
+  ],
+  "dummies": [[1200, 750], [980, 520], [980, 980]]
+}

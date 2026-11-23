@@ -1,0 +1,135 @@
+extends Node
+## Screen manager (menu -> lobby -> match) plus command-line automation used
+## for testing, e.g.:  -- --auto=practice --char=ember --bots_red=1 --shots=5 --quit_at=6
+
+const MenuScreen = preload("res://scripts/ui/menu.gd")
+const LobbyScreen = preload("res://scripts/ui/lobby.gd")
+
+var screen: Node = null
+var _shots: Array = []
+var _quit_at := -1.0
+var _auto_started := false
+var _clock := 0.0
+
+
+func _ready() -> void:
+	Game.match_started.connect(_on_match_started)
+	Game.lobby_joined.connect(show_lobby)
+	Game.back_to_lobby.connect(show_lobby)
+	Game.left_game.connect(show_menu)
+	if not _auto():
+		show_menu("")
+
+
+func show_menu(msg := "") -> void:
+	var m := MenuScreen.new()
+	m.main = self
+	_set_screen(m)
+	m.set_status(msg)
+
+
+func show_lobby() -> void:
+	var l := LobbyScreen.new()
+	l.main = self
+	_set_screen(l)
+
+
+func _on_match_started(cfg: Dictionary) -> void:
+	var w := World.new()
+	w.name = "World%d" % int(cfg.id)
+	_set_screen(w)
+	w.start(cfg)
+	if Game.cmdline.has("selftest"):
+		add_child(preload("res://scripts/selftest.gd").new())
+
+
+func _set_screen(n: Node) -> void:
+	if screen != null and is_instance_valid(screen):
+		remove_child(screen)
+		screen.queue_free()
+	screen = n
+	add_child(n)
+
+
+# -------------------------------------------------------- test automation ---
+
+func _auto() -> bool:
+	var a := Game.cmdline
+	if a.has("name"):
+		Game.player_name = a.name
+	for s in str(a.get("shots", "")).split(",", false):
+		_shots.append(float(s))
+	_quit_at = float(a.get("quit_at", "-1"))
+	if a.has("speed"):
+		Engine.time_scale = float(a.speed)
+		Engine.max_physics_steps_per_frame = 16
+	match str(a.get("auto", "")):
+		"practice":
+			Game.start_practice()
+			_setup_lobby(a)
+			Game.start_match()
+		"host":
+			Game.host(int(a.get("port", "7777")))
+			_setup_lobby(a)
+			show_lobby()
+		"join":
+			Game.join(str(a.get("ip", "127.0.0.1")), int(a.get("port", "7777")))
+			show_menu("Joining...")
+		_:
+			return false
+	return true
+
+
+func _setup_lobby(a: Dictionary) -> void:
+	if a.has("map"):
+		Game.settings.map = a.map
+	if a.has("char"):
+		Game.players[1].character = a.char
+	if a.has("team"):
+		Game.players[1].team = int(a.team)
+	for i in int(a.get("bots_blue", "0")):
+		Game.add_bot(0)
+	for i in int(a.get("bots_red", "0")):
+		Game.add_bot(1)
+
+
+func _process(delta: float) -> void:
+	_clock += delta
+	var a := Game.cmdline
+	if str(a.get("auto", "")) == "host" and not _auto_started and Game.players.size() >= int(a.get("wait", "2")):
+		_auto_started = true
+		get_tree().create_timer(1.0).timeout.connect(Game.start_match)
+	if a.has("char") and str(a.get("auto", "")) == "join" and Game.players.has(multiplayer.get_unique_id()) \
+			and Game.characters.has(a.char) and Game.players[multiplayer.get_unique_id()].character != a.char:
+		Game.request_change("character", a.char)
+	if a.has("autopilot") and Game.world != null and Game.world.local_champion != null and not Game.world.local_champion.get_meta("auto", false):
+		Game.world.local_champion.set_meta("auto", true)
+		Game.world.send_command("autopilot", [true])
+	if not _shots.is_empty() and _clock >= _shots[0]:
+		var t: float = _shots.pop_front()
+		_screenshot("%s_%d.png" % [str(a.get("shot", "user://shot")), int(t)])
+	if _quit_at > 0.0 and _clock >= _quit_at:
+		_quit_at = -1.0
+		_report()
+		get_tree().quit()
+
+
+func _screenshot(path: String) -> void:
+	await RenderingServer.frame_post_draw
+	var img := get_viewport().get_texture().get_image()
+	img.save_png(path)
+	print("[auto] screenshot saved: ", path)
+
+
+func _report() -> void:
+	var w = Game.world
+	if w == null:
+		print("[auto] no match running. players=", Game.players.size(), " chars=", Game.characters.size())
+		return
+	print("[auto] time=%.1f entities=%d units=%d kills=%s ended=%s server=%s" % [w.time, w.entities.size(), w.units.size(), str(w.kills), str(w.ended), str(w.is_server)])
+	for c in w.champions.values():
+		print("[auto]   %s %s team=%d lvl=%d hp=%d/%d pos=%s k/d=%d/%d dead=%s" % [c.player_name, c.char_id, c.team, c.level, c.hp, c.stats.max_hp, str(c.global_position.round()), c.kills, c.deaths, str(c.dead)])
+	var counts := {}
+	for e in w.entities.values():
+		counts[e.get_class() + ":" + str(e.get("kind"))] = counts.get(e.get_class() + ":" + str(e.get("kind")), 0) + 1
+	print("[auto]   entity kinds: ", counts)

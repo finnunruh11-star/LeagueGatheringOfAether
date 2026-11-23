@@ -1,0 +1,15 @@
+{
+  "name": "Meteor Shower",
+  "description": "Call down 7 meteors around the target area over 2.5 seconds.",
+  "cooldown": 45,
+  "targeting": "point",
+  "range": 900,
+  "effects": [
+    {"type": "repeat", "count": 7, "interval": 0.35, "effects": [
+      {"type": "area", "scatter": 230, "radius": 130, "delay": 0.8, "color": "#ff4d1a", "effects": [
+        {"type": "damage", "amount": "85 + 0.45 * ap"},
+        {"type": "dot", "amount": "15 + 0.1 * ap", "duration": 2, "id": "burn"}
+      ]}
+    ]}
+  ]
+}

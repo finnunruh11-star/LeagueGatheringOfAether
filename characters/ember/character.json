@@ -1,0 +1,51 @@
+{
+  "name": "Ember",
+  "title": "The Pyromaniac",
+  "description": "Ranged fire mage. Everything she touches burns. Some things she doesn't touch also burn.",
+  "color": "#ff7a2f",
+  "stats": {
+    "max_hp": 560,
+    "move_speed": 330,
+    "attack_damage": 48,
+    "attack_speed": 0.7,
+    "attack_range": 480,
+    "armor": 14,
+    "ability_power": 40
+  },
+  "per_level": {"max_hp": 70, "attack_damage": 2.5, "ability_power": 12},
+  "attack": {"ranged": true, "projectile_speed": 950, "projectile_color": "#ffb347", "projectile_size": 7},
+  "passive": {
+    "name": "Kindling",
+    "description": "Basic attacks set enemies ablaze for 2s (8 + 10% AP damage per second).",
+    "triggers": [
+      {"on": "attack", "effects": [
+        {"type": "dot", "amount": "8 + 0.1 * ap", "duration": 2, "id": "burn"}
+      ]}
+    ]
+  },
+  "abilities": {
+    "q": "fireball",
+    "w": {
+      "name": "Flame Field",
+      "description": "Ignite the ground for 4s. Enemies inside burn and are slowed.",
+      "cooldown": 11,
+      "targeting": "point",
+      "range": 700,
+      "effects": [
+        {"type": "zone", "radius": 170, "duration": 4, "interval": 0.5, "color": "#ff5a1f", "effects": [
+          {"type": "damage", "amount": "14 + 0.12 * ap"},
+          {"type": "slow", "amount": 0.3, "duration": 0.6}
+        ]}
+      ]
+    },
+    "e": {
+      "name": "Flicker",
+      "description": "Teleport a short distance.",
+      "cooldown": 10,
+      "targeting": "point",
+      "range": 430,
+      "effects": [{"type": "teleport", "color": "#ffb347"}]
+    },
+    "r": "meteor_shower"
+  }
+}

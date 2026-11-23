@@ -1,0 +1,83 @@
+{
+  "name": "Mender",
+  "title": "Field Medic",
+  "description": "Support who heals friends, hooks enemies and drops sanctuaries.",
+  "color": "#8fe07a",
+  "stats": {
+    "max_hp": 590,
+    "move_speed": 330,
+    "attack_damage": 44,
+    "attack_speed": 0.7,
+    "attack_range": 450,
+    "armor": 18,
+    "ability_power": 35
+  },
+  "per_level": {"max_hp": 80, "attack_damage": 2.5, "ability_power": 10},
+  "attack": {"ranged": true, "projectile_speed": 1000, "projectile_color": "#d6ffc4", "projectile_size": 6},
+  "passive": {
+    "name": "Soothing Presence",
+    "description": "Every 5 seconds, heal yourself and nearby allies for 15 + 4 per level.",
+    "triggers": [
+      {"on": "interval", "interval": 5, "effects": [
+        {"type": "area", "at": "self", "radius": 450, "affects": "allies", "color": "#8fe07a", "effects": [
+          {"type": "heal", "amount": "15 + 4 * level"}
+        ]}
+      ]}
+    ]
+  },
+  "abilities": {
+    "q": {
+      "name": "Spirit Orb",
+      "description": "An orb that damages and slows the first enemy hit - or heals the first ally it touches.",
+      "cooldown": 5,
+      "targeting": "direction",
+      "range": 850,
+      "effects": [
+        {"type": "projectile", "speed": 1000, "radius": 15, "color": "#b7ff9e", "affects": "all", "on_hit": [
+          {"type": "heal", "amount": "60 + 0.6 * ap", "if": "ally"},
+          {"type": "damage", "amount": "60 + 0.6 * ap", "if": "ally == 0"},
+          {"type": "slow", "amount": 0.35, "duration": 1.5, "if": "ally == 0"}
+        ]}
+      ]
+    },
+    "w": {
+      "name": "Lifeline Hook",
+      "description": "Throw a hook. The first enemy hit is pulled to you and stunned briefly.",
+      "cooldown": 14,
+      "targeting": "direction",
+      "range": 900,
+      "effects": [
+        {"type": "projectile", "speed": 1500, "radius": 14, "color": "#e0e0e0", "on_hit": [
+          {"type": "damage", "amount": "50 + 0.5 * ap"},
+          {"type": "pull", "duration": 0.3},
+          {"type": "stun", "duration": 0.6}
+        ]}
+      ]
+    },
+    "e": {
+      "name": "Sanctuary",
+      "description": "Create a healing zone for 4 seconds.",
+      "cooldown": 13,
+      "targeting": "point",
+      "range": 600,
+      "effects": [
+        {"type": "zone", "radius": 220, "duration": 4, "interval": 0.5, "affects": "allies", "color": "#8fe07a", "effects": [
+          {"type": "heal", "amount": "12 + 0.1 * ap"}
+        ]}
+      ]
+    },
+    "r": {
+      "name": "Guardian Spirits",
+      "description": "All allies within 1200 range are cleansed, healed and shielded for 4s.",
+      "cooldown": 60,
+      "targeting": "self",
+      "effects": [
+        {"type": "area", "at": "self", "radius": 1200, "affects": "allies", "color": "#c8ffb5", "effects": [
+          {"type": "cleanse"},
+          {"type": "heal", "amount": "100 + 0.5 * ap"},
+          {"type": "shield", "amount": "150 + 1.0 * ap", "duration": 4}
+        ]}
+      ]
+    }
+  }
+}
