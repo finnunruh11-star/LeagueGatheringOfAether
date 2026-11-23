@@ -367,6 +367,8 @@ func load_settings() -> void:
 
 
 func save_settings() -> void:
+	if cmdline.has("auto"):
+		return
 	var cfg := ConfigFile.new()
 	cfg.set_value("player", "name", player_name)
 	cfg.set_value("net", "ip", last_ip)

@@ -266,7 +266,9 @@ static func _key(e: Dictionary, ctx: Dictionary) -> String:
 		return ""
 	var c = ctx.get("caster")
 	var cid: int = c.net_id if is_instance_valid(c) else 0
-	return "%d:%s:%s" % [cid, ctx.get("ability", ""), e.get("id", e.get("type", ""))]
+	if e.has("id"):
+		return "%d:%s" % [cid, e.id]
+	return "%d:%s:%s" % [cid, ctx.get("ability", ""), e.get("type", "")]
 
 
 static func _color(e: Dictionary, ctx: Dictionary, fallback := Color(1, 0.6, 0.2)) -> Color:

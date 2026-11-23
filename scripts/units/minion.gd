@@ -23,6 +23,10 @@ func setup(d: Dictionary) -> void:
 	var sc := float(d.get("scale", 1.0))
 	for k in ["max_hp", "attack_damage", "attack_speed", "attack_range", "move_speed", "armor"]:
 		base_stats[k] = t[k]
+	var ov = world.map.data.get("minion_stats", {})
+	if ov is Dictionary and ov.get(minion_type) is Dictionary:
+		for k in ov[minion_type]:
+			base_stats[k] = float(ov[minion_type][k])
 	base_stats.max_hp *= sc
 	base_stats.attack_damage *= sc
 	base_stats.hp_regen = 0.0

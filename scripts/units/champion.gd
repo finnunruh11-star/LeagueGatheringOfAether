@@ -170,14 +170,14 @@ func change_cooldown(slot: String, amount: float, reset: bool) -> void:
 
 # ---------------------------------------------------------------- passive ---
 
-func trigger(event: String, target = null, pos = null, extra := {}) -> bool:
+func trigger(event: String, target = null, pos = null, extra := {}, only := -1) -> bool:
 	if puppet or _trigger_depth > 2 or def.is_empty():
 		return false
 	var fired := false
 	var trigs: Array = def.passive.triggers
 	for i in trigs.size():
 		var tr: Dictionary = trigs[i]
-		if str(tr.get("on", "")) != event or trigger_cds.get(i, 0.0) > 0.0:
+		if (only >= 0 and i != only) or str(tr.get("on", "")) != event or trigger_cds.get(i, 0.0) > 0.0:
 			continue
 		if event == "low_health" and hp > stats.max_hp * float(tr.get("threshold", 0.3)):
 			continue
@@ -241,7 +241,7 @@ func _think(delta: float) -> void:
 			interval_timers[i] = float(interval_timers.get(i, 0.0)) + delta
 			if interval_timers[i] >= maxf(float(trigs[i].get("interval", 5.0)), 0.1):
 				interval_timers[i] = 0.0
-				trigger("interval", self)
+				trigger("interval", self, null, {}, i)
 	if casting != null:
 		casting.time -= delta
 		if casting.time <= 0.0:
@@ -460,7 +460,7 @@ func _bot_think(delta: float) -> void:
 	for i in lane.size():
 		if global_position.distance_to(lane[i]) < global_position.distance_to(lane[nearest]):
 			nearest = i
-	var goal: Vector2 = lane[mini(nearest + 1, lane.size() - 1)]
+	var goal: Vector2 = global_position.move_toward(lane[mini(nearest + 1, lane.size() - 1)], 500.0)
 	if _under_enemy_tower(goal) and not _allied_minions_near(goal):
 		amove = null
 		move_goal = null

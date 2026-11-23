@@ -3,6 +3,21 @@
   "title": "Menace of the Village",
   "description": "An absolutely unhinged goose. Honks. Summons goslings. Becomes enormous.",
   "color": "#f2f2f2",
+  "portrait": "portrait.png",
+  "sprite": {
+    "sheet": "spritesheet.png",
+    "frame_width": 32,
+    "frame_height": 32,
+    "scale": 2.4,
+    "offset": [0, -10],
+    "animations": {
+      "idle": {"row": 0, "frames": 2, "fps": 3},
+      "walk": {"row": 1, "frames": 4, "fps": 10},
+      "attack": {"row": 2, "frames": 3, "fps": 14, "loop": false},
+      "cast": {"row": 3, "frames": 2, "fps": 8},
+      "death": {"row": 4, "frames": 3, "fps": 6}
+    }
+  },
   "stats": {
     "max_hp": 650,
     "move_speed": 355,
@@ -31,6 +46,7 @@
   "abilities": {
     "q": {
       "name": "HONK",
+      "icon": "honk_icon.png",
       "description": "Honk in a cone, damaging enemies and blasting them away.",
       "cooldown": 7,
       "targeting": "direction",
@@ -49,7 +65,7 @@
       "cooldown": 16,
       "targeting": "self",
       "effects": [
-        {"type": "summon", "name": "Gosling", "count": 3, "duration": 10, "size": 0.5, "color": "#ffe680", "at": "self",
+        {"type": "summon", "name": "Gosling", "sprite": "gosling.png", "count": 3, "duration": 10, "size": 0.5, "color": "#ffe680", "at": "self",
           "stats": {"max_hp": "120 + 15 * level", "attack_damage": "10 + 2 * level", "attack_speed": 1.2, "move_speed": 390}}
       ]
     },

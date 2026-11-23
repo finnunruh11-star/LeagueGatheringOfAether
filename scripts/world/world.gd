@@ -19,6 +19,7 @@ var next_id := 1
 var time := 0.0
 var started := false
 var ended := false
+var closing := false
 var winner := -1
 var kills := [0, 0]
 var wave_timer := 0.0
@@ -103,6 +104,17 @@ func _exit_tree() -> void:
 		Game.world = null
 
 
+func shutdown() -> void:
+	closing = true
+	ended = true
+	visible = false
+	hud.visible = false
+	camera.enabled = false
+	process_mode = Node.PROCESS_MODE_DISABLED
+	if Game.world == self:
+		Game.world = null
+
+
 func check_ready() -> void:
 	if is_server and not started and Game.all_peers_ready():
 		begin()
@@ -121,8 +133,9 @@ func begin() -> void:
 		var p: Dictionary = config.players[pid]
 		var t := clampi(int(p.team), 0, 1)
 		var off := Vector2(0, 70).rotated(per_team[t] * 2.1) if per_team[t] > 0 else Vector2.ZERO
+		var gone: bool = online and pid != 1 and not bool(p.get("bot", false)) and not Game.players.has(pid)
 		spawn("champion", {"peer": pid, "team": t, "character": p.character, "name": p.name,
-			"bot": bool(p.get("bot", false)), "pos": map.spawn_point(t) + off, "lane": per_team[t]})
+			"bot": bool(p.get("bot", false)) or gone, "pos": map.spawn_point(t) + off, "lane": per_team[t]})
 		per_team[t] += 1
 	for dpos in map.dummies:
 		spawn("dummy", {"pos": dpos})
@@ -147,7 +160,8 @@ func spawn(kind: String, data: Dictionary) -> Node:
 
 @rpc("authority", "call_remote", "reliable")
 func _rpc_spawn(kind: String, id: int, data: Dictionary) -> void:
-	_create(kind, id, data)
+	if not closing:
+		_create(kind, id, data)
 
 
 func _create(kind: String, id: int, data: Dictionary) -> Node:
@@ -241,22 +255,27 @@ func _run_scheduled() -> void:
 
 # ----------------------------------------------------------- networking ---
 
-func _send_snapshot() -> void:
-	var buf := PackedFloat32Array([time])
+func _build_snapshot() -> PackedFloat32Array:
+	var buf := PackedFloat32Array([time, kills[0], kills[1]])
 	for id in entities:
 		var st: PackedFloat32Array = entities[id].net_state()
 		buf.append(id)
 		buf.append(st.size())
 		buf.append_array(st)
-	_rpc_snapshot.rpc(buf)
+	return buf
+
+
+func _send_snapshot() -> void:
+	_rpc_snapshot.rpc(_build_snapshot())
 
 
 @rpc("authority", "call_remote", "unreliable_ordered")
 func _rpc_snapshot(buf: PackedFloat32Array) -> void:
-	if buf.is_empty():
+	if buf.size() < 3 or closing:
 		return
 	time = buf[0]
-	var i := 1
+	kills = [int(buf[1]), int(buf[2])]
+	var i := 3
 	while i + 1 < buf.size():
 		var id := int(buf[i])
 		var n := int(buf[i + 1])
@@ -274,6 +293,8 @@ func fx(kind: String, data: Dictionary) -> void:
 
 @rpc("authority", "call_remote", "reliable")
 func _rpc_fx(list: Array) -> void:
+	if closing:
+		return
 	for f in list:
 		_play_fx(f[0], f[1])
 
@@ -281,12 +302,49 @@ func _rpc_fx(list: Array) -> void:
 func _play_fx(kind: String, data: Dictionary) -> void:
 	if kind == "sound":
 		_play_sound(data)
-	elif kind == "announce":
+		return
+	if kind == "announce":
 		hud.announce(str(data.text), data.get("color", Color.WHITE))
+		var txt := str(data.text)
+		if txt.contains("destroyed"):
+			_sfx("boom", null, -2.0)
+		elif txt.contains("slain") or txt.contains("died"):
+			_sfx("death", null, -6.0)
+		return
+	var f := Fx.new()
+	f.setup(kind, data)
+	fx_layer.add_child(f)
+	match kind:
+		"blast":
+			_sfx("boom", data.get("pos"), -14.0 + clampf(float(data.get("radius", 100.0)) / 40.0, 0.0, 7.0))
+		"ring":
+			_sfx("pop", data.get("pos"), -16.0)
+		"line", "beam":
+			_sfx("zap", data.get("from"), -12.0)
+		"text":
+			if str(data.get("text", "")).begins_with("LEVEL"):
+				_sfx("level", data.get("pos"), -8.0)
+
+
+func _sfx(sound: String, pos, volume: float) -> void:
+	if not Sfx.allow(sound):
+		return
+	var p: Node
+	if pos is Vector2:
+		var p2 := AudioStreamPlayer2D.new()
+		p2.stream = Sfx.stream(sound)
+		p2.volume_db = volume
+		p2.max_distance = 2200.0
+		p2.position = pos
+		p = p2
 	else:
-		var f := Fx.new()
-		f.setup(kind, data)
-		fx_layer.add_child(f)
+		var p1 := AudioStreamPlayer.new()
+		p1.stream = Sfx.stream(sound)
+		p1.volume_db = volume
+		p = p1
+	fx_layer.add_child(p)
+	p.finished.connect(p.queue_free)
+	p.play()
 
 
 func _play_sound(d: Dictionary) -> void:
@@ -339,6 +397,9 @@ func apply_command(pid: int, cmd: String, args: Array) -> void:
 
 
 func on_peer_left(id: int, pname: String) -> void:
+	if not started:
+		check_ready()
+		return
 	var c = champions.get(id)
 	if c != null:
 		c.is_bot = true
@@ -507,12 +568,14 @@ func end_match(win_team: int) -> void:
 		return
 	_finish(win_team)
 	if online:
-		_send_snapshot()
-		_rpc_end.rpc(win_team)
+		_rpc_end.rpc(win_team, _build_snapshot())
 
 
 @rpc("authority", "call_remote", "reliable")
-func _rpc_end(t: int) -> void:
+func _rpc_end(t: int, final_state: PackedFloat32Array) -> void:
+	if closing:
+		return
+	_rpc_snapshot(final_state)
 	_finish(t)
 
 
@@ -679,6 +742,8 @@ func _cast(slot: String) -> void:
 		if t != null:
 			tid = t.net_id
 	send_command("cast", [slot, m, tid])
+	if local_champion.cooldowns.get(slot, 0.0) <= 0.0:
+		_sfx("cast", local_champion.global_position, -14.0)
 
 
 func _process(delta: float) -> void:
@@ -698,6 +763,11 @@ func _process(delta: float) -> void:
 		if mp.y > vp.y - 10 or Input.is_key_pressed(KEY_DOWN):
 			pan.y += 1
 		camera.global_position += pan * 1400.0 * delta / cam_zoom
+		var half := get_viewport_rect().size * 0.5 / camera.zoom
+		var lo := Vector2(camera.limit_left, camera.limit_top) + half
+		var hi := Vector2(camera.limit_right, camera.limit_bottom) - half
+		var cp := camera.global_position
+		camera.global_position = Vector2(clampf(cp.x, lo.x, maxf(lo.x, hi.x)), clampf(cp.y, lo.y, maxf(lo.y, hi.y)))
 	if rmb_held:
 		rmb_timer -= delta
 		if rmb_timer <= 0.0:

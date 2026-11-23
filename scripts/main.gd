@@ -6,6 +6,7 @@ const MenuScreen = preload("res://scripts/ui/menu.gd")
 const LobbyScreen = preload("res://scripts/ui/lobby.gd")
 
 var screen: Node = null
+var ui_layer: CanvasLayer
 var _shots: Array = []
 var _quit_at := -1.0
 var _auto_started := false
@@ -13,6 +14,8 @@ var _clock := 0.0
 
 
 func _ready() -> void:
+	ui_layer = CanvasLayer.new()
+	add_child(ui_layer)
 	Game.match_started.connect(_on_match_started)
 	Game.lobby_joined.connect(show_lobby)
 	Game.back_to_lobby.connect(show_lobby)
@@ -45,10 +48,19 @@ func _on_match_started(cfg: Dictionary) -> void:
 
 func _set_screen(n: Node) -> void:
 	if screen != null and is_instance_valid(screen):
-		remove_child(screen)
-		screen.queue_free()
+		if screen is World:
+			# Keep the old match around (disabled) for a moment so network
+			# messages still in flight find their node instead of erroring.
+			screen.shutdown()
+			get_tree().create_timer(3.0).timeout.connect(screen.queue_free)
+		else:
+			screen.get_parent().remove_child(screen)
+			screen.queue_free()
 	screen = n
-	add_child(n)
+	if n is Control:
+		ui_layer.add_child(n)
+	else:
+		add_child(n)
 
 
 # -------------------------------------------------------- test automation ---
@@ -108,10 +120,24 @@ func _process(delta: float) -> void:
 	if not _shots.is_empty() and _clock >= _shots[0]:
 		var t: float = _shots.pop_front()
 		_screenshot("%s_%d.png" % [str(a.get("shot", "user://shot")), int(t)])
+	_at("end_at", func(): if Game.world != null: Game.world.end_match(0))
+	_at("relobby_at", Game.return_to_lobby)
+	_at("restart_at", Game.start_match)
+	_at("leave_at", func(): Game.leave(); Game.left_game.emit("left (test)"))
 	if _quit_at > 0.0 and _clock >= _quit_at:
 		_quit_at = -1.0
 		_report()
 		get_tree().quit()
+
+
+var _done := {}
+
+
+func _at(key: String, f: Callable) -> void:
+	if Game.cmdline.has(key) and not _done.has(key) and _clock >= float(Game.cmdline[key]):
+		_done[key] = true
+		print("[auto] ", key)
+		f.call()
 
 
 func _screenshot(path: String) -> void:

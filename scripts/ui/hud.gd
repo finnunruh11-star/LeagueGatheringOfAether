@@ -27,13 +27,14 @@ var end_label: Label
 var menu_panel: PanelContainer
 var feed: Array = []
 var _tooltips_for := ""
+var _last_hp := -1.0
 
 
 func _ready() -> void:
 	layer = 10
 	font = ThemeDB.fallback_font
 	var root := Control.new()
-	root.set_anchors_preset(Control.PRESET_FULL_RECT)
+	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(root)
 
@@ -175,6 +176,10 @@ func _process(_delta: float) -> void:
 			lines.append(f[0])
 	feed_label.text = "\n".join(lines)
 	var ch := world.local_champion
+	if ch != null:
+		if _last_hp >= 0.0 and ch.hp < _last_hp - ch.stats.max_hp * 0.01 and not ch.dead:
+			world._sfx("hit", null, -14.0)
+		_last_hp = ch.hp
 	center_label.text = ""
 	if not world.started:
 		center_label.text = "Waiting for players..."

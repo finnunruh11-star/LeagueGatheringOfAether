@@ -373,6 +373,8 @@ func add_status(s: Dictionary, source = null, key := "") -> void:
 	if key != "":
 		for i in statuses.size():
 			if statuses[i].key == key and statuses[i].type == s.type:
+				if s.has("tick") and statuses[i].has("tick"):
+					s.tick = minf(s.tick, statuses[i].tick)
 				statuses[i] = s
 				return
 	statuses.append(s)
@@ -488,22 +490,23 @@ func start_dash(dir: Vector2, length: float, speed: float, e: Dictionary, ctx: D
 
 
 func _forced_process(delta: float) -> void:
-	velocity = forced.vel
+	var f: Dictionary = forced
+	velocity = f.vel
 	move_and_slide()
-	forced.time -= delta
-	if forced.dash and forced.e.has("on_hit"):
-		var e: Dictionary = forced.e
+	f.time -= delta
+	if f.dash and f.e.has("on_hit"):
+		var e: Dictionary = f.e
 		for u in world.query(global_position, radius + 10.0, team, str(e.get("affects", "enemies")), false):
-			if u == self or forced.hit.has(u.net_id):
+			if u == self or f.hit.has(u.net_id):
 				continue
-			forced.hit[u.net_id] = true
-			Effects.run(e.on_hit, Effects.sub(forced.ctx, {"target": u, "pos": u.global_position, "origin": global_position}))
-			if forced == null:
+			f.hit[u.net_id] = true
+			Effects.run(e.on_hit, Effects.sub(f.ctx, {"target": u, "pos": u.global_position, "origin": global_position}))
+			if not is_same(forced, f):
 				return
 			if bool(e.get("stop_on_hit", false)):
-				forced.time = 0.0
+				f.time = 0.0
 				break
-	if forced != null and (forced.time <= 0.0 or get_slide_collision_count() > 0):
+	if is_same(forced, f) and (f.time <= 0.0 or get_slide_collision_count() > 0):
 		_end_forced()
 
 
@@ -567,6 +570,7 @@ func apply_net_state(s: PackedFloat32Array) -> void:
 
 func _process(delta: float) -> void:
 	if puppet:
+		life += delta
 		net_t = minf(net_t + delta / World.SNAP_DT, 1.0)
 		global_position = net_from.lerp(net_to, net_t)
 	flash = maxf(flash - delta, 0.0)

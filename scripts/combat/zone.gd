@@ -56,9 +56,9 @@ func init_server(e: Dictionary, c: Dictionary) -> void:
 
 
 func _physics_process(delta: float) -> void:
-	life += delta
 	if puppet or world == null or world.ended:
 		return
+	life += delta
 	if follow != null:
 		if is_instance_valid(follow) and not follow.dead:
 			global_position = follow.global_position

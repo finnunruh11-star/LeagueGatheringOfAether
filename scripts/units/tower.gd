@@ -22,13 +22,13 @@ func setup(d: Dictionary) -> void:
 	base_stats.hp_regen = 0.0
 	base_stats.move_speed = 0.0
 	if is_nexus:
-		base_stats.max_hp = 4500.0
+		base_stats.max_hp = 3600.0
 		base_stats.armor = 30.0
 		base_stats.attack_damage = 0.0
 		base_radius = 62.0
 		display_name = "Nexus"
 	else:
-		base_stats.max_hp = 2600.0
+		base_stats.max_hp = 2200.0
 		base_stats.armor = 45.0
 		base_stats.attack_damage = 150.0
 		base_stats.attack_speed = 0.83
@@ -36,6 +36,10 @@ func setup(d: Dictionary) -> void:
 		base_radius = 38.0
 		xp_value = 120.0
 		display_name = "Tower"
+	var ov = world.map.data.get("nexus_stats" if is_nexus else "tower_stats", {})
+	if ov is Dictionary:
+		for k in ov:
+			base_stats[k] = float(ov[k])
 	color = Game.TEAM_COLORS[team]
 	attack_def = {"ranged": true, "speed": 1300.0, "color": color.lightened(0.5), "size": 10.0, "sprite": "", "char": "", "on_hit": []}
 	global_position = d.pos
@@ -56,6 +60,9 @@ func _think(delta: float) -> void:
 		think_t = 0.2
 		attack_target = _pick()
 	target_id = attack_target.net_id if attack_target != null else 0
+	if attack_target == null:
+		last_target_id = 0
+		ramp = 0
 
 
 func _pick() -> Unit:
@@ -80,10 +87,10 @@ func aggro(attacker: Unit) -> void:
 
 
 func attack_damage_against(t) -> float:
-	if not t.is_champion:
-		return maxf(stats.attack_damage, t.stats.max_hp * 0.45)
 	ramp = ramp + 1 if t.net_id == last_target_id else 0
 	last_target_id = t.net_id
+	if not t.is_champion:
+		return maxf(stats.attack_damage, t.stats.max_hp * 0.45)
 	return stats.attack_damage * (1.0 + 0.3 * mini(ramp, 5))
 
 
