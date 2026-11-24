@@ -517,7 +517,8 @@ static func _one(e: Dictionary, ctx: Dictionary) -> void:
 				var iv := maxf(num(e.get("interval"), ctx, 0.5), 0.1)
 				_add(u, {"type": type, "amount": num(e.get("amount"), ctx, 20.0) * rmult, "interval": iv, "tick": iv,
 					"time": num(e.get("duration"), ctx, 3.0), "dtype": str(e.get("damage_type", "magic")), "col": _color(e, ctx),
-					"src_slot": str(ctx.get("src_slot", "")), "item": str(ctx.get("item", "")), "raw": bool(e.get("raw", false))}, e, ctx)
+					"src_slot": str(ctx.get("src_slot", "")), "item": str(ctx.get("item", "")), "raw": bool(e.get("raw", false)),
+					"proc": bool(ctx.get("proc", false))}, e, ctx)
 		"buff":
 			var u := _unit(e, ctx)
 			if u and (u.team == int(ctx.get("team", -1)) or not _blocked(u, ctx)):
@@ -697,6 +698,10 @@ static func _one(e: Dictionary, ctx: Dictionary) -> void:
 			var u := _unit(e, ctx)
 			if u is Champion:
 				u.gain_xp(maxf(u.xp_to_next() - u.xp, 0.0) + 0.01)
+		"xp":
+			var u := _unit(e, ctx)
+			if u is Champion:
+				u.gain_xp(num(e.get("amount"), ctx, 50.0))
 		"text":
 			w.fx("text", {"pos": _pos(e.get("at", "target"), ctx) + Vector2(0, -50), "text": str(e.get("text", "!")),
 				"color": _color(e, ctx, Color.WHITE), "size": int(num(e.get("size"), ctx, 28.0))})
@@ -745,6 +750,10 @@ static func _add(u: Unit, s: Dictionary, e: Dictionary, ctx: Dictionary) -> void
 		s.keep_longer = true
 	if str(ctx.get("item", "")) != "":
 		s.item = str(ctx.item)
+	if bool(e.get("persist", false)):
+		s.persist = true
+	if s.has("triggers"):
+		s.trig_sig = str(s.triggers).hash()
 	u.add_status(s, _caster(ctx), _key(e, ctx))
 	if Game.debug_log and s.type != "dot" and s.type != "hot":
 		print("[status] t=%.2f %s gets %s%s %.2fs %s" % [Game.world.time, u.display_name, s.type, (":" + s.id) if s.has("id") else "",
@@ -1007,6 +1016,15 @@ static func _projectile(e: Dictionary, ctx: Dictionary) -> void:
 static func _summon(e: Dictionary, ctx: Dictionary) -> void:
 	var w = Game.world
 	var count := clampi(int(num(e.get("count"), ctx, 1.0)), 1, 20)
+	var limit := int(num(e.get("limit"), ctx, 0.0))
+	if limit > 0:
+		# Keep at most `limit` of this summon per owner: the oldest ones disappear.
+		var mine := []
+		for u in w.units:
+			if u is Summon and not u.dead and u.owner_unit == _caster(ctx) and u.display_name == str(e.get("name", "Summon")):
+				mine.append(u)
+		while mine.size() + count > limit and not mine.is_empty():
+			mine.pop_front().die(null)
 	var st := {}
 	var raw_stats = e.get("stats", {})
 	if raw_stats is Dictionary:

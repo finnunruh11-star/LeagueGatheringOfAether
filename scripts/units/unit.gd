@@ -523,7 +523,7 @@ func die(killer = null) -> void:
 	world.fx("death", {"p": global_position, "r": radius, "c": color, "k": kind, "v": net_id})
 	# Kill/takedown triggers may still look at the victim's marks; clear them afterwards.
 	world.on_unit_died(self, killer if is_instance_valid(killer) else null)
-	statuses.clear()
+	statuses = statuses.filter(func(s): return s.get("persist", false))
 	stats_dirty = true
 	damagers.clear()
 	_on_death()
@@ -605,7 +605,8 @@ func _update_statuses(delta: float) -> void:
 				s.tick += s.interval
 				if s.type == "dot":
 					take_damage(s.amount * s.interval, s.source, s.dtype, {"vfx": "dot", "col": s.get("col", Color(1, 0.5, 0.2)),
-						"dot": true, "ability": s.get("src_slot", ""), "item": s.get("item", ""), "raw": s.get("raw", false)})
+						"dot": true, "ability": s.get("src_slot", ""), "item": s.get("item", ""), "raw": s.get("raw", false),
+						"proc": s.get("proc", false)})
 					if dead:
 						return
 				else:

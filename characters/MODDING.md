@@ -157,10 +157,11 @@ Godot math and logic work too (write decimals like `10.0` in `clamp`/`min`/`max`
 | `mana` | restore `amount` mana (negative drains) |
 | `reveal` | the target is visible to your team through fog of war (and stealth) for `duration` 2 |
 | `level_up` | the target champion gains a level |
+| `xp` | the target champion gains `amount` experience |
 
 Repeated statuses from the same ability refresh instead of stacking. Add `"stack": true` to let
 them stack, or `"id": "burn"` to share one status between abilities; `"keep_longer": true` keeps the
-longer of the old and new duration when refreshing. (Marks add a stack each time they are applied.) Enemy spell shields block
+longer of the old and new duration when refreshing, and `"persist": true` keeps a status through death. (Marks add a stack each time they are applied.) Enemy spell shields block
 ability effects (not basic attacks or item effects).
 
 ### You / your champion
@@ -190,7 +191,7 @@ ability effects (not basic attacks or item effects).
 | `beam` | instant line from you. `length` (ability range), `width` 70, `delay`, `affects`, `effects` [...] |
 | `zone` | lingering circle. `radius` 160, `duration` 4, `interval` 0.5, `follow` (true = aura around you), `affects`, `effects` [... each tick], `on_expire` [...] |
 | `trap` | `radius` 60, `duration` 30, `arm_time` 0.6, `hidden` true, `effects` [... on the unit that steps on it] |
-| `summon` | `name`, `count` 1, `duration` 10, `stats` {max_hp, attack_damage, attack_range, attack_speed, move_speed, armor, vision...}, `ranged`, `stationary` (turret), `size` 0.7, `sprite`, `on_hit` [...], `on_death` [...], `ward` (a ward: 1 damage per basic attack, ignored by minions and towers), `reveal` (sees stealthed enemies in its vision) |
+| `summon` | `name`, `count` 1, `duration` 10, `stats` {max_hp, attack_damage, attack_range, attack_speed, move_speed, armor, vision...}, `ranged`, `stationary` (turret), `size` 0.7, `sprite`, `on_hit` [...], `on_death` [...], `ward` (a ward: 1 damage per basic attack, ignored by minions and towers), `reveal` (sees stealthed enemies in its vision), `limit` (max of these per owner; the oldest disappears) |
 
 Abilities don't hurt towers unless you set `"hits_structures": true`.
 
@@ -300,7 +301,7 @@ fountain or while dead (anywhere in Practice / the Training Arena). Keys **1-6**
 - `passives` are triggers (see Passive triggers) plus `name`/`description`. A passive without `on` is
   just text. Passives with the same `"unique": "name"` don't stack (default: per item, so two copies
   of one item don't double up). Inside them `rank` = your level, so 18-entry lists scale by level.
-- `active` works like an ability (targeting, range, indicator) and is used with keys 1-6 (`"while_dead": true` allows using it while dead).
+- `active` works like an ability (targeting, range, indicator) and is used with keys 1-6 (`"while_dead": true` allows using it while dead; `"requires": "t_minion"` - an expression checked before the cooldown starts, e.g. only usable on minions).
   Consumables (`"consume": true`, default for rarity consumable) lose one charge per use.
 - `{"type": "transform", "into": "muramana"}` inside a passive upgrades the item in place.
 

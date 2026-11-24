@@ -423,7 +423,7 @@ func _status_triggers(event: String, target, pos, extra: Dictionary) -> bool:
 			var tr = trs[j]
 			if not (tr is Dictionary) or str(tr.get("on", "")) != event:
 				continue
-			var key := "s:%s:%d" % [s.key, j]
+			var key := "s:%s:%d:%d" % [s.key, int(s.get("trig_sig", 0)), j]
 			if trigger_cds.get(key, 0.0) > 0.0:
 				continue
 			if extra.get("is_proc", false) and event in PROC_GUARDED and not tr.get("procs", false):
@@ -705,6 +705,9 @@ func use_item(slot: int, aim: Vector2, tid: int) -> bool:
 	ctx.rank = level
 	ctx.color = it.color
 	ctx.erase("rank_mult")
+	if ab.has("requires") and Effects.num(ab.requires, ctx, 1.0) == 0.0:
+		world.fx("notice", {"peer": peer, "text": "%s can't be used on that" % it.name})
+		return false
 	var cd := maxf(Effects.num(ab.cooldown, ctx, 60.0), 0.0)
 	inst.cd = cd
 	inst.cd_total = maxf(cd, 0.01)
@@ -906,7 +909,7 @@ func _dead_process(delta: float) -> void:
 
 func respawn() -> void:
 	dead = false
-	statuses.clear()
+	statuses = statuses.filter(func(s): return s.get("persist", false))
 	teleport(world.map.spawn_point(team) + Vector2(randf_range(-40, 40), randf_range(-40, 40)))
 	recompute_stats()
 	hp = stats.max_hp
