@@ -181,6 +181,9 @@ func _compute(team: int) -> void:
 			if old.has(u.net_id):
 				seen[u.net_id] = true
 			continue
+		if u.flags & (Unit.F_REVEAL0 << team):
+			seen[u.net_id] = true
+			continue
 		if u.flags & Unit.F_STEALTH and not _revealed(u, team):
 			continue
 		if _sees(src, u.global_position, u.radius):

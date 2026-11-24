@@ -25,6 +25,8 @@ const F_SPELLSHIELD := 32768
 const F_GRIEVOUS := 65536
 const F_ENERGIZED := 131072
 const F_UNTARGETABLE := 262144
+const F_REVEAL0 := 524288     # revealed to team 0 ("reveal" effect); F_REVEAL0 << team
+const F_REVEAL1 := 1048576
 const NET_BASE := 9
 const HARD_CC := ["stun", "root", "slow", "silence", "dot", "grievous"]
 const CC_TYPES := ["stun", "root", "slow", "silence"]
@@ -508,7 +510,6 @@ func die(killer = null) -> void:
 		return
 	dead = true
 	hp = 0.0
-	statuses.clear()
 	forced = null
 	attack_target = null
 	move_goal = null
@@ -519,7 +520,10 @@ func die(killer = null) -> void:
 	if is_structure:
 		collision_layer = 0
 	world.fx("death", {"p": global_position, "r": radius, "c": color, "k": kind, "v": net_id})
+	# Kill/takedown triggers may still look at the victim's marks; clear them afterwards.
 	world.on_unit_died(self, killer if is_instance_valid(killer) else null)
+	statuses.clear()
+	stats_dirty = true
 	damagers.clear()
 	_on_death()
 
@@ -689,6 +693,7 @@ func _compute_flags() -> int:
 			"spellshield": f |= F_SPELLSHIELD
 			"grievous": f |= F_GRIEVOUS
 			"untargetable": f |= F_UNTARGETABLE
+			"reveal": f |= F_REVEAL0 << clampi(int(s.get("team", 0)), 0, 1)
 	if forced != null and not forced.dash:
 		f |= F_AIR
 	if dead:

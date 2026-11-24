@@ -880,10 +880,10 @@ func _right_click(with_fx: bool) -> void:
 
 func _cast(slot: String) -> void:
 	var c := local_champion
-	if c == null or c.dead or ended:
+	if c == null or ended:
 		return
 	var ab = aim_ability(slot)
-	if ab == null:
+	if ab == null or (c.dead and not (slot.begins_with("i") and ab.get("while_dead", false))):
 		return
 	var m := get_global_mouse_position()
 	var tid := 0

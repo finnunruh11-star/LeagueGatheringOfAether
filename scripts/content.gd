@@ -58,7 +58,7 @@ const EFFECT_TYPES := [
 	"cooldown", "text", "sound",
 	"mana", "gold", "mark", "remove", "counter", "stasis", "stealth", "spellshield", "grievous",
 	"untargetable", "modify_damage", "transform", "vfx", "attack_reset", "item_cooldown",
-	"shield_break", "fire_event",
+	"shield_break", "fire_event", "passive_cooldown", "reveal", "level_up",
 ]
 const NESTED_KEYS := ["effects", "on_hit", "on_end", "on_expire", "on_death", "options"]
 const ITEM_RARITIES := ["basic", "epic", "legendary", "mythic", "boots", "starter", "consumable", "jungle", "transform"]

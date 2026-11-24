@@ -16,7 +16,7 @@ const VARS := [
 	"t_mr", "t_mana", "t_max_mana", "t_champion", "t_minion", "t_structure", "t_ranged", "t_level", "t_bonus_hp", "t_ms",
 	"dmg", "dtype", "crit_hit", "is_attack", "is_ability", "is_dot", "is_aoe", "slot", "amount",
 	"in_combat", "combat_time", "since_hit", "since_combat", "gold", "kills", "deaths", "assists", "energy", "legendaries", "moving",
-	"cc", "t_self", "at_base", "t_summon", "dmg_raw",
+	"cc", "t_self", "at_base", "t_summon", "dmg_raw", "shield", "t_shield",
 ]
 
 
@@ -122,6 +122,16 @@ class Env extends RefCounted:
 	func h_stat(n: String) -> float:
 		var h := _u("holder")
 		return float(h.stats.get(n, 0.0)) if h != null else 0.0
+
+	func h_hp() -> float:
+		var h := _u("holder")
+		return h.hp if h != null else 0.0
+
+	## Distance between the buff's holder and the one who gave it.
+	func h_dist() -> float:
+		var h := _u("holder")
+		var c := _u("caster")
+		return h.global_position.distance_to(c.global_position) if h != null and c != null else 0.0
 
 	func has_item(id: String) -> bool:
 		var c := _u("caster")
@@ -383,6 +393,8 @@ static func _values(ctx: Dictionary) -> Array:
 		vals[67] = 1.0 if c.global_position.distance_to(Game.world.map.spawn_point(c.team)) <= Game.world.map.fountain_radius * 1.25 else 0.0
 	vals[68] = 1.0 if tv and t is Summon else 0.0
 	vals[69] = float(ctx.get("dmg_raw", ctx.get("dmg", 0.0)))
+	vals[70] = c.shield if cv else 0.0
+	vals[71] = t.shield if tv else 0.0
 	return vals
 
 
@@ -467,7 +479,7 @@ static func _one(e: Dictionary, ctx: Dictionary) -> void:
 			var c := _caster(ctx)
 			var t = ctx.get("target")
 			if c and is_instance_valid(t) and t is Unit and not t.dead:
-				var ex := {"crit_hit": false, "onhit": true, "exclude": str(ctx.get("trigger_key", ""))}
+				var ex := {"crit_hit": bool(ctx.get("crit_hit", false)), "onhit": true, "exclude": str(ctx.get("trigger_key", ""))}
 				c.trigger(str(e.get("event", "attack")), t, null, ex)
 		"stun", "root", "silence":
 			var u := _unit(e, ctx)
@@ -666,7 +678,25 @@ static func _one(e: Dictionary, ctx: Dictionary) -> void:
 		"item_cooldown":
 			var c := _caster(ctx)
 			if c is Champion:
-				c.change_item_cooldown(str(e.get("item", "all")), num(e.get("amount"), ctx, 1.0), bool(e.get("reset", false)))
+				if e.has("set"):
+					c.set_item_cooldown(str(e.get("item", ctx.get("item", ""))), num(e.get("set"), ctx, 0.0))
+				else:
+					c.change_item_cooldown(str(e.get("item", "all")), num(e.get("amount"), ctx, 1.0), bool(e.get("reset", false)))
+		"passive_cooldown":
+			var c := _caster(ctx)
+			if c is Champion:
+				var key := str(ctx.get("trigger_key", ""))
+				if e.has("passive") and str(ctx.get("item", "")) != "":
+					key = "%s#%d" % [ctx.item, int(e.passive)]
+				c.set_trigger_cooldown(key, num(e.get("amount"), ctx, 0.0))
+		"reveal":
+			var u := _unit(e, ctx)
+			if u:
+				_add(u, {"type": "reveal", "time": num(e.get("duration"), ctx, 2.0), "team": int(ctx.get("team", 0))}, e, ctx)
+		"level_up":
+			var u := _unit(e, ctx)
+			if u is Champion:
+				u.gain_xp(maxf(u.xp_to_next() - u.xp, 0.0) + 0.01)
 		"text":
 			w.fx("text", {"pos": _pos(e.get("at", "target"), ctx) + Vector2(0, -50), "text": str(e.get("text", "!")),
 				"color": _color(e, ctx, Color.WHITE), "size": int(num(e.get("size"), ctx, 28.0))})
@@ -713,6 +743,8 @@ static func _add(u: Unit, s: Dictionary, e: Dictionary, ctx: Dictionary) -> void
 		s.id = str(e.id)
 	if bool(e.get("keep_longer", false)):
 		s.keep_longer = true
+	if str(ctx.get("item", "")) != "":
+		s.item = str(ctx.item)
 	u.add_status(s, _caster(ctx), _key(e, ctx))
 	if Game.debug_log and s.type != "dot" and s.type != "hot":
 		print("[status] t=%.2f %s gets %s%s %.2fs %s" % [Game.world.time, u.display_name, s.type, (":" + s.id) if s.has("id") else "",
@@ -919,6 +951,7 @@ static func _dash(e: Dictionary, ctx: Dictionary) -> void:
 				dir = to2.normalized()
 				length = maxf(to2.length() - t.radius - c.radius, 0.0)
 	c.start_dash(dir, length, speed, e, sub(ctx))
+	c.trigger("dash", c, c.global_position + dir * length)
 
 
 static func _teleport(e: Dictionary, ctx: Dictionary) -> void:
@@ -938,6 +971,7 @@ static func _teleport(e: Dictionary, ctx: Dictionary) -> void:
 	to = w.map.nearest_open(to)
 	w.fx("blink", {"from": c.global_position, "to": to, "color": _color(e, ctx)})
 	c.teleport(to)
+	c.trigger("dash", c, to)
 
 
 static func _projectile(e: Dictionary, ctx: Dictionary) -> void:
@@ -967,7 +1001,7 @@ static func _projectile(e: Dictionary, ctx: Dictionary) -> void:
 			"pos": start, "dir": d, "radius": num(e.get("radius"), ctx, 12.0), "color": _color(e, ctx), "team": int(ctx.get("team", 0)),
 			"sprite": str(e.get("sprite", "")), "char": str(ctx.get("char", "")),
 		})
-		p.init_ability(e, sub(ctx), d, homing_target)
+		p.init_ability(e, sub(ctx, {"aoe": false}), d, homing_target)
 
 
 static func _summon(e: Dictionary, ctx: Dictionary) -> void:

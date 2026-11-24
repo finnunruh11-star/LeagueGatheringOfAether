@@ -112,6 +112,7 @@ dashes, delays and repeats contain their own effect lists. Any effect may also h
 | `t_champion`, `t_minion`, `t_structure`, `t_ranged` | 1/0 target type |
 | `rank` | ability rank (for item/passive triggers: your level) |
 | `dist`, `ally`, `i`, `time` | distance to target; 1 if target is an ally; repeat index / trigger count; match time |
+| `shield`, `t_shield` | your / the target's current shield amount |
 | `in_combat`, `combat_time`, `since_hit`, `since_combat` | champion-combat state (seconds) |
 | `moving` | 1 while you are walking |
 | `gold`, `kills`, `deaths`, `assists`, `energy`, `legendaries` | your score, Energize stacks (0-100), legendary item count |
@@ -128,9 +129,9 @@ Functions: `has('id')` (you have a status/mark with that id or type), `t_has('id
 you - or any status of that type like `'stun'`), `t_has_any('id')`, `stacks('id')`, `t_stacks('id')`,
 `counter('id')`, `stat('name')`, `t_stat('name')`, `base('name')`, `bonus('name')`, `pre('name')` (a stat
 before multipliers, e.g. crit chance before Guinsoo's sets it to 0), `h_stat('name')` (stat of the unit
-holding the buff whose trigger runs), `near_allies(r)`, `near_enemies(r)` (champions; `near_enemies(r, 'id')` skips ones carrying your mark 'id'), `near_units(r)`,
+holding the buff whose trigger runs), `h_hp()`, `h_dist()` (holder's HP / distance to you), `near_allies(r)`, `near_enemies(r)` (champions; `near_enemies(r, 'id')` skips ones carrying your mark 'id'), `near_units(r)`,
 `cd('q')` (remaining), `cd_total('r')` (full cooldown of the last cast), `has_item('id')`, `item_count('legendary')`.
-Godot math and logic work too: `min`, `max`, `clamp`, `pow`, `sqrt`, `randf()`, `and`, `or`, `not`,
+Godot math and logic work too (write decimals like `10.0` in `clamp`/`min`/`max` - with whole numbers they return whole numbers): `min`, `max`, `clamp`, `pow`, `sqrt`, `randf()`, `and`, `or`, `not`,
 `a if cond else b`, `[10, 20, 30][rank - 1]`.
 
 ### On a unit (the current target, or yourself with `"target": "self"`)
@@ -154,6 +155,8 @@ Godot math and logic work too: `min`, `max`, `clamp`, `pow`, `sqrt`, `randf()`, 
 | `pull` | toward you; `distance` (default: all the way), `duration` 0.25 |
 | `swap` | you and the target swap places |
 | `mana` | restore `amount` mana (negative drains) |
+| `reveal` | the target is visible to your team through fog of war (and stealth) for `duration` 2 |
+| `level_up` | the target champion gains a level |
 
 Repeated statuses from the same ability refresh instead of stacking. Add `"stack": true` to let
 them stack, or `"id": "burn"` to share one status between abilities; `"keep_longer": true` keeps the
@@ -166,7 +169,8 @@ ability effects (not basic attacks or item effects).
 | `gold` | `amount` - gives you gold (floating text for you) |
 | `counter` | permanent number on your champion (stacks like Mejai's): `id`, `add`, `set`, `mult`, `max`, `min`. Read with `counter('id')` |
 | `cooldown` | `slot` "q"/"w"/"e"/"r"/"basic" (q+w+e)/"all", `amount` seconds (or fraction of the remaining time with `"percent": true`), or `"reset": true` |
-| `item_cooldown` | `item` id or "all", `amount` / `reset` |
+| `item_cooldown` | `item` id or "all", `amount` / `reset`; or `set`: put this item's active on that cooldown |
+| `passive_cooldown` | puts the running trigger (or this item's passive number `passive`) on cooldown `amount` - the item slot shows it |
 | `attack_reset` | your next basic attack is ready immediately |
 | `modify_damage` | only inside `deal_damage_pre` / `take_damage_pre` triggers: `mult`, `add` change the hit (after armor/MR) |
 | `fire_event` | runs your triggers for `event` (default "attack") again on the current target, except the trigger doing it - e.g. "apply on-hit effects twice" |
@@ -245,6 +249,7 @@ Inside a trigger, `rank` is your level, so `[..18 values..]` lists scale with le
 | `buff_ally` | you gave a `buff` to another allied champion (target = ally) |
 | `spellshield_pop` | your spell shield blocked something |
 | `interval` | every `interval` seconds |
+| `dash` | you dashed, blinked or teleported (target = you, `pos` = destination) |
 | `spawn`, `level_up`, `rank_up`, `buy`, `item_used` | as named |
 
 **Triggers on statuses**: a `buff` or `mark` can carry `"triggers": [...]` that work while it lasts
@@ -295,7 +300,7 @@ fountain or while dead (anywhere in Practice / the Training Arena). Keys **1-6**
 - `passives` are triggers (see Passive triggers) plus `name`/`description`. A passive without `on` is
   just text. Passives with the same `"unique": "name"` don't stack (default: per item, so two copies
   of one item don't double up). Inside them `rank` = your level, so 18-entry lists scale by level.
-- `active` works like an ability (targeting, range, indicator) and is used with keys 1-6.
+- `active` works like an ability (targeting, range, indicator) and is used with keys 1-6 (`"while_dead": true` allows using it while dead).
   Consumables (`"consume": true`, default for rarity consumable) lose one charge per use.
 - `{"type": "transform", "into": "muramana"}` inside a passive upgrades the item in place.
 

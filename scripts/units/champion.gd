@@ -125,6 +125,10 @@ func command(cmd: String, args: Array) -> void:
 		"autopilot":
 			is_bot = args.size() > 0 and bool(args[0])
 			return
+		"item":
+			if args.size() >= 3 and (args[0] is int or args[0] is float) and args[1] is Vector2 and (args[2] is int or args[2] is float):
+				use_item(int(args[0]), args[1], int(args[2]))
+			return
 	if dead:
 		return
 	match cmd:
@@ -156,9 +160,6 @@ func command(cmd: String, args: Array) -> void:
 		"cast":
 			if args.size() >= 3 and args[0] is String and args[1] is Vector2 and (args[2] is int or args[2] is float):
 				cast(args[0], args[1], int(args[2]))
-		"item":
-			if args.size() >= 3 and (args[0] is int or args[0] is float) and args[1] is Vector2 and (args[2] is int or args[2] is float):
-				use_item(int(args[0]), args[1], int(args[2]))
 		"recall":
 			start_recall()
 
@@ -274,6 +275,22 @@ func change_item_cooldown(item_id: String, amount: float, reset: bool) -> void:
 	for inst in items:
 		if inst != null and (item_id == "all" or inst.id == item_id):
 			inst.cd = 0.0 if reset else maxf(inst.cd - amount, 0.0)
+
+
+## Puts an item's active on cooldown (shown on its slot).
+func set_item_cooldown(item_id: String, amount: float) -> void:
+	for inst in items:
+		if inst != null and inst.id == item_id:
+			inst.cd = maxf(amount, 0.0)
+			inst.cd_total = maxf(amount, 0.01)
+
+
+## Puts a passive trigger on cooldown (item slots show their passives' cooldowns).
+func set_trigger_cooldown(key: String, amount: float) -> void:
+	if key == "":
+		return
+	trigger_cds[key] = maxf(amount, 0.0)
+	trigger_cd_total[key] = maxf(amount, 0.01)
 
 
 # ------------------------------------------------------------------ ranks ---
@@ -409,13 +426,16 @@ func _status_triggers(event: String, target, pos, extra: Dictionary) -> bool:
 				continue
 			if extra.get("is_proc", false) and event in PROC_GUARDED and not tr.get("procs", false):
 				continue
-			var giver = s.source if is_instance_valid(s.source) and not s.source.dead else self
+			var giver = s.source if is_instance_valid(s.source) else null
+			if giver == null or (giver.dead and giver != self):
+				continue
 			var tgt = target if is_instance_valid(target) else self
 			var tpos: Vector2 = pos if pos is Vector2 else tgt.global_position
 			var ctx := {"caster": giver, "team": giver.team, "ability": str(s.get("id", "buff")), "char": giver.char_id,
 				"color": giver.color, "origin": global_position, "target": tgt, "pos": tpos, "range": 600.0, "holder": self,
 				"dir": (tpos - global_position).normalized() if tpos.distance_to(global_position) > 1.0 else Vector2(facing, 0),
-				"rank": giver.get_level(), "proc": true, "src_slot": "passive", "i": int(s.get("fired", 0))}
+				"rank": giver.get_level(), "proc": true, "src_slot": "item" if s.has("item") else "passive",
+				"item": str(s.get("item", "")), "i": int(s.get("fired", 0))}
 			ctx.merge(extra, true)
 			if tr.has("if") and Effects.num(tr["if"], ctx, 1.0) == 0.0:
 				continue
@@ -665,7 +685,7 @@ func _items_changed() -> void:
 
 func use_item(slot: int, aim: Vector2, tid: int) -> bool:
 	var it = item_def(slot)
-	if it == null or it.active == null or dead or has_status("stasis"):
+	if it == null or it.active == null or has_status("stasis") or (dead and not it.active.get("while_dead", false)):
 		return false
 	var inst: Dictionary = items[slot]
 	if inst.cd > 0.0 or (it.charges > 0 and int(inst.n) <= 0):
