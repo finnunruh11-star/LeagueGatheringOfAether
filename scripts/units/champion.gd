@@ -3,7 +3,7 @@ extends Unit
 ## A player (or bot) controlled character built from a character definition.
 ## Also owns everything per-player: ability ranks, mana, gold and items.
 
-const MAX_LEVEL := 21
+const MAX_LEVEL := 18
 const SKILL_POINT_LEVELS := 18
 const SLOTS := ["q", "w", "e", "r"]
 const ITEM_SLOTS := 6
@@ -928,7 +928,7 @@ func _act(delta: float) -> void:
 func start_recall() -> void:
 	if dead or recall_timer > 0.0 or casting != null:
 		return
-	recall_timer = 4.0
+	recall_timer = 8.0
 	move_goal = null
 	attack_target = null
 	amove = null
@@ -954,15 +954,16 @@ func gain_xp(amount: float) -> void:
 
 
 func xp_to_next() -> float:
-	return 100.0 + 45.0 * (level - 1)
+	return 280.0 + 100.0 * (level - 1)
 
 
 func _level_up() -> void:
 	level += 1
 	if level <= SKILL_POINT_LEVELS:
 		skill_points += 1
+	var growth := 0.65 + 0.035 * level
 	for k in def.per_level:
-		base_stats[k] = float(base_stats.get(k, 0.0)) + def.per_level[k]
+		base_stats[k] = float(base_stats.get(k, 0.0)) + def.per_level[k] * growth
 	recompute_stats()
 	world.fx("levelup", {"p": global_position, "l": level, "v": net_id})
 	trigger("level_up", self)

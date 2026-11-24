@@ -4,15 +4,15 @@
   "description": "Tanky melee bruiser. Charges in, bonks things, refuses to elaborate.",
   "color": "#c9a36b",
   "stats": {
-    "max_hp": 760,
-    "hp_regen": 4,
+    "max_hp": 690,
+    "hp_regen": 1.8,
     "move_speed": 340,
     "attack_damage": 64,
     "attack_speed": 0.85,
-    "attack_range": 70,
+    "attack_range": 125,
     "armor": 32
   },
-  "per_level": {"max_hp": 95, "attack_damage": 4, "armor": 3},
+  "per_level": {"max_hp": 106, "attack_damage": 4, "armor": 3},
   "attack": {"ranged": false},
   "passive": {
     "name": "Bonk Rhythm",

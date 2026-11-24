@@ -22,7 +22,7 @@ The *Training Arena* map has dummies that show your DPS.
 | P | shop (in your fountain or while dead; anywhere in Practice). Click an item for details, right-click or double-click to buy, search box + category filters; click one of your items to sell it, drag to reorder |
 | A + left click | attack-move |
 | S | stop |
-| B | recall to base (4s, cancelled by damage or moving) |
+| B | recall to base (8s, cancelled by damage or moving) |
 | Y | lock/unlock camera (edge-pan or arrow keys when unlocked), Space = jump to your champion |
 | Mouse wheel | zoom |
 | Tab | scoreboard |
@@ -30,18 +30,21 @@ The *Training Arena* map has dummies that show your DPS.
 | F1 / F2 / F3 / F4 | Practice only: level up / +1000 gold / reset cooldowns & mana / max ability ranks |
 | Minimap | left click = look there, right click = move there |
 
-Destroy the enemy **Nexus** to win. Towers protect the ones behind them; the Nexus can only be
-damaged once all towers of one lane are down. Minions spawn in waves; standing in your fountain
-heals you and refills mana, the enemy fountain kills you.
+Destroy the enemy **Nexus** to win. On **Two Lanes**, destroy a lane's turrets and inhibitor to
+open up the two Nexus turrets. The Nexus is vulnerable only while at least one inhibitor and both
+Nexus turrets are down. A destroyed inhibitor gives the opposing team super minions in that lane
+until it respawns five minutes later. On **Bridge**, clear the lane turrets to expose the Nexus.
+Your fountain heals and refills mana; the enemy fountain deals damage.
 
-- **Levels & abilities:** XP from nearby kills, max level 21. Abilities start at rank 0: every level up
-  to 18 gives a skill point. Q/W/E go to rank 5, R to rank 3 (at levels 6/11/16). Levels 19-21 only
-  give stats.
+- **Levels & abilities:** XP comes from nearby kills, not elapsed time. The level cap is 18.
+  You start with one skill point and earn one per level. Q/W/E go to rank 5, R to rank 3
+  (at levels 6/11/16).
 - **Stats & mana:** health, mana (casters only - abilities cost mana), attack damage, ability power,
   attack speed, armor, magic resist, crit, ability haste, penetration, life steal/omnivamp, tenacity,
   move speed... shown in the bottom-left panel.
-- **Gold & items:** you start with 500 gold and earn it over time, from last-hitting minions (22/16),
-  champion kills (300, assists share 150) and towers (150 for the team). The shop has ~180 League of
+- **Gold & items:** you start with 500 gold and earn passive gold from 1:50. Melee/caster last hits
+  grant 20/14 gold, champion kills grant 300 (assists share 150), and turret kills grant 50 to each
+  enemy player. The shop has ~180 League of
   Legends items from patches 10.23-13.24 (mythics, legendaries, components, boots, potions, elixirs,
   jungle items) with their stats and effects; recipes subtract owned components, only one Mythic and
   one pair of boots. Sell for 70%.
@@ -88,11 +91,33 @@ godot --path . -- --auto=practice --map=arena --selftest --only=ember
 
 ## Maps
 `maps/*.json`: size, walls (rectangles), spawn, nexus, lanes (lists of points from blue to red),
-towers (lane + order: 0 = outermost) and minion wave settings. With `"mirror": true` you only
+towers (lane + order: 0 = outermost) and minion wave settings. A tower entry can use
+`"kind": "inhibitor"` for a lane inhibitor or `"kind": "nexus_turret"` for a base turret.
+`"waves": {"rift": true, ...}` enables cannon and super minions. With `"mirror": true` you only
 describe the blue half. Optional `"tower_stats"`, `"nexus_stats"` and
-`"minion_stats": {"melee": {...}, "ranged": {...}}` override the default stats (same names as
+`"inhibitor_stats"` and `"minion_stats": {"melee": {...}, "ranged": {...}}` override the default stats (same names as
 character stats). Also `"fog": false` (no fog of war), `"start_gold"`, `"start_level"`,
 `"gold_per_second"`, `"shop_anywhere"` and `"cheats"` (F1-F4 online). See `two_lanes.json`, `bridge.json` and `arena.json`.
+
+### League-scale balance branch
+
+Health and damage use direct values (no hidden multiplier). One world coordinate unit is the
+distance unit for attack range, spell geometry and pathing; movement speed is in units per second.
+Basic attacks still measure edge-to-edge using this game's collision radii. The custom maps use
+their own layouts: Two Lanes is 12,000 by 6,500 units, Bridge is 6,300 by 1,950, and Training Arena
+keeps its compact layout.
+
+Benchmarks include 465 HP melee minions, 284 HP casters, 750-range turrets, 4,000 HP inhibitors,
+and a 5,500 HP Nexus. Two Lanes uses the classic 1:05 first wave, a 30-second wave interval, and
+cannons that become more frequent later in the match. The [League of Legends Wiki](https://wiki.leagueoflegends.com/en-us/Minion)
+is a reference for scale, not a patch lock: custom spells, map layouts, minion growth, and the
+existing item catalog are not replicas. Jungle camps, epic monsters, and turret plates are not included.
+
+Run the lane and base siege integration test:
+
+```
+godot --headless --path . -- --auto=practice --map=two_lanes --selftest=balance
+```
 
 ## Visual effects
 Hit impacts, slashes, explosions and smoke use the pixel-art packs in the project root

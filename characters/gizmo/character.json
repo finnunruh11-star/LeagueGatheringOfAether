@@ -4,17 +4,17 @@
   "description": "Marksman with traps, rocket boots and a pocket turret. Keep your distance!",
   "color": "#5fd4c4",
   "stats": {
-    "max_hp": 540,
+    "max_hp": 600,
     "move_speed": 335,
     "attack_damage": 58,
     "attack_speed": 0.9,
-    "attack_range": 520,
-    "armor": 12,
+    "attack_range": 550,
+    "armor": 24,
     "max_mana": 340,
     "mana_regen": 1.4
   },
   "per_level": {
-    "max_hp": 72,
+    "max_hp": 100,
     "attack_damage": 4.5,
     "max_mana": 30,
     "mana_regen": 0.12

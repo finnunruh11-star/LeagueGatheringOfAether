@@ -4,6 +4,8 @@ extends Unit
 ## (unless a champion attacks an allied champion nearby). Destroy the enemy Nexus to win.
 
 var is_nexus := false
+var is_inhibitor := false
+var is_nexus_turret := false
 var lane := 0
 var order := 0
 var think_t := 0.0
@@ -18,29 +20,41 @@ func setup(d: Dictionary) -> void:
 	is_structure = true
 	team = int(d.team)
 	is_nexus = str(d.get("kind", "tower")) == "nexus"
+	is_inhibitor = d.get("kind") == "inhibitor"
+	is_nexus_turret = d.get("kind") == "nexus_turret"
 	lane = int(d.get("lane", 0))
 	order = int(d.get("order", 0))
 	base_stats.hp_regen = 0.0
 	base_stats.move_speed = 0.0
-	base_stats.vision = 900.0
+	base_stats.vision = 1095.0
 	if is_nexus:
-		base_stats.max_hp = 3600.0
-		base_stats.armor = 30.0
-		base_stats.magic_resist = 30.0
+		base_stats.max_hp = 5500.0
+		base_stats.hp_regen = 20.0
+		base_stats.armor = 20.0
+		base_stats.magic_resist = 0.0
 		base_stats.attack_damage = 0.0
 		base_radius = 62.0
 		display_name = "Nexus"
-	else:
-		base_stats.max_hp = 2200.0
-		base_stats.armor = 45.0
-		base_stats.magic_resist = 45.0
-		base_stats.attack_damage = 150.0
-		base_stats.attack_speed = 0.83
-		base_stats.attack_range = 480.0
+	elif is_inhibitor:
+		base_stats.max_hp = 4000.0
+		base_stats.hp_regen = 15.0
+		base_stats.armor = 20.0
+		base_stats.magic_resist = 0.0
+		base_stats.attack_damage = 0.0
 		base_radius = 38.0
-		xp_value = 120.0
-		display_name = "Tower"
-	var ov = world.map.data.get("nexus_stats" if is_nexus else "tower_stats", {})
+		gold_value = 50.0
+		display_name = "Inhibitor"
+	else:
+		base_stats.max_hp = 2700.0 if is_nexus_turret else (5000.0 if order == 0 else (3600.0 if order == 1 else 3300.0))
+		base_stats.armor = 40.0 if order == 0 and not is_nexus_turret else 55.0
+		base_stats.magic_resist = base_stats.armor
+		base_stats.attack_damage = 182.0 if order == 0 and not is_nexus_turret else 195.0
+		base_stats.attack_speed = 0.833
+		base_stats.attack_range = 750.0
+		base_radius = 38.0
+		display_name = "Nexus Turret" if is_nexus_turret else "Turret"
+	var stat_key := "nexus_stats" if is_nexus else ("inhibitor_stats" if is_inhibitor else "tower_stats")
+	var ov = world.map.data.get(stat_key, {})
 	if ov is Dictionary:
 		for k in ov:
 			base_stats[k] = float(ov[k])
@@ -58,7 +72,7 @@ func muzzle() -> Vector2:
 
 
 func _think(delta: float) -> void:
-	if is_nexus:
+	if is_nexus or is_inhibitor:
 		attack_target = null
 		return
 	if attack_target != null and (not valid_target(attack_target) or global_position.distance_to(attack_target.global_position) > attack_reach(attack_target)):
@@ -90,13 +104,16 @@ func _pick() -> Unit:
 
 
 func aggro(attacker: Unit) -> void:
-	if not is_nexus and not dead and valid_target(attacker) and global_position.distance_to(attacker.global_position) <= attack_reach(attacker):
+	if not is_nexus and not is_inhibitor and not dead and valid_target(attacker) and global_position.distance_to(attacker.global_position) <= attack_reach(attacker):
 		attack_target = attacker
 
 
 func attack_damage_against(t) -> float:
 	ramp = ramp + 1 if t.net_id == last_target_id else 0
 	last_target_id = t.net_id
+	if t is Minion:
+		var fraction: float = {"melee": 0.45, "ranged": 0.70, "siege": 0.14, "super": 0.07}[t.minion_type]
+		return t.stats.max_hp * fraction * (1.0 + t.stats.armor / 100.0)
 	if not t.is_champion:
 		return maxf(stats.attack_damage, t.stats.max_hp * 0.45)
 	return stats.attack_damage * (1.0 + 0.3 * mini(ramp, 5))
@@ -109,8 +126,25 @@ func net_state() -> PackedFloat32Array:
 
 
 func apply_net_state(s: PackedFloat32Array) -> void:
+	var was_dead := dead
 	super.apply_net_state(s)
+	if dead != was_dead:
+		collision_layer = 0 if dead else 1
 	target_id = int(s[NET_BASE])
+
+
+func _on_death() -> void:
+	if is_inhibitor:
+		world.schedule(300.0, _restore_inhibitor)
+
+
+func _restore_inhibitor() -> void:
+	dead = false
+	flags = 0
+	anim = ANIM_IDLE
+	hp = stats.max_hp
+	collision_layer = 1
+	world.fx("announce", {"text": "%s Inhibitor respawned!" % Game.TEAM_NAMES[team], "color": team_color()})
 
 
 func bar_width() -> float:
@@ -153,7 +187,7 @@ func _draw_body() -> void:
 		return
 	var c := tc.lerp(Color.WHITE, 0.55) if flash > 0.0 else tc
 	var stone := Color(0.42, 0.42, 0.47) if flash <= 0.0 else Color(0.8, 0.8, 0.85)
-	if is_nexus:
+	if is_nexus or is_inhibitor:
 		draw_circle(Vector2(0, r * 0.15), r * 1.05, stone.darkened(0.35))
 		draw_circle(Vector2.ZERO, r * 0.95, stone)
 		draw_arc(Vector2.ZERO, r * 0.78, life * 0.6, life * 0.6 + TAU, 48, Color(c, 0.7), 3.0, true)
@@ -179,9 +213,9 @@ func _draw_body() -> void:
 ## Range warning and targeting line (not affected by hit squash).
 func _draw_extra() -> void:
 	var lc = world.local_champion if world != null else null
-	if dead or is_nexus or lc == null or lc.dead or team == lc.team:
+	if dead or is_nexus or is_inhibitor or lc == null or lc.dead or team == lc.team:
 		return
-	var reach: float = stats.attack_range + radius
+	var reach := attack_reach(lc)
 	var d := global_position.distance_to(lc.global_position)
 	if d > reach + 350.0:
 		return

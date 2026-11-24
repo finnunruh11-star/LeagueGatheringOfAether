@@ -6,10 +6,10 @@ extends Node2D
 const SNAP_EVERY := 3
 const SNAP_DT := SNAP_EVERY / 60.0
 const SNAP_CHUNK := 300  # floats per snapshot packet (~1.2 KB, under the usual 1392-byte MTU)
-const XP_RANGE := 1300.0
+const XP_RANGE := 1400.0
 const KILL_GOLD := 300.0
 const ASSIST_GOLD := 150.0
-const TOWER_GOLD := 150.0
+const TOWER_GOLD := 50.0
 
 var config := {}
 var online := false
@@ -509,24 +509,45 @@ func _waves(delta: float) -> void:
 	wave_timer -= delta
 	if wave_timer > 0.0:
 		return
-	wave_timer = map.wave_interval
+	wave_timer += map.wave_interval
 	wave_count += 1
-	var types := []
-	for k in map.wave_melee:
-		types.append("melee")
-	for k in map.wave_ranged:
-		types.append("ranged")
-	var sc := 1.0 + 0.05 * time / 60.0
 	for team in 2:
 		for li in map.lane_count():
+			var types := _wave_types(team, li)
 			var start: Vector2 = map.lane(team, li)[0]
 			for k in types.size():
-				schedule(k * 0.7, _spawn_minion.bind(team, li, types[k], start, sc))
+				schedule(k * 0.792, _spawn_minion.bind(team, li, types[k], start, floori((wave_count - 1) / 3.0)))
 
 
-func _spawn_minion(team: int, li: int, type: String, pos: Vector2, sc: float) -> void:
+func _wave_types(team: int, lane: int) -> Array[String]:
+	var types: Array[String] = []
+	for k in map.wave_melee:
+		types.append("melee")
+	if map.rift_waves:
+		var down := 0
+		var total := 0
+		var lane_down := false
+		for s in structures:
+			if s.team == 1 - team and s.is_inhibitor:
+				total += 1
+				if s.dead:
+					down += 1
+					lane_down = lane_down or s.lane == lane
+		var siege_every := 3 if time < 900.0 else (2 if time < 1500.0 else 1)
+		if lane_down:
+			types.append("super")
+			if total > 1 and down == total:
+				types.append("super")
+		elif wave_count % siege_every == 0:
+			types.append("siege")
+	for k in map.wave_ranged:
+		types.append("ranged")
+	return types
+
+
+func _spawn_minion(team: int, li: int, type: String, pos: Vector2, upgrades: int) -> void:
 	if not ended:
-		spawn("minion", {"team": team, "lane": li, "type": type, "pos": pos, "scale": sc})
+		spawn("minion", {"team": team, "lane": li, "type": type, "pos": pos, "upgrades": upgrades})
 
 
 func _fountain(delta: float) -> void:
@@ -552,9 +573,8 @@ func _trickle(delta: float) -> void:
 	_trickle_t += delta
 	if _trickle_t >= 1.0:
 		_trickle_t -= 1.0
-		var g := float(map.data.get("gold_per_second", 2.5))
+		var g := float(map.data.get("gold_per_second", 2.04 if time >= 110.0 else 0.0))
 		for c in champions.values():
-			c.gain_xp(3.0)
 			c.gold += g
 
 
@@ -609,11 +629,26 @@ func respawn_time(level: int) -> float:
 
 
 func is_protected(t: Tower) -> bool:
+	var has_inhibitors := false
+	var down := false
+	var nexus_turret_alive := false
+	for s in structures:
+		if s.team != t.team:
+			continue
+		if s.is_inhibitor:
+			has_inhibitors = true
+			down = down or s.dead
+		elif s.is_nexus_turret and not s.dead:
+			nexus_turret_alive = true
+	if t.is_nexus_turret:
+		return has_inhibitors and not down
+	if t.is_nexus and has_inhibitors:
+		return not down or nexus_turret_alive
 	if t.is_nexus:
 		var lanes_total := {}
 		var lanes_alive := {}
 		for s in structures:
-			if s.team == t.team and not s.is_nexus:
+			if s.team == t.team and not s.is_nexus and not s.is_nexus_turret:
 				lanes_total[s.lane] = true
 				if not s.dead:
 					lanes_alive[s.lane] = true
@@ -622,7 +657,7 @@ func is_protected(t: Tower) -> bool:
 				return false
 		return not lanes_total.is_empty()
 	for s in structures:
-		if s != t and s.team == t.team and not s.is_nexus and s.lane == t.lane and s.order < t.order and not s.dead:
+		if s.team == t.team and not s.is_nexus and not s.is_inhibitor and not s.is_nexus_turret and s.lane == t.lane and s.order < t.order and not s.dead:
 			return true
 	return false
 
@@ -681,6 +716,8 @@ func on_unit_died(u: Unit, killer) -> void:
 			_give_xp(u.global_position, u.team, u.xp_value, null)
 	if u is Tower:
 		fx("announce", {"text": "%s %s destroyed!" % [Game.TEAM_NAMES[u.team], u.display_name], "color": Game.TEAM_COLORS[1 - u.team]})
+		if u.is_inhibitor:
+			return
 		for c in champions.values():
 			if c.team != u.team:
 				c.add_gold(TOWER_GOLD, u.global_position if c.global_position.distance_to(u.global_position) < 1200.0 else null)
