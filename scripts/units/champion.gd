@@ -1124,7 +1124,12 @@ func _bot_level_up() -> void:
 	while skill_points > 0 and guard < 8:
 		guard += 1
 		var done := false
-		for s in ["r", "q", "w", "e"]:
+		var order := ["r", "q", "w", "e"]
+		for s in ["q", "w", "e"]:
+			if int(ranks[s]) == 0 and can_rank_up(s):
+				order = [s]
+				break
+		for s in order:
 			if can_rank_up(s):
 				rank_up(s)
 				done = true

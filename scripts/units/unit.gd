@@ -313,7 +313,7 @@ func perform_attack(t: Unit) -> void:
 	trigger("attack_launch", t, null, {"crit_hit": crit})
 	if attack_def.ranged:
 		var p = world.spawn("projectile", {
-			"pos": muzzle(), "dir": (t.global_position - global_position).normalized(),
+			"pos": muzzle(), "dir": (t.global_position - global_position).normalized(), "team": team,
 			"radius": attack_def.size * (1.4 if crit else 1.0), "color": attack_def.color, "sprite": attack_def.sprite, "char": attack_def.char,
 		})
 		p.init_attack(self, t, dmg, attack_def.speed, crit)
@@ -843,7 +843,7 @@ func _update_ghost_hp(delta: float) -> void:
 func _afterimages(delta: float) -> void:
 	var moved := 0.0 if _last_pos == Vector2.INF else global_position.distance_to(_last_pos)
 	_last_pos = global_position
-	if dead or is_structure or delta <= 0.0 or moved > 150.0 or moved / delta < 820.0:
+	if dead or is_structure or delta <= 0.0 or moved > 150.0 or moved / delta < 820.0 or not visible or modulate.a < 0.5:
 		return
 	_afterimage_t -= delta
 	if _afterimage_t > 0.0:

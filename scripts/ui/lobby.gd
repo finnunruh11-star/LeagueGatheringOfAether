@@ -6,6 +6,7 @@ var players_box: VBoxContainer
 var grid: GridContainer
 var details: RichTextLabel
 var map_select: OptionButton
+var fog_check: CheckBox
 var start_btn: Button
 var status: Label
 var problems: RichTextLabel
@@ -51,6 +52,10 @@ func _ready() -> void:
 	map_select.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	map_select.item_selected.connect(func(i): Game.set_map(_map_ids[i]))
 	mrow.add_child(map_select)
+	fog_check = CheckBox.new()
+	fog_check.text = "Fog of war"
+	fog_check.toggled.connect(func(on): Game.set_setting("fog", on))
+	left.add_child(fog_check)
 	var spacer := Control.new()
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	left.add_child(spacer)
@@ -161,6 +166,10 @@ func _refresh() -> void:
 		if _map_ids[i] == Game.settings.map:
 			map_select.select(i)
 	map_select.disabled = not Game.is_host()
+	fog_check.set_pressed_no_signal(bool(Game.settings.get("fog", true)))
+	fog_check.disabled = not Game.is_host()
+	var md = Game.maps.get(Game.settings.map, {})
+	fog_check.tooltip_text = "This map has fog of war turned off." if md is Dictionary and not bool(md.get("fog", true)) else ""
 	if not Game.online:
 		status.text = "Practice mode. Add bots to fight, or play alone with the training dummies."
 	elif Game.is_host():
@@ -192,13 +201,23 @@ func _show_details(id: String) -> void:
 		t += "[i]%s[/i]\n" % def.title
 	if def.description != "":
 		t += "%s\n" % def.description
-	t += "\n[color=#9aa3b5]HP %d  |  AD %d  |  AS %.2f  |  Range %d  |  MS %d  |  Armor %d[/color]\n" % [
-		s.max_hp, s.attack_damage, s.attack_speed, s.attack_range, s.move_speed, s.armor]
+	var mana := "Mana %d  |  " % s.get("max_mana", 0.0) if s.get("max_mana", 0.0) > 0.0 else "No mana  |  "
+	t += "\n[color=#9aa3b5]HP %d  |  %sAD %d  |  AS %.2f  |  Range %d  |  MS %d  |  Armor %d  |  MR %d[/color]\n" % [
+		s.max_hp, mana, s.attack_damage, s.attack_speed, s.attack_range, s.move_speed, s.armor, s.get("magic_resist", 0.0)]
 	t += "[color=#9aa3b5]%s basic attack[/color]\n\n" % ("Ranged" if def.attack.ranged else "Melee")
 	t += "[b][color=#ffd36b]Passive - %s[/color][/b]\n%s\n\n" % [def.passive.name, def.passive.description]
 	for slot in ["q", "w", "e", "r"]:
 		var ab = def.abilities.get(slot)
 		if ab == null:
 			continue
-		t += "[b][color=#7fc8ff]%s - %s[/color][/b]  [color=#9aa3b5](%ss)[/color]\n%s\n\n" % [slot.to_upper(), ab.name, str(ab.cooldown), ab.description]
+		t += "[b][color=#7fc8ff]%s - %s[/color][/b]  [color=#9aa3b5](%ss)[/color]\n%s\n\n" % [slot.to_upper(), ab.name, _per_rank(ab.cooldown), ab.description]
 	details.text = t
+
+
+static func _per_rank(v) -> String:
+	if v is Array:
+		var parts := PackedStringArray()
+		for x in v:
+			parts.append(String.num(float(x), 2) if (x is float or x is int) else str(x))
+		return "/".join(parts)
+	return String.num(float(v), 2) if (v is float or v is int) else str(v)

@@ -97,6 +97,8 @@ func _auto() -> bool:
 func _setup_lobby(a: Dictionary) -> void:
 	if a.has("map"):
 		Game.settings.map = a.map
+	if a.has("fog"):
+		Game.settings.fog = str(a.fog) != "0"
 	if a.has("char"):
 		Game.players[1].character = a.char
 	if a.has("team"):
@@ -165,6 +167,11 @@ func _report() -> void:
 	print("[auto] time=%.1f fps=%d entities=%d units=%d kills=%s ended=%s server=%s" % [w.time, Engine.get_frames_per_second(), w.entities.size(), w.units.size(), str(w.kills), str(w.ended), str(w.is_server)])
 	for c in w.champions.values():
 		print("[auto]   %s %s team=%d lvl=%d hp=%d/%d pos=%s k/d=%d/%d dead=%s" % [c.player_name, c.char_id, c.team, c.level, c.hp, c.stats.max_hp, str(c.global_position.round()), c.kills, c.deaths, str(c.dead)])
+		var inv := []
+		for inst in c.items:
+			if inst != null:
+				inv.append(inst.id)
+		print("[auto]     gold=%d ranks=%s items=%s" % [c.gold, str(c.ranks), str(inv)])
 	var counts := {}
 	for e in w.entities.values():
 		counts[e.get_class() + ":" + str(e.get("kind"))] = counts.get(e.get_class() + ":" + str(e.get("kind")), 0) + 1

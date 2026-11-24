@@ -34,7 +34,7 @@ var using_host_content := false
 var online := false
 var in_match := false
 var players := {}          # peer id -> {name, team, character, bot}
-var settings := {"map": "two_lanes"}
+var settings := {"map": "two_lanes", "fog": true}
 var world: Node = null
 var match_count := 0
 var cmdline := {}
@@ -298,6 +298,13 @@ func set_map(id: String) -> void:
 		_broadcast_lobby()
 
 
+## Host-only match options (e.g. "fog").
+func set_setting(key: String, value) -> void:
+	if is_host() and not in_match:
+		settings[key] = value
+		_broadcast_lobby()
+
+
 func add_bot(team: int) -> void:
 	if not is_host() or characters.is_empty():
 		return
@@ -330,6 +337,7 @@ func start_match() -> void:
 		"map_data": maps[map_id],
 		"players": players.duplicate(true),
 		"online": online,
+		"fog": bool(settings.get("fog", true)),
 	}
 	in_match = true
 	_ready_peers.clear()

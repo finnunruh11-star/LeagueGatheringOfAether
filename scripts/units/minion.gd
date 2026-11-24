@@ -33,6 +33,7 @@ func setup(d: Dictionary) -> void:
 	base_radius = t.radius
 	xp_value = t.xp
 	gold_value = t.gold
+	base_stats.vision = 650.0
 	color = Game.TEAM_COLORS[team].lerp(Color.WHITE, 0.15)
 	attack_def = {"ranged": t.ranged, "speed": 900.0, "color": color.lightened(0.4), "size": 5.0, "sprite": "", "char": "", "on_hit": []}
 	separate = true

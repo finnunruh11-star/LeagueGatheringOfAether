@@ -822,7 +822,7 @@ static func _projectile(e: Dictionary, ctx: Dictionary) -> void:
 				ang = -spread * 0.5 + spread * k / (count - 1)
 		var d := base_dir.rotated(ang)
 		var p = w.spawn("projectile", {
-			"pos": start, "dir": d, "radius": num(e.get("radius"), ctx, 12.0), "color": _color(e, ctx),
+			"pos": start, "dir": d, "radius": num(e.get("radius"), ctx, 12.0), "color": _color(e, ctx), "team": int(ctx.get("team", 0)),
 			"sprite": str(e.get("sprite", "")), "char": str(ctx.get("char", "")),
 		})
 		p.init_ability(e, sub(ctx), d, homing_target)
