@@ -7,6 +7,11 @@ extends Node
 ## Steps (comma separated, "name:value"):
 ##   attack:S       A basic-attacks the enemy for S seconds      enemy_attack:S  the enemy attacks A
 ##   cast:q         A casts q at the enemy (cooldown/mana reset)  enemy_cast:q    the enemy casts q at A
+##   cast_now:q     like cast, without waiting afterwards         heal:X          A is healed for X (no source)
+##   try:q          A casts q without resetting its cooldown (prints whether it worked)   pos   print A's and B's positions
+##   behind         spawn a training dummy behind the enemy (seen from A)
+##   net            print what clients would see of A (its network snapshot applied to a copy)
+##   aim:q          show A's aiming indicator for q toward the enemy (aim: hides it) - for screenshots
 ##   item:N         A uses item slot N on the enemy              item_ally:N / item_self:N
 ##   hurt:X / hurtm:X / hurtt:X   A takes X physical (attack) / magic (ability) / true damage from the enemy
 ##   ally           spawn an allied champion at 50% HP next to A   heal_ally:X  A heals the ally for X
@@ -63,7 +68,7 @@ func _ready() -> void:
 		var what := kv[0]
 		var arg := kv[1] if kv.size() > 1 else ""
 		var v := float(arg) if arg.is_valid_float() else 0.0
-		print("[itemtest] --- step %s (t=%.2f) A hp=%d/%d mana=%d shield=%d  B hp=%d/%d" % [step, world.time, a.hp, a.stats.max_hp, a.mana, a.shield, b.hp, b.stats.max_hp])
+		print("[itemtest] --- step %s (t=%.2f) A hp=%d/%d mana=%d shield=%d bond=%d  B hp=%d/%d" % [step, world.time, a.hp, a.stats.max_hp, a.mana, a.shield, a.bond, b.hp, b.stats.max_hp])
 		if b.dead:
 			b.respawn()
 			b.teleport(a.global_position + Vector2(150, 0))
@@ -72,11 +77,37 @@ func _ready() -> void:
 				a.attack_target = b
 				await _wait(v)
 				a.attack_target = null
-			"cast":
+			"cast", "cast_now":
 				a.cooldowns[arg] = 0.0
 				a.mana = a.stats.max_mana
 				print("[itemtest] cast %s -> %s" % [arg, str(a.cast(arg, b.global_position, b.net_id))])
-				await _wait(1.5)
+				await _wait(1.5 if what == "cast" else 0.05)
+			"try":
+				print("[itemtest] try %s (cooldown %.2f) -> %s" % [arg, a.cooldowns.get(arg, 0.0), str(a.cast(arg, b.global_position, b.net_id))])
+				await _wait(0.05)
+			"pos":
+				print("[itemtest] pos A=%s B=%s dist=%.0f" % [str(a.global_position.round()), str(b.global_position.round()), a.global_position.distance_to(b.global_position)])
+			"heal":
+				print("[itemtest] A is healed for %d -> healed %.1f" % [int(v), a.heal(v, null, true)])
+				await _wait(0.1)
+			"net":
+				# What a client would see: apply A's snapshot to a fresh puppet copy.
+				var p := Champion.new()
+				p.puppet = true
+				p.def = a.def
+				p.apply_net_state(a.net_state())
+				print("[itemtest] net: hp %d/%d bond %.0f (host %.0f) level %d cds %s recast %s charges %s (host %s %s)" % [p.hp, p.stats.max_hp,
+					p.bond, a.bond, p.level, str(p.cooldowns.values().map(func(x): return snappedf(x, 0.1))),
+					str(p.recast_left.values().map(func(x): return snappedf(x, 0.1))), str(p.recast_charges.values()),
+					str(a.recast_left.values().map(func(x): return snappedf(x, 0.1))), str(a.recast_charges.values())])
+				p.free()
+			"behind":
+				var d = world.spawn("dummy", {"pos": b.global_position + (b.global_position - a.global_position).normalized() * 120.0, "hp": 100000.0})
+				print("[itemtest] dummy %d spawned behind the enemy" % d.net_id)
+				await _wait(0.1)
+			"aim":
+				world.aim_slot = arg
+				world.test_aim = b.global_position if arg != "" else null
 			"enemy_cast":
 				b.cooldowns[arg] = 0.0
 				b.mana = b.stats.max_mana
@@ -233,4 +264,5 @@ func _print_stats(label: String, c: Champion) -> void:
 	for st in c.statuses:
 		sts.append("%s%s(%.1fs%s%s)" % [st.type, (":" + st.id) if st.has("id") else "", st.time, (" x%d" % st.stacks) if st.has("stacks") else "",
 			(" amt=%.0f" % st.amount) if st.has("amount") and st.amount is float else ""])
-	print("[itemtest]   statuses=%s counters=%s shield=%.0f energy=%.0f" % [str(sts), str(c.counters), c.shield, c.energy])
+	print("[itemtest]   statuses=%s counters=%s shield=%.0f bond=%.0f energy=%.0f cds=%s" % [str(sts), str(c.counters), c.shield, c.bond, c.energy,
+		str(c.cooldowns.values().map(func(x): return snappedf(x, 0.1)))])
