@@ -24,25 +24,6 @@
     "consume": true,
     "effects": [
       {
-        "type": "hot",
-        "amount": "100 / 12.0",
-        "duration": 12,
-        "interval": 0.5,
-        "id": "corrupting_potion"
-      },
-      {
-        "type": "repeat",
-        "count": 12,
-        "interval": 1,
-        "effects": [
-          {
-            "type": "mana",
-            "target": "self",
-            "amount": 6.25
-          }
-        ]
-      },
-      {
         "type": "buff",
         "target": "self",
         "id": "corrupting_potion_corruption",
@@ -62,6 +43,26 @@
                 "color": "#a24bff"
               }
             ]
+          }
+        ]
+      },
+      {
+        "type": "hot",
+        "amount": "100 / 12.0",
+        "duration": 12,
+        "interval": 0.5,
+        "id": "corrupting_potion"
+      },
+      {
+        "type": "repeat",
+        "count": 12,
+        "interval": 1,
+        "effects": [
+          {
+            "type": "mana",
+            "target": "self",
+            "amount": 6.25,
+            "if": "has('corrupting_potion_corruption')"
           }
         ]
       }

@@ -23,13 +23,14 @@
       "name": "Annul",
       "description": "You have a spell shield that blocks the next enemy ability. It returns 40s after breaking; taking damage from champions restarts that timer.",
       "on": "interval",
-      "interval": 0.5,
+      "interval": 0.25,
       "if": "not has('spellshield') and not has('edge_of_night_cd')",
       "effects": [
         {
           "type": "spellshield",
           "target": "self",
-          "id": "edge_of_night_annul"
+          "id": "edge_of_night_annul",
+          "persist": true
         }
       ]
     },
@@ -41,7 +42,14 @@
           "type": "mark",
           "target": "self",
           "id": "edge_of_night_cd",
-          "duration": 40
+          "duration": 40,
+          "max_stacks": 1,
+          "persist": true
+        },
+        {
+          "type": "passive_cooldown",
+          "passive": 0,
+          "amount": 40
         }
       ]
     },
@@ -54,7 +62,14 @@
           "type": "mark",
           "target": "self",
           "id": "edge_of_night_cd",
-          "duration": 40
+          "duration": 40,
+          "max_stacks": 1,
+          "persist": true
+        },
+        {
+          "type": "passive_cooldown",
+          "passive": 0,
+          "amount": 40
         }
       ]
     }

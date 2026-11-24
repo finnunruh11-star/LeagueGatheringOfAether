@@ -41,24 +41,27 @@
       "name": "Siphon",
       "description": "Every 3rd attack on the same champion within 6s deals 40-103 magic damage (40, +7 per level from 10) and steals 25% move speed for 2s (30s cooldown).",
       "on": "attack",
-      "if": "t_champion and t_stacks('blade_of_the_ruined_king_siphon') >= 2",
-      "cooldown": 30,
+      "if": "t_champion",
       "effects": [
         {
-          "type": "remove",
-          "id": "blade_of_the_ruined_king_siphon"
+          "type": "mark",
+          "id": "blade_of_the_ruined_king_siphon",
+          "duration": 6,
+          "max_stacks": 3
         },
         {
           "type": "damage",
           "damage_type": "magic",
           "amount": "40 + 7 * clamp(level - 9, 0, 9)",
           "vfx": "magic",
-          "color": "#4fe0b5"
+          "color": "#4fe0b5",
+          "if": "t_stacks('blade_of_the_ruined_king_siphon') >= 3"
         },
         {
           "type": "slow",
           "amount": 0.25,
-          "duration": 2
+          "duration": 2,
+          "if": "t_stacks('blade_of_the_ruined_king_siphon') >= 3"
         },
         {
           "type": "buff",
@@ -67,20 +70,18 @@
           "duration": 2,
           "add": {
             "move_speed_bonus": 0.25
-          }
-        }
-      ]
-    },
-    {
-      "name": "Siphon",
-      "on": "attack",
-      "if": "t_champion",
-      "effects": [
+          },
+          "if": "t_stacks('blade_of_the_ruined_king_siphon') >= 3"
+        },
         {
-          "type": "mark",
+          "type": "passive_cooldown",
+          "amount": 30,
+          "if": "t_stacks('blade_of_the_ruined_king_siphon') >= 3"
+        },
+        {
+          "type": "remove",
           "id": "blade_of_the_ruined_king_siphon",
-          "duration": 6,
-          "max_stacks": 2
+          "if": "t_stacks('blade_of_the_ruined_king_siphon') >= 3"
         }
       ]
     }

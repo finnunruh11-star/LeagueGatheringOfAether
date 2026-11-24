@@ -20,7 +20,7 @@
   "passives": [
     {
       "name": "Hypershot",
-      "description": "Hitting an enemy champion with an ability from more than 700 range, or slowing or immobilizing them, marks them for 6s. Marked enemies take 10% more damage from you, including the hit that marked them.",
+      "description": "Hitting an enemy champion with an ability from more than 700 range, or slowing or immobilizing them, reveals and marks them for 6s. Marked enemies take 10% more damage from you, including the hit that marked them.",
       "on": "deal_damage_pre",
       "if": "is_ability and t_champion and dist > 700",
       "effects": [
@@ -35,6 +35,10 @@
         {
           "type": "mark",
           "id": "horizon_focus_mark",
+          "duration": 6
+        },
+        {
+          "type": "reveal",
           "duration": 6
         }
       ]
@@ -55,6 +59,10 @@
         {
           "type": "mark",
           "id": "horizon_focus_mark",
+          "duration": 6
+        },
+        {
+          "type": "reveal",
           "duration": 6
         }
       ]

@@ -29,7 +29,7 @@
       "name": "Lifeline",
       "description": "When a hit would leave you below 30% health, gain a shield of 250 + 20% of your current mana for 3s that also absorbs that hit (90s cooldown).",
       "on": "take_damage_pre",
-      "if": "hp - dmg < 0.3 * max_hp",
+      "if": "hp - max(0, dmg - shield) < 0.3 * max_hp",
       "cooldown": 90,
       "effects": [
         {

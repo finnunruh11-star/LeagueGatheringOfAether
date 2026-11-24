@@ -20,22 +20,22 @@
   "passives": [
     {
       "name": "Flux",
-      "description": "When an enemy champion dies (your kill or assist) within 3s of you damaging a champion, refund 10% (+0.4% per lethality) of your ultimate's total cooldown.",
+      "description": "When an enemy champion you damaged in the last 3s dies (your kill or an assist), refund 10% (+0.4% per lethality) of your ultimate's total cooldown.",
       "on": "deal_damage_pre",
       "if": "t_champion and not t_self",
       "effects": [
         {
           "type": "mark",
-          "target": "self",
-          "id": "axiom_arc_recent",
-          "duration": 3
+          "id": "axiom_arc_flux",
+          "duration": 3,
+          "max_stacks": 1
         }
       ]
     },
     {
       "name": "Flux",
       "on": "takedown",
-      "if": "has('axiom_arc_recent')",
+      "if": "t_has('axiom_arc_flux')",
       "effects": [
         {
           "type": "cooldown",

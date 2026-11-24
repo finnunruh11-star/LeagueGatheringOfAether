@@ -25,13 +25,14 @@
   "passives": [],
   "active": {
     "name": "Quicksilver",
-    "description": "Cleanse all stuns, roots, slows, silences, damage over time and Grievous Wounds on you and gain 50% move speed for 1.5s.",
+    "description": "Remove all stuns, roots, slows and silences on you and gain 50% move speed for 1.5s.",
     "cooldown": 90,
     "targeting": "self",
     "effects": [
       {
         "type": "cleanse",
-        "target": "self"
+        "target": "self",
+        "cc_only": true
       },
       {
         "type": "buff",

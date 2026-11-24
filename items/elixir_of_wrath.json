@@ -14,7 +14,7 @@
   "passives": [],
   "active": {
     "name": "Drink",
-    "description": "For 3 minutes: +30 attack damage, and heal for 12% of the physical damage you deal to champions. Replaces your other elixir.",
+    "description": "For 3 minutes, kept through death: +30 attack damage, and heal for 12% of the physical damage you deal to champions. Replaces your other elixir.",
     "cooldown": 1,
     "targeting": "self",
     "consume": true,
@@ -24,6 +24,7 @@
         "target": "self",
         "id": "elixir",
         "duration": 180,
+        "persist": true,
         "add": {
           "attack_damage": 30
         },

@@ -19,7 +19,7 @@ The *Training Arena* map has dummies that show your DPS.
 | Q W E R | hold to aim (shows range), release to cast. Left click also casts, right click cancels |
 | Ctrl + Q W E R | spend a skill point (or click the **+** above an ability) |
 | 1 - 6 | use item actives (aimed ones work like abilities) |
-| P | shop (in your fountain or while dead; anywhere in Practice) |
+| P | shop (in your fountain or while dead; anywhere in Practice). Click an item for details, right-click or double-click to buy, search box + category filters; click one of your items to sell it, drag to reorder |
 | A + left click | attack-move |
 | S | stop |
 | B | recall to base (4s, cancelled by damage or moving) |

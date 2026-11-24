@@ -82,15 +82,21 @@
           "if": "in_combat and stacks('jaksho_the_protean_resilience') >= 8 and not has('jaksho_the_protean_empowered')"
         },
         {
-          "type": "buff",
-          "target": "self",
-          "id": "jaksho_the_protean_empowered",
-          "duration": 9999,
-          "add": {
-            "armor": "0.2 * bonus_armor",
-            "magic_resist": "0.2 * bonus_mr"
-          },
-          "if": "in_combat and stacks('jaksho_the_protean_resilience') >= 8 and not has('jaksho_the_protean_empowered')"
+          "type": "delay",
+          "time": 0.1,
+          "if": "in_combat and stacks('jaksho_the_protean_resilience') >= 8 and not has('jaksho_the_protean_empowered')",
+          "effects": [
+            {
+              "type": "buff",
+              "target": "self",
+              "id": "jaksho_the_protean_empowered",
+              "duration": 9999,
+              "add": {
+                "armor": "0.2 * bonus_armor",
+                "magic_resist": "0.2 * bonus_mr"
+              }
+            }
+          ]
         },
         {
           "type": "remove",

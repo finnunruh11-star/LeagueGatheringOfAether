@@ -23,8 +23,8 @@
       "name": "Annul",
       "description": "A spell shield blocks the next enemy ability. After it breaks it comes back in 40s; taking damage from champions during that time restarts the 40s.",
       "on": "interval",
-      "interval": 0.5,
-      "if": "not has('spellshield') and time >= counter('banshees_veil_ready')",
+      "interval": 0.25,
+      "if": "not has('spellshield')",
       "effects": [
         {
           "type": "spellshield",
@@ -37,6 +37,11 @@
       "on": "spellshield_pop",
       "effects": [
         {
+          "type": "passive_cooldown",
+          "passive": 0,
+          "amount": 40
+        },
+        {
           "type": "counter",
           "id": "banshees_veil_ready",
           "set": "time + 40"
@@ -48,6 +53,11 @@
       "on": "take_damage",
       "if": "t_champion and not t_self and time < counter('banshees_veil_ready')",
       "effects": [
+        {
+          "type": "passive_cooldown",
+          "passive": 0,
+          "amount": 40
+        },
         {
           "type": "counter",
           "id": "banshees_veil_ready",

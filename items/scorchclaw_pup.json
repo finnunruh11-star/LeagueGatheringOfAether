@@ -6,7 +6,7 @@
     "Jungle"
   ],
   "group": "jungle",
-  "display": "counter('scorchclaw_pup_treats')",
+  "display": "counter('scorchclaw_pup_charge') if counter('scorchclaw_pup_treats') >= 40 else counter('scorchclaw_pup_treats')",
   "stats": {},
   "description": "No jungle in this game: the pet grows from minion kills and champion takedowns, monster effects work on minions and Smite is this item's active.",
   "passives": [
@@ -85,11 +85,29 @@
     },
     {
       "name": "Scorchclaw's Slash",
-      "description": "Fully grown: about every 10s, your next attack or ability that damages an enemy champion burns it for 4% of its max health as true damage over 4s and slows it by 30% for 2s.",
-      "on": "deal_damage",
-      "if": "counter('scorchclaw_pup_treats') >= 40 and t_champion and (is_attack or is_ability)",
-      "cooldown": 10,
+      "description": "Fully grown: your pet charges 6 per second plus 1 per 60 distance you walk (shown on the slot). At 100, your next attack or ability that damages an enemy champion burns it for 4% of its max health as true damage over 4s and slows it by 30% for 2s.",
+      "on": "interval",
+      "interval": 0.5,
+      "if": "counter('scorchclaw_pup_treats') >= 40 and counter('scorchclaw_pup_charge') < 100",
       "effects": [
+        {
+          "type": "counter",
+          "id": "scorchclaw_pup_charge",
+          "add": "3 + int(moving) * ms * 0.5 / 60",
+          "max": 100
+        }
+      ]
+    },
+    {
+      "name": "Scorchclaw's Slash",
+      "on": "deal_damage",
+      "if": "counter('scorchclaw_pup_treats') >= 40 and counter('scorchclaw_pup_charge') >= 100 and t_champion and (is_attack or is_ability)",
+      "effects": [
+        {
+          "type": "counter",
+          "id": "scorchclaw_pup_charge",
+          "set": 0
+        },
         {
           "type": "dot",
           "id": "scorchclaw_pup_burn",
@@ -121,6 +139,7 @@
     "cooldown": 45,
     "targeting": "unit",
     "range": 500,
+    "requires": "not t_ward and (not t_champion or counter('scorchclaw_pup_treats') >= 20)",
     "effects": [
       {
         "type": "damage",
@@ -131,44 +150,19 @@
         "if": "not t_champion"
       },
       {
-        "type": "item_cooldown",
-        "item": "scorchclaw_pup",
-        "reset": true,
-        "if": "t_champion and counter('scorchclaw_pup_treats') < 20"
-      },
-      {
-        "type": "text",
-        "text": "Your pet needs 20 treats",
-        "at": "self",
-        "color": "#dddddd",
-        "size": 18,
-        "if": "t_champion and counter('scorchclaw_pup_treats') < 20"
-      },
-      {
         "type": "damage",
         "damage_type": "true",
         "amount": "20 + 140 * (min(level, 18) - 1) / 17",
         "vfx": "fire",
         "color": "#ff6a3d",
-        "if": "t_champion and counter('scorchclaw_pup_treats') >= 20"
+        "if": "t_champion"
       },
       {
         "type": "slow",
         "amount": 0.25,
-        "duration": 1,
-        "if": "t_champion and counter('scorchclaw_pup_treats') >= 20"
-      },
-      {
-        "type": "delay",
-        "time": 1,
-        "effects": [
-          {
-            "type": "slow",
-            "amount": 0.125,
-            "duration": 1
-          }
-        ],
-        "if": "t_champion and counter('scorchclaw_pup_treats') >= 20"
+        "duration": 2,
+        "decay": true,
+        "if": "t_champion"
       }
     ]
   }

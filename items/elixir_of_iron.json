@@ -14,7 +14,7 @@
   "passives": [],
   "active": {
     "name": "Drink",
-    "description": "For 3 minutes: +300 health, +25% tenacity and a bigger body, and allied champions within 150 of you move 15% faster (instead of the original's speed trail). Replaces your other elixir.",
+    "description": "For 3 minutes, kept through death: +300 health, +25% tenacity and a bigger body. While you move, allied champions within 150 of you move 15% faster (instead of the original's speed trail). Replaces your other elixir.",
     "cooldown": 1,
     "targeting": "self",
     "consume": true,
@@ -24,18 +24,68 @@
         "target": "self",
         "id": "elixir",
         "duration": 180,
+        "persist": true,
         "add": {
           "max_hp": 300,
           "tenacity": 0.25,
           "size": 0.15
-        }
+        },
+        "triggers": [
+          {
+            "on": "death",
+            "effects": [
+              {
+                "type": "counter",
+                "id": "elixir_of_iron_died",
+                "set": "time"
+              }
+            ]
+          },
+          {
+            "on": "spawn",
+            "effects": [
+              {
+                "type": "counter",
+                "id": "elixir_of_iron_end",
+                "add": "time - counter('elixir_of_iron_died')"
+              },
+              {
+                "type": "zone",
+                "at": "self",
+                "follow": true,
+                "radius": 150,
+                "duration": "max(0.1, counter('elixir_of_iron_end') - time)",
+                "interval": 0.5,
+                "affects": "allies",
+                "color": "#b8c4d0",
+                "effects": [
+                  {
+                    "type": "buff",
+                    "id": "elixir_of_iron_speed",
+                    "duration": 1,
+                    "add": {
+                      "move_speed_bonus": 0.15
+                    },
+                    "if": "t_champion and not t_self and moving and has('elixir_of_iron_path')"
+                  }
+                ]
+              }
+            ]
+          }
+        ]
       },
       {
         "type": "mark",
         "target": "self",
         "id": "elixir_of_iron_path",
         "duration": 180,
-        "max_stacks": 1
+        "max_stacks": 1,
+        "persist": true
+      },
+      {
+        "type": "counter",
+        "id": "elixir_of_iron_end",
+        "set": "time + 180"
       },
       {
         "type": "zone",
@@ -54,7 +104,7 @@
             "add": {
               "move_speed_bonus": 0.15
             },
-            "if": "t_champion and not t_self and has('elixir_of_iron_path')"
+            "if": "t_champion and not t_self and moving and has('elixir_of_iron_path')"
           }
         ]
       }

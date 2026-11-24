@@ -28,10 +28,11 @@
   ],
   "active": {
     "name": "Purify",
-    "description": "Remove stuns, roots, slows, silences, damage over time and Grievous Wounds from an allied champion within 650 range and heal them for 100-250 (by your level). It can't affect you: used on yourself, it picks the nearest allied champion instead.",
+    "description": "Remove stuns, roots, slows and silences from an allied champion within 650 range and heal them for 100-250 (by your level). It can't affect you: used on yourself, it picks the nearest allied champion instead (no cooldown if there is none).",
     "cooldown": 120,
     "targeting": "ally",
     "range": 650,
+    "requires": "t_champion and (not t_self or near_allies(650) > 0)",
     "effects": [
       {
         "type": "area",
@@ -45,7 +46,8 @@
         "show": false,
         "effects": [
           {
-            "type": "cleanse"
+            "type": "cleanse",
+            "cc_only": true
           },
           {
             "type": "heal",

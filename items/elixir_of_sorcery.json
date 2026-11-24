@@ -13,7 +13,7 @@
   "passives": [],
   "active": {
     "name": "Drink",
-    "description": "For 3 minutes: +50 ability power and +15% base mana regen. Damaging an enemy champion deals 25 bonus true damage (5s cooldown); every hit on a turret does. Replaces your other elixir.",
+    "description": "For 3 minutes, kept through death: +50 ability power and +15% base mana regen. Damaging an enemy champion deals 25 bonus true damage (5s cooldown); every hit on a turret does. Replaces your other elixir.",
     "cooldown": 1,
     "targeting": "self",
     "consume": true,
@@ -23,6 +23,7 @@
         "target": "self",
         "id": "elixir",
         "duration": 180,
+        "persist": true,
         "add": {
           "ability_power": 50,
           "mana_regen_percent": 0.15

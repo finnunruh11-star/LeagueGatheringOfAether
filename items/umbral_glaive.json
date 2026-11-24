@@ -26,7 +26,6 @@
       "description": "Enemy Control Wards that can see you lose their vision for 8s (50s cooldown; there are no traps to reveal in this game). Your attacks deal 3 (melee) / 2 (ranged) damage to wards.",
       "on": "interval",
       "interval": 0.5,
-      "if": "not has('umbral_glaive_cd')",
       "effects": [
         {
           "type": "area",
@@ -35,10 +34,8 @@
           "show": false,
           "effects": [
             {
-              "type": "mark",
-              "target": "self",
-              "id": "umbral_glaive_cd",
-              "duration": 50,
+              "type": "passive_cooldown",
+              "amount": 50,
               "if": "t_ward and dist <= t_stat('vision')"
             },
             {

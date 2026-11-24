@@ -14,7 +14,7 @@
   "passives": [],
   "active": {
     "name": "Place Ward",
-    "description": "Place a Control Ward up to 600 away. It sees 900 around it, reveals stealthed enemies there and stays until destroyed (4 basic attacks).",
+    "description": "Place a Control Ward up to 600 away. It sees 900 around it, reveals stealthed enemies there and stays until destroyed (4 basic attacks). Only one per player: a new one replaces the old.",
     "cooldown": 1,
     "targeting": "point",
     "range": 600,
@@ -27,6 +27,7 @@
         "reveal": true,
         "stationary": true,
         "duration": 9999,
+        "limit": 1,
         "color": "#ff4fa0",
         "stats": {
           "max_hp": 4,

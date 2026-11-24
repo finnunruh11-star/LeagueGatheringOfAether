@@ -42,6 +42,7 @@
               "type": "buff",
               "id": "locket_of_the_iron_solari_consecrate",
               "duration": 1.5,
+              "hidden": true,
               "add": {
                 "armor": "3 + 2 * legendaries",
                 "magic_resist": "3 + 2 * legendaries"
@@ -54,7 +55,7 @@
   ],
   "active": {
     "name": "Devotion",
-    "description": "Shield allied champions within 850 (you included) for 200-360 (by level) for 2.5s (the shield doesn't decay here). Champions shielded by a Locket in the last 20s only get 25%.",
+    "description": "Shield allied champions within 850 (you included) for 200-360 (by level), decaying over 2.5s. Champions shielded by a Locket in the last 20s only get 25%.",
     "cooldown": 90,
     "targeting": "self",
     "effects": [
@@ -68,8 +69,9 @@
         "effects": [
           {
             "type": "shield",
-            "amount": "(200 + 160 * (clamp(level, 1, 18) - 1) / 17) * (1 - 0.75 * int(t_has_any('locket_of_the_iron_solari_recent')))",
-            "duration": 2.5
+            "amount": "(200 + 160 * (clamp(level, 1.0, 18.0) - 1) / 17) * (0.25 if t_has_any('locket_of_the_iron_solari_recent') else 1.0)",
+            "duration": 2.5,
+            "decay": true
           },
           {
             "type": "mark",

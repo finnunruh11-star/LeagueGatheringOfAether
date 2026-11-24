@@ -44,9 +44,9 @@
     },
     {
       "name": "Defy",
-      "description": "A champion takedown within 3s of you damaging a champion wipes out all held-back Ignore Pain damage and heals you for 50% bonus AD over 2s.",
+      "description": "A champion takedown within 3s of you damaging that champion wipes out all held-back Ignore Pain damage and heals you for 50% bonus AD over 2s.",
       "on": "takedown",
-      "if": "has('deaths_dance_window')",
+      "if": "t_has('deaths_dance_recent')",
       "effects": [
         {
           "type": "remove",
@@ -70,8 +70,7 @@
       "effects": [
         {
           "type": "mark",
-          "target": "self",
-          "id": "deaths_dance_window",
+          "id": "deaths_dance_recent",
           "duration": 3
         }
       ]

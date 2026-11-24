@@ -21,14 +21,45 @@
   "passives": [
     {
       "name": "Sandstrike",
-      "description": "After you cast an ability (stand-in for dashes, blinks and leaving stealth, which the game can't detect), your next attack on a champion within 3s deals 85 + 55% bonus AD (melee) / 65 + 35% bonus AD (ranged) bonus physical damage; melee hits also slow by 99% for 0.5s (5s cooldown).",
-      "on": "cast",
+      "description": "After you dash, blink or leave stealth, your next attack on a champion within 3s deals 85 + 55% bonus AD (melee) / 65 + 35% bonus AD (ranged) bonus physical damage; melee hits also slow by 99% for 0.5s (5s cooldown).",
+      "on": "dash",
       "effects": [
         {
           "type": "mark",
           "target": "self",
           "id": "prowlers_claw_sandstrike",
-          "duration": 3
+          "duration": 3,
+          "max_stacks": 1
+        }
+      ]
+    },
+    {
+      "name": "Sandstrike",
+      "on": "interval",
+      "interval": 0.25,
+      "if": "has('stealth') or has('prowlers_claw_stealthed')",
+      "effects": [
+        {
+          "type": "mark",
+          "target": "self",
+          "id": "prowlers_claw_sandstrike",
+          "duration": 3,
+          "max_stacks": 1,
+          "if": "not has('stealth')"
+        },
+        {
+          "type": "remove",
+          "target": "self",
+          "id": "prowlers_claw_stealthed",
+          "if": "not has('stealth')"
+        },
+        {
+          "type": "mark",
+          "target": "self",
+          "id": "prowlers_claw_stealthed",
+          "duration": 1,
+          "max_stacks": 1,
+          "if": "has('stealth')"
         }
       ]
     },

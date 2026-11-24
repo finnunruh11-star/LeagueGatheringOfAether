@@ -21,51 +21,16 @@
   "passives": [
     {
       "name": "Vendetta",
-      "description": "Once you have a Nemesis, gain a Vendetta stack every 2s (max 30 after 60s) and take 1% less damage from your Nemesis per stack. If your Nemesis dies, the Vow breaks: stacks reset and Vow is ready again.",
+      "description": "Once you have a Nemesis, gain a Vendetta stack every 2s (max 30 after 60s) and take 1% less damage from your Nemesis per stack.",
       "on": "interval",
       "interval": 2,
-      "if": "counter('anathemas_chains_vow') > 0",
+      "if": "counter('anathemas_chains_vow') > 0 and counter('anathemas_chains_vendetta') < 30",
       "effects": [
-        {
-          "type": "area",
-          "at": "self",
-          "radius": 30000,
-          "show": false,
-          "filter": "champions",
-          "effects": [
-            {
-              "type": "mark",
-              "target": "self",
-              "id": "anathemas_chains_bound",
-              "duration": 6.5,
-              "if": "t_has('anathemas_chains_nemesis')"
-            }
-          ]
-        },
         {
           "type": "counter",
           "id": "anathemas_chains_vendetta",
           "add": 1,
-          "max": 30,
-          "if": "has('anathemas_chains_bound')"
-        },
-        {
-          "type": "counter",
-          "id": "anathemas_chains_vendetta",
-          "set": 0,
-          "if": "not has('anathemas_chains_bound')"
-        },
-        {
-          "type": "item_cooldown",
-          "item": "anathemas_chains",
-          "reset": true,
-          "if": "not has('anathemas_chains_bound')"
-        },
-        {
-          "type": "counter",
-          "id": "anathemas_chains_vow",
-          "set": 0,
-          "if": "not has('anathemas_chains_bound')"
+          "max": 30
         }
       ]
     },
@@ -110,10 +75,12 @@
   ],
   "active": {
     "name": "Vow",
-    "description": "Choose an enemy champion anywhere on the map as your Nemesis; Vendetta stacks restart from 0. (Can't be used while dead or on non-champions.)",
+    "description": "Choose an enemy champion anywhere on the map as your Nemesis, even while dead; Vendetta stacks restart from 0. Can't be used within 15s of fighting champions.",
     "cooldown": 90,
     "targeting": "unit",
     "range": 30000,
+    "while_dead": true,
+    "requires": "t_champion and since_combat >= 15",
     "effects": [
       {
         "type": "area",
@@ -121,7 +88,6 @@
         "radius": 30000,
         "show": false,
         "filter": "champions",
-        "if": "t_champion",
         "effects": [
           {
             "type": "remove",
@@ -133,35 +99,31 @@
         "type": "mark",
         "id": "anathemas_chains_nemesis",
         "duration": 99999,
-        "if": "t_champion"
+        "persist": true
       },
       {
         "type": "counter",
         "id": "anathemas_chains_vendetta",
-        "set": 0,
-        "if": "t_champion"
+        "set": 0
       },
       {
         "type": "counter",
         "id": "anathemas_chains_vow",
-        "set": 1,
-        "if": "t_champion"
+        "set": 1
       },
       {
         "type": "vfx",
         "kind": "line",
         "from": "self",
         "to": "target",
-        "color": "#8a5cff",
-        "if": "t_champion"
+        "color": "#8a5cff"
       },
       {
         "type": "vfx",
         "kind": "ring",
         "at": "target",
         "radius": 70,
-        "color": "#8a5cff",
-        "if": "t_champion"
+        "color": "#8a5cff"
       }
     ]
   }

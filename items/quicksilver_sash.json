@@ -17,13 +17,14 @@
   "passives": [],
   "active": {
     "name": "Quicksilver",
-    "description": "Instantly remove all stuns, roots, slows and silences from yourself (this also clears damage-over-time and Grievous Wounds).",
+    "description": "Instantly remove all stuns, roots, slows and silences from yourself.",
     "cooldown": 90,
     "targeting": "self",
     "effects": [
       {
         "type": "cleanse",
-        "target": "self"
+        "target": "self",
+        "cc_only": true
       },
       {
         "type": "vfx",

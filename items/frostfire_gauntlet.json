@@ -103,7 +103,7 @@
           "effects": [
             {
               "type": "damage",
-              "amount": "(12 + 73 * (min(level, 18) - 1) / 17) * (0.5 + 0.5 * melee)",
+              "amount": "(12 + 73 * (min(level, 18.0) - 1.0) / 17.0) * (0.5 + 0.5 * melee)",
               "vfx": "twinkle",
               "color": "#9fe8ff"
             }

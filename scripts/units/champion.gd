@@ -172,7 +172,7 @@ func cast(slot: String, aim: Vector2, tid: int) -> bool:
 	if ctx.is_empty():
 		return false
 	var cost := ability_cost(ab, ctx)
-	ctx.cost_paid = cost
+	ctx.cost_paid = cost if ab.cost_type != "health" else 0.0  # "amount" in cast triggers = mana spent
 	if cost > 0.0:
 		if ab.cost_type == "health":
 			if hp <= cost:

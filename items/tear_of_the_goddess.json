@@ -24,7 +24,7 @@
         {
           "type": "counter",
           "id": "mana_charge",
-          "add": "3 + 3 * t_champion",
+          "add": "6 if t_champion else 3",
           "max": 360
         }
       ]

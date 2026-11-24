@@ -29,53 +29,41 @@
   "passives": [
     {
       "name": "Colossal Consumption",
-      "description": "Staying within 700 of an enemy champion for 3s charges up your next attack against a champion: it deals 125 + 6% max health bonus physical damage and permanently adds 10% of that amount to this item's 800 health. 30s cooldown per champion.",
+      "description": "Staying within 700 of an enemy champion for 3s charges it up (the charge fades 5s after you leave). Your next attack on a charged champion deals 125 + 6% max health bonus physical damage and permanently adds 10% of that amount to this item's 800 health. 30s cooldown per champion.",
       "on": "interval",
       "interval": 0.5,
-      "if": "near_enemies(700) > 0",
+      "if": "near_enemies(700, 'heartsteel_cd') > 0",
       "effects": [
         {
-          "type": "mark",
-          "id": "heartsteel_ready",
-          "target": "self",
-          "duration": 5,
-          "if": "has('heartsteel_ready')"
-        },
-        {
-          "type": "mark",
-          "id": "heartsteel_charge",
-          "target": "self",
-          "duration": 1,
-          "max_stacks": 6,
-          "if": "not has('heartsteel_ready')"
-        },
-        {
-          "type": "vfx",
-          "kind": "ring",
+          "type": "area",
           "at": "self",
-          "radius": 60,
-          "color": "#ff5c5c",
-          "if": "stacks('heartsteel_charge') >= 6"
-        },
-        {
-          "type": "mark",
-          "id": "heartsteel_ready",
-          "target": "self",
-          "duration": 5,
-          "if": "stacks('heartsteel_charge') >= 6"
-        },
-        {
-          "type": "remove",
-          "id": "heartsteel_charge",
-          "target": "self",
-          "if": "has('heartsteel_ready')"
+          "radius": 700,
+          "filter": "champions",
+          "show": false,
+          "effects": [
+            {
+              "type": "vfx",
+              "kind": "ring",
+              "at": "target",
+              "radius": 60,
+              "color": "#ff5c5c",
+              "if": "t_stacks('heartsteel_charge') == 5 and not t_has('heartsteel_cd')"
+            },
+            {
+              "type": "mark",
+              "id": "heartsteel_charge",
+              "duration": 5,
+              "max_stacks": 6,
+              "if": "not t_has('heartsteel_cd')"
+            }
+          ]
         }
       ]
     },
     {
       "name": "Colossal Consumption",
       "on": "attack",
-      "if": "has('heartsteel_ready') and t_champion and not t_has('heartsteel_cd')",
+      "if": "t_champion and t_stacks('heartsteel_charge') >= 6 and not t_has('heartsteel_cd')",
       "effects": [
         {
           "type": "damage",
@@ -90,14 +78,13 @@
           "add": "0.1 * (125 + 0.06 * max_hp)"
         },
         {
+          "type": "remove",
+          "id": "heartsteel_charge"
+        },
+        {
           "type": "mark",
           "id": "heartsteel_cd",
           "duration": 30
-        },
-        {
-          "type": "remove",
-          "id": "heartsteel_ready",
-          "target": "self"
         }
       ]
     },

@@ -45,7 +45,6 @@
       "effects": [
         {
           "type": "mark",
-          "target": "self",
           "id": "duskblade_of_draktharr_window",
           "duration": 3,
           "max_stacks": 1
@@ -55,7 +54,7 @@
     {
       "name": "Nightstalker",
       "on": "takedown",
-      "if": "has('duskblade_of_draktharr_window')",
+      "if": "t_has('duskblade_of_draktharr_window')",
       "cooldown": 30,
       "effects": [
         {

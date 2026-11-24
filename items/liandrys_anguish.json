@@ -24,21 +24,22 @@
   "passives": [
     {
       "name": "Agony",
-      "description": "Deal up to 12% more magic damage to champions, scaling with their bonus health (full bonus at 1250 bonus health).",
+      "description": "Deal up to 12% more magic damage (item damage included) to champions, scaling with their bonus health (full bonus at 1250 bonus health).",
       "on": "deal_damage_pre",
       "if": "t_champion and not t_self and dtype == 'magic' and t_bonus_hp > 0",
+      "procs": true,
       "effects": [
         {
           "type": "modify_damage",
-          "mult": "1 + 0.12 * min(t_bonus_hp / 1250, 1)"
+          "mult": "1 + 0.12 * min(t_bonus_hp / 1250.0, 1.0)"
         }
       ]
     },
     {
       "name": "Torment",
-      "description": "Ability damage sets enemies on fire for 4s, dealing 12.5 + 1.5% AP + 1% of their max health magic damage per second.",
+      "description": "Ability damage (damage over time included) sets enemies on fire for 4s, dealing 12.5 + 1.5% AP + 1% of their max health magic damage per second.",
       "on": "deal_damage",
-      "if": "is_ability and not is_dot and not t_structure and not t_self",
+      "if": "is_ability and not t_structure and not t_self",
       "effects": [
         {
           "type": "dot",

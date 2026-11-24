@@ -31,18 +31,11 @@
       "cooldown": 60,
       "effects": [
         {
-          "type": "repeat",
-          "count": 5,
-          "interval": 0,
-          "effects": [
-            {
-              "type": "shield",
-              "target": "self",
-              "stack": true,
-              "amount": "0.8 * bonus_hp / 5",
-              "duration": "0.75 + 0.75 * (i + 1)"
-            }
-          ]
+          "type": "shield",
+          "target": "self",
+          "amount": "0.8 * bonus_hp",
+          "duration": 4.5,
+          "decay": true
         },
         {
           "type": "buff",

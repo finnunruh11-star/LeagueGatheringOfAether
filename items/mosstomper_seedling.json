@@ -123,6 +123,7 @@
     "cooldown": 45,
     "targeting": "unit",
     "range": 500,
+    "requires": "not t_ward and (not t_champion or counter('mosstomper_seedling_treats') >= 20)",
     "effects": [
       {
         "type": "damage",
@@ -133,44 +134,19 @@
         "if": "not t_champion"
       },
       {
-        "type": "item_cooldown",
-        "item": "mosstomper_seedling",
-        "reset": true,
-        "if": "t_champion and counter('mosstomper_seedling_treats') < 20"
-      },
-      {
-        "type": "text",
-        "text": "Your pet needs 20 treats",
-        "at": "self",
-        "color": "#dddddd",
-        "size": 18,
-        "if": "t_champion and counter('mosstomper_seedling_treats') < 20"
-      },
-      {
         "type": "damage",
         "damage_type": "true",
         "amount": "20 + 140 * (min(level, 18) - 1) / 17",
         "vfx": "burst",
         "color": "#86d65c",
-        "if": "t_champion and counter('mosstomper_seedling_treats') >= 20"
+        "if": "t_champion"
       },
       {
         "type": "slow",
         "amount": 0.25,
-        "duration": 1,
-        "if": "t_champion and counter('mosstomper_seedling_treats') >= 20"
-      },
-      {
-        "type": "delay",
-        "time": 1,
-        "effects": [
-          {
-            "type": "slow",
-            "amount": 0.125,
-            "duration": 1
-          }
-        ],
-        "if": "t_champion and counter('mosstomper_seedling_treats') >= 20"
+        "duration": 2,
+        "decay": true,
+        "if": "t_champion"
       }
     ]
   }

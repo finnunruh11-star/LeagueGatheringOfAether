@@ -31,7 +31,7 @@
   "passives": [
     {
       "name": "Threefold Strike",
-      "description": "Basic attacks give you 20 move speed for 5s. Attacks on champions or structures also grant +6% base AD for 5s, stacking up to 3 times (+18%).",
+      "description": "Basic attacks give you 20 move speed for 5s. Attacks on champions or structures also grant +6% base AD for 5s, stacking up to 3 times (+18%); once they run out, the stacks drop off one every 0.5s.",
       "on": "attack",
       "effects": [
         {
@@ -45,11 +45,32 @@
         },
         {
           "type": "buff",
+          "if": "(t_champion or t_structure) and has('trinity_force_threefold_2')",
+          "target": "self",
+          "id": "trinity_force_threefold_3",
+          "duration": 5,
+          "hidden": true,
+          "add": {
+            "attack_damage": "0.06 * base_ad"
+          }
+        },
+        {
+          "type": "buff",
+          "if": "(t_champion or t_structure) and has('trinity_force_threefold_1')",
+          "target": "self",
+          "id": "trinity_force_threefold_2",
+          "duration": 5.5,
+          "hidden": true,
+          "add": {
+            "attack_damage": "0.06 * base_ad"
+          }
+        },
+        {
+          "type": "buff",
           "if": "t_champion or t_structure",
           "target": "self",
-          "id": "trinity_force_threefold",
-          "duration": 5,
-          "max_stacks": 3,
+          "id": "trinity_force_threefold_1",
+          "duration": 6,
           "add": {
             "attack_damage": "0.06 * base_ad"
           }

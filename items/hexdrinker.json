@@ -30,7 +30,7 @@
           "id": "hexdrinker_lifeline",
           "damage_type": "magic",
           "duration": 2.5,
-          "amount": "(110 + 10 * (min(level, 18) - 1)) * (1 - 0.25 * ranged)"
+          "amount": "(110 + 10 * (min(level, 18.0) - 1)) * (1 - 0.25 * ranged)"
         },
         {
           "type": "vfx",

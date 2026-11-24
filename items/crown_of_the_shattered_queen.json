@@ -28,7 +28,7 @@
   "passives": [
     {
       "name": "Safeguard",
-      "description": "While Safeguarded you take 40% less damage from champions. The first champion hit breaks it, but it lingers for 2.5s; it comes back after 40s without taking champion damage.",
+      "description": "While Safeguarded you take 40% less damage from champions. The first champion hit breaks it, but it lingers for 2.5s; it comes back after 40s without taking champion damage (the item slot shows the recharge) or when you respawn.",
       "on": "take_damage_pre",
       "if": "t_champion and not t_self and (not has('crown_of_the_shattered_queen_down') or has('crown_of_the_shattered_queen_linger'))",
       "effects": [
@@ -52,10 +52,14 @@
           "if": "not has('crown_of_the_shattered_queen_down')"
         },
         {
-          "type": "mark",
-          "id": "crown_of_the_shattered_queen_grace",
+          "type": "buff",
           "target": "self",
+          "id": "crown_of_the_shattered_queen_poise",
           "duration": 5.5,
+          "hidden": true,
+          "add": {
+            "ability_power": "10 + 3 * clamp(level - 8, 0.0, 10.0)"
+          },
           "if": "not has('crown_of_the_shattered_queen_down')"
         },
         {
@@ -76,6 +80,11 @@
           "id": "crown_of_the_shattered_queen_down",
           "target": "self",
           "duration": 40
+        },
+        {
+          "type": "passive_cooldown",
+          "passive": 2,
+          "amount": 40
         }
       ]
     },
@@ -84,16 +93,28 @@
       "description": "While Safeguarded, and for 3s after it ends, gain 10 AP (+3 per level from level 9, up to 40).",
       "on": "interval",
       "interval": 0.5,
-      "if": "not has('crown_of_the_shattered_queen_down') or has('crown_of_the_shattered_queen_grace')",
+      "if": "not has('crown_of_the_shattered_queen_down')",
       "effects": [
         {
           "type": "buff",
           "target": "self",
           "id": "crown_of_the_shattered_queen_poise",
           "duration": 0.75,
+          "hidden": true,
           "add": {
-            "ability_power": "10 + 3 * clamp(level - 8, 0, 10)"
+            "ability_power": "10 + 3 * clamp(level - 8, 0.0, 10.0)"
           }
+        }
+      ]
+    },
+    {
+      "name": "Safeguard",
+      "on": "spawn",
+      "effects": [
+        {
+          "type": "passive_cooldown",
+          "passive": 2,
+          "amount": 0
         }
       ]
     }

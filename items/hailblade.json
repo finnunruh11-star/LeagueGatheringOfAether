@@ -10,13 +10,13 @@
   "group": "jungle",
   "display": "counter('hailblade_smites')",
   "stats": {},
-  "description": "No jungle in this game: monster effects work on minions and Smite is this item's active. Huntsman (bonus XP) and consuming the item after 5 Smites are left out.",
+  "description": "No jungle in this game: monster effects work on minions and Smite is this item's active. The item is not used up after 5 Smites - it keeps working while you own it.",
   "passives": [
     {
       "name": "Sear",
-      "description": "Damaging a minion with an attack or ability burns it for 60 (+30% AP, +5% bonus AD, +2% bonus health) magic damage over 5s.",
+      "description": "Damaging a minion burns it for 60 (+30% AP, +5% bonus AD, +2% bonus health) magic damage over 5s.",
       "on": "deal_damage",
-      "if": "t_minion and (is_attack or is_ability)",
+      "if": "t_minion",
       "effects": [
         {
           "type": "dot",
@@ -55,6 +55,19 @@
           "amount": "8 + 0.6 * (min(level, 18) - 1)"
         }
       ]
+    },
+    {
+      "name": "Huntsman",
+      "description": "Killing a melee minion (standing in for large monsters) grants 10 bonus experience.",
+      "on": "kill",
+      "if": "t_minion and not t_ranged",
+      "effects": [
+        {
+          "type": "xp",
+          "target": "self",
+          "amount": 10
+        }
+      ]
     }
   ],
   "active": {
@@ -63,6 +76,7 @@
     "cooldown": 45,
     "targeting": "unit",
     "range": 500,
+    "requires": "not t_ward and (not t_champion or counter('hailblade_smites') >= 5)",
     "effects": [
       {
         "type": "damage",
@@ -88,32 +102,18 @@
         "if": "not t_champion"
       },
       {
-        "type": "item_cooldown",
-        "item": "hailblade",
-        "reset": true,
-        "if": "t_champion and counter('hailblade_smites') < 5"
-      },
-      {
-        "type": "text",
-        "text": "Smite 5 times first",
-        "at": "self",
-        "color": "#dddddd",
-        "size": 18,
-        "if": "t_champion and counter('hailblade_smites') < 5"
-      },
-      {
         "type": "damage",
         "damage_type": "true",
         "amount": "20 + 8 * (min(level, 18) - 1)",
         "vfx": "burst",
         "color": "#9fe8ff",
-        "if": "t_champion and counter('hailblade_smites') >= 5"
+        "if": "t_champion"
       },
       {
         "type": "slow",
         "amount": 0.2,
         "duration": 2,
-        "if": "t_champion and counter('hailblade_smites') >= 5"
+        "if": "t_champion"
       },
       {
         "type": "buff",
@@ -123,7 +123,7 @@
         "add": {
           "move_speed_bonus": 0.2
         },
-        "if": "t_champion and counter('hailblade_smites') >= 5"
+        "if": "t_champion"
       }
     ]
   }

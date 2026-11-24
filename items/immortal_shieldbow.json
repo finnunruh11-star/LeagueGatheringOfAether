@@ -26,7 +26,7 @@
       "name": "Lifeline",
       "description": "When a hit would drop you below 30% health, you first gain a 290-500 shield (290, +30 per level from 12) for 3s and 30% attack speed for 8s (90s cooldown).",
       "on": "take_damage_pre",
-      "if": "hp - dmg < 0.3 * max_hp",
+      "if": "hp - max(dmg - shield, 0.0) < 0.3 * max_hp",
       "cooldown": 90,
       "effects": [
         {

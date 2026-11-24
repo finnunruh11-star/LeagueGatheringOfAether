@@ -28,10 +28,15 @@
   "passives": [
     {
       "name": "Motivate",
-      "description": "Healing or shielding another allied champion gives both of you 20% move speed for 1.5s (4s cooldown per ally). Here only heals and shields count, not other ally buffs.",
+      "description": "Healing, shielding or buffing another allied champion gives both of you 20% move speed for 1.5s (4s cooldown per ally).",
       "on": "heal_ally",
       "if": "not t_has('shurelyas_battlesong_cd')",
       "effects": [
+        {
+          "type": "mark",
+          "id": "shurelyas_battlesong_cd",
+          "duration": 4
+        },
         {
           "type": "buff",
           "id": "shurelyas_battlesong_motivate",
@@ -48,11 +53,6 @@
           "add": {
             "move_speed_bonus": 0.2
           }
-        },
-        {
-          "type": "mark",
-          "id": "shurelyas_battlesong_cd",
-          "duration": 4
         }
       ]
     },
@@ -62,6 +62,11 @@
       "if": "not t_has('shurelyas_battlesong_cd')",
       "effects": [
         {
+          "type": "mark",
+          "id": "shurelyas_battlesong_cd",
+          "duration": 4
+        },
+        {
           "type": "buff",
           "id": "shurelyas_battlesong_motivate",
           "duration": 1.5,
@@ -77,11 +82,35 @@
           "add": {
             "move_speed_bonus": 0.2
           }
-        },
+        }
+      ]
+    },
+    {
+      "name": "Motivate",
+      "on": "buff_ally",
+      "if": "not t_has('shurelyas_battlesong_cd')",
+      "effects": [
         {
           "type": "mark",
           "id": "shurelyas_battlesong_cd",
           "duration": 4
+        },
+        {
+          "type": "buff",
+          "id": "shurelyas_battlesong_motivate",
+          "duration": 1.5,
+          "add": {
+            "move_speed_bonus": 0.2
+          }
+        },
+        {
+          "type": "buff",
+          "target": "self",
+          "id": "shurelyas_battlesong_motivate",
+          "duration": 1.5,
+          "add": {
+            "move_speed_bonus": 0.2
+          }
         }
       ]
     }

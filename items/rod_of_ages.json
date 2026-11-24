@@ -27,16 +27,34 @@
   "passives": [
     {
       "name": "Timeless",
-      "description": "Every 60s this item gains 20 health, 20 mana and 4 ability power, up to 10 times (+200 health, +200 mana, +40 AP). At 10 stacks Eternity becomes 50% stronger.",
+      "description": "Every 60s this item gains 20 health, 20 mana and 4 ability power, up to 10 times (+200 health, +200 mana, +40 AP). At 10 stacks you gain a level and Eternity becomes 50% stronger.",
       "on": "interval",
-      "interval": 60,
+      "interval": 1,
       "if": "counter('rod_of_ages_stacks') < 10",
       "effects": [
         {
           "type": "counter",
+          "id": "rod_of_ages_since",
+          "set": "time",
+          "if": "counter('rod_of_ages_since') <= 0"
+        },
+        {
+          "type": "counter",
           "id": "rod_of_ages_stacks",
-          "add": 1,
-          "max": 10
+          "add": "floor((time - counter('rod_of_ages_since')) / 60.0)",
+          "max": 10,
+          "if": "time - counter('rod_of_ages_since') >= 60"
+        },
+        {
+          "type": "counter",
+          "id": "rod_of_ages_since",
+          "add": "60 * floor((time - counter('rod_of_ages_since')) / 60.0)",
+          "if": "time - counter('rod_of_ages_since') >= 60"
+        },
+        {
+          "type": "level_up",
+          "target": "self",
+          "if": "counter('rod_of_ages_stacks') >= 10"
         },
         {
           "type": "text",
@@ -50,44 +68,26 @@
     },
     {
       "name": "Eternity",
-      "description": "Taking damage from champions restores mana equal to 7% of the damage before your armor/magic resist. Casting an ability heals you for 25% of the mana it cost, up to 20 health per cast.",
+      "description": "Taking damage from champions restores mana equal to 7% of the damage before resistances. Casting an ability heals you for 25% of the mana it cost, up to 20 health per cast.",
       "on": "take_damage",
       "if": "t_champion and not t_self and max_mana > 0",
       "effects": [
         {
           "type": "mana",
           "target": "self",
-          "amount": "0.07 * (1 + 0.5 * int(counter('rod_of_ages_stacks') >= 10)) * dmg * (1 + max(0, armor) / 100.0 * int(dtype == 'physical') + max(0, mr) / 100.0 * int(dtype == 'magic'))"
+          "amount": "0.07 * dmg_raw * (1.5 if counter('rod_of_ages_stacks') >= 10 else 1.0)"
         }
       ]
     },
     {
       "name": "Eternity",
       "on": "cast",
-      "if": "max_mana > 0",
+      "if": "amount > 0 and max_mana > 0",
       "effects": [
         {
           "type": "heal",
           "target": "self",
-          "amount": "(1 + 0.5 * int(counter('rod_of_ages_stacks') >= 10)) * min(20, 0.25 * max(0, counter('rod_of_ages_mana') - mana))"
-        },
-        {
-          "type": "counter",
-          "id": "rod_of_ages_mana",
-          "set": "mana"
-        }
-      ]
-    },
-    {
-      "name": "Eternity",
-      "on": "interval",
-      "interval": 0.1,
-      "if": "mana > counter('rod_of_ages_mana')",
-      "effects": [
-        {
-          "type": "counter",
-          "id": "rod_of_ages_mana",
-          "set": "mana"
+          "amount": "min(20, 0.25 * amount) * (1.5 if counter('rod_of_ages_stacks') >= 10 else 1.0)"
         }
       ]
     }

@@ -26,7 +26,7 @@
   "passives": [
     {
       "name": "Coruscation",
-      "description": "Stunning, rooting, knocking back or pulling an enemy champion makes it and every enemy champion within 600 of it take 7% more damage for 5s. Getting stunned or rooted yourself does the same to enemy champions within 600 of you (the caster of the CC can't be tracked).",
+      "description": "Stunning, rooting, knocking back or pulling an enemy champion - or being immobilized by one - makes that champion and every enemy champion within 600 of it take 7% more damage for 5s.",
       "on": "cc_applied",
       "if": "cc == 'stun' or cc == 'root' or cc == 'knockback' or cc == 'pull'",
       "effects": [
@@ -66,17 +66,15 @@
     },
     {
       "name": "Coruscation",
-      "on": "interval",
-      "interval": 0.25,
-      "if": "has('stun') or has('root')",
+      "on": "cc_received",
+      "if": "t_champion and (cc == 'stun' or cc == 'root' or cc == 'knockback' or cc == 'pull')",
       "effects": [
         {
           "type": "area",
-          "at": "self",
+          "at": "target",
           "radius": 600,
           "filter": "champions",
           "show": false,
-          "if": "not has('evenshroud_immobilized')",
           "effects": [
             {
               "type": "mark",
@@ -102,12 +100,6 @@
               "color": "#ffd98a"
             }
           ]
-        },
-        {
-          "type": "mark",
-          "id": "evenshroud_immobilized",
-          "target": "self",
-          "duration": 0.4
         }
       ]
     }

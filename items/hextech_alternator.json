@@ -26,7 +26,7 @@
         {
           "type": "damage",
           "damage_type": "magic",
-          "amount": "50 + 75 * (min(level, 18) - 1) / 17",
+          "amount": "50 + 75 * (min(level, 18.0) - 1) / 17",
           "vfx": "burst",
           "color": "#6fd1ff"
         }

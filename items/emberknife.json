@@ -10,13 +10,13 @@
   "group": "jungle",
   "display": "counter('emberknife_smites')",
   "stats": {},
-  "description": "No jungle in this game: monster effects work on minions and Smite is this item's active. Huntsman (bonus XP) and consuming the item after 5 Smites are left out.",
+  "description": "No jungle in this game: monster effects work on minions and Smite is this item's active. The item is not used up after 5 Smites - it keeps working while you own it.",
   "passives": [
     {
       "name": "Sear",
-      "description": "Damaging a minion with an attack or ability burns it for 60 (+30% AP, +5% bonus AD, +2% bonus health) magic damage over 5s.",
+      "description": "Damaging a minion burns it for 60 (+30% AP, +5% bonus AD, +2% bonus health) magic damage over 5s.",
       "on": "deal_damage",
-      "if": "t_minion and (is_attack or is_ability)",
+      "if": "t_minion",
       "effects": [
         {
           "type": "dot",
@@ -57,8 +57,21 @@
       ]
     },
     {
+      "name": "Huntsman",
+      "description": "Killing a melee minion (standing in for large monsters) grants 10 bonus experience.",
+      "on": "kill",
+      "if": "t_minion and not t_ranged",
+      "effects": [
+        {
+          "type": "xp",
+          "target": "self",
+          "amount": 10
+        }
+      ]
+    },
+    {
       "name": "Challenging Smite",
-      "description": "Champions hit by Challenging Smite are marked for 4s: your attacks and abilities burn them for 48-125 (by level) true damage over 2.5s, and they deal 20% less damage to you.",
+      "description": "Champions hit by Challenging Smite are marked and revealed for 4s: your attacks and abilities burn them for 48-125 (by level) true damage over 2.5s, and they deal 20% less damage to you.",
       "on": "deal_damage",
       "if": "(is_attack or is_ability) and t_has('emberknife_challenged')",
       "effects": [
@@ -91,6 +104,7 @@
     "cooldown": 45,
     "targeting": "unit",
     "range": 500,
+    "requires": "not t_ward and (not t_champion or counter('emberknife_smites') >= 5)",
     "effects": [
       {
         "type": "damage",
@@ -116,25 +130,16 @@
         "if": "not t_champion"
       },
       {
-        "type": "item_cooldown",
-        "item": "emberknife",
-        "reset": true,
-        "if": "t_champion and counter('emberknife_smites') < 5"
-      },
-      {
-        "type": "text",
-        "text": "Smite 5 times first",
-        "at": "self",
-        "color": "#dddddd",
-        "size": 18,
-        "if": "t_champion and counter('emberknife_smites') < 5"
-      },
-      {
         "type": "mark",
         "id": "emberknife_challenged",
         "duration": 4,
         "max_stacks": 1,
-        "if": "t_champion and counter('emberknife_smites') >= 5"
+        "if": "t_champion"
+      },
+      {
+        "type": "reveal",
+        "duration": 4,
+        "if": "t_champion"
       },
       {
         "type": "vfx",
@@ -143,7 +148,7 @@
         "radius": 90,
         "vfx": "fire",
         "color": "#ff7a2f",
-        "if": "t_champion and counter('emberknife_smites') >= 5"
+        "if": "t_champion"
       }
     ]
   }
