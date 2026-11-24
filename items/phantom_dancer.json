@@ -23,7 +23,7 @@
   "passives": [
     {
       "name": "Spectral Waltz",
-      "description": "Attacks give 7% move speed for 3s. After 4 attacks in a row (each within 3s of the last) they also give 30% attack speed. Ghosting isn't simulated.",
+      "description": "Attacks give 7% move speed for 3s. After 4 attacks in a row (each within 3s of the last) they also give 30% attack speed. Attacks also grant ghosting (walk through units) for 3s.",
       "on": "attack",
       "effects": [
         {
@@ -32,7 +32,8 @@
           "id": "phantom_dancer_waltz",
           "duration": 3,
           "add": {
-            "move_speed_bonus": 0.07
+            "move_speed_bonus": 0.07,
+            "ghost": 1
           }
         },
         {

@@ -67,7 +67,7 @@
   ],
   "active": {
     "name": "Wraith Step",
-    "description": "Gain 25% move speed for 6s (units never block each other here, so the ghosting part is built in).",
+    "description": "Gain 25% move speed and ghosting (walk through units) for 6s.",
     "cooldown": 45,
     "targeting": "self",
     "effects": [
@@ -77,7 +77,8 @@
         "id": "youmuus_ghostblade_wraith",
         "duration": 6,
         "add": {
-          "move_speed_bonus": 0.25
+          "move_speed_bonus": 0.25,
+          "ghost": 1
         }
       }
     ]

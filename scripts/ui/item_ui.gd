@@ -14,6 +14,7 @@ const STAT_NAMES := {
 	"heal_received": ["Healing Received", true], "tenacity": ["Tenacity", true], "slow_resist": ["Slow Resist", true],
 	"vision": ["Vision Range", false], "size": ["Size", false], "damage_mult": ["Damage Dealt", true],
 	"damage_taken_mult": ["Damage Taken", true], "cooldown_mult": ["Cooldowns", true], "attack_speed": ["Base Attack Speed", false],
+	"summoner_haste": ["Summoner Spell Haste", false],
 }
 const RARITY_COLORS := {
 	"basic": Color(0.55, 0.57, 0.62), "epic": Color(0.35, 0.6, 1.0), "legendary": Color(1.0, 0.55, 0.2),

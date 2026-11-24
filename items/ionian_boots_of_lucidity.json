@@ -11,8 +11,9 @@
   ],
   "stats": {
     "ability_haste": 20.0,
-    "move_speed": 45.0
+    "move_speed": 45.0,
+    "summoner_haste": 12.0
   },
-  "description": "The original's summoner spell haste is left out - this game has no summoner spells.",
+  "description": "Gain 12 summoner spell haste.",
   "passives": []
 }
