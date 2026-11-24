@@ -1,13 +1,19 @@
 class_name Shop
 extends PanelContainer
-## League-style item shop. P or the HUD's "Shop (P)" button toggles it, Esc closes it.
+## League-style item shop. The shop key (the rebindable "shop" action, P by default) or the HUD's
+## Shop button toggles it, Esc closes it.
 ##   left   - search box and stat categories (an item must match every selected category)
 ##   middle - all buyable items grouped by rarity with your price (owned components are
 ##            subtracted): click shows details, right-click or double-click buys
-##   right  - details: recipe tree (owned parts green), what it builds into, Buy button
-##   bottom - your item slots: select one to sell it, drag one onto another to swap them
-## Buying and selling go through world.send_command, so the host validates everything.
+##   right  - details: recipe tree (owned parts green), what it builds into, Buy / Add to build
+##   bottom - your autobuy build for this character: Ctrl/Shift+click any item (or Add to build)
+##            adds it, drag to reorder, right-click removes; while it's empty the recommended
+##            build is shown (and used by autobuy). The Autobuy switch, then your item slots:
+##            select one to sell it, drag one onto another to swap them
+## Buying and selling go through world.send_command, so the host validates everything. Builds are
+## saved in Game.prefs.builds and sent to the host with world.send_build().
 ## Test flags: --open_shop  --shop_select=<id>  --shop_gold[=times]  --shop_buy=<id>,<id>
+##             --shop_build=<id>,<id> (sets this character's build, empty = recommended)
 
 const PANEL_SIZE := Vector2(1100, 660)
 const RAISE := 80.0   # keeps the panel above the HUD's ability bar
@@ -15,6 +21,8 @@ const REFRESH_EVERY := 0.2
 const ICON := 44.0
 const CELL := Vector2(52, 66)
 const HEAD_H := 30.0
+const BUILD_MAX := 12          # the host keeps at most 12 build items
+const ROW_LABEL_W := 86.0      # "BUILD" / "YOUR ITEMS", so both bottom rows line up
 
 const BG := Color(0.05, 0.06, 0.08, 0.95)
 const BG_INNER := Color(0.075, 0.085, 0.11, 0.9)
@@ -70,6 +78,7 @@ var _query := ""
 var _query_sq := ""         # the query with only letters and digits ("rabadons" finds "Rabadon's")
 var _state := {}            # id -> [your price, check_buy() reason or ""]
 var _owned := {}            # id -> number of slots holding it
+var _parts := {}            # id -> the owned item it went into (components of owned items, recursively)
 var _gold := 0
 var _gold_shown := -1
 var _sig := ""
@@ -80,8 +89,16 @@ var _msg_t := 0.0
 var _last_notice := ""
 var _auto_pending := false
 var _auto_t := 0.0
+var _mine: Array = []       # your saved build for this character (known items, no duplicates)
+var _plan: Array = []       # what the build strip shows: _mine, or the recommended build if it's empty
+var _plan_rec := false      # _plan is the recommended build
+var _next := -1             # _plan index of the first item you don't have (what autobuy works toward)
+var _rec: Array = []        # Champion.recommended_build() for _rec_for
+var _rec_for := ""
+var _rec_items = null       # the Game.items dictionary _rec was made from
 
 var _gold_label: Label
+var _close_btn: Button
 var _search: LineEdit
 var _clear_btn: Button
 var _cat_box: VBoxContainer
@@ -102,6 +119,12 @@ var _into: IntoRow
 var _desc: RichTextLabel
 var _reason: Label
 var _buy_btn: Button
+var _add_btn: Button
+var _build: BuildRow
+var _build_note: Label
+var _use_rec_btn: Button
+var _clear_build_btn: Button
+var _autobuy_box: CheckBox
 var _inv: InvRow
 var _sell_btn: Button
 var _msg: Label
@@ -118,7 +141,7 @@ func _ready() -> void:
 	_build_ui()
 	_place.call_deferred()
 	var a: Dictionary = Game.cmdline
-	_auto_pending = a.has("open_shop") or a.has("shop_select") or a.has("shop_gold") or a.has("shop_buy")
+	_auto_pending = a.has("open_shop") or a.has("shop_select") or a.has("shop_gold") or a.has("shop_buy") or a.has("shop_build")
 
 
 func toggle() -> void:
@@ -127,6 +150,9 @@ func toggle() -> void:
 		_place()
 		if not is_same(_items_ref, Game.items):
 			_build_catalog()
+		# The shop key can be rebound while the game runs.
+		_close_btn.tooltip_text = ("Close (%s or Esc)" % Controls.label("shop")) if Controls.code_of("shop") != "" else "Close (Esc)"
+		_sync_autobuy()
 		var nl := _notice_label()
 		_last_notice = nl.text if nl != null else ""
 		_sig = ""
@@ -156,9 +182,16 @@ func _champ() -> Champion:
 # ------------------------------------------------------------------ input ---
 
 func _input(event: InputEvent) -> void:
-	# Clicking anywhere else (or Esc) leaves the search box so game hotkeys work again.
-	if not visible or not _search.has_focus():
+	if not visible:
 		return
+	if not _search.has_focus():
+		# Shift+click adds items to your build here: don't let the Shift press reach a game key
+		# bound to it (summoner spell 2 in the WASD layout would cast at the hidden cursor).
+		if event is InputEventKey and event.keycode == KEY_SHIFT and event.pressed and not event.is_action("shop") \
+				and get_global_rect().has_point(get_global_mouse_position()):
+			get_viewport().set_input_as_handled()
+		return
+	# Clicking anywhere else (or Esc) leaves the search box so game hotkeys work again.
 	if event is InputEventMouseButton and event.pressed:
 		if not _search.get_global_rect().has_point(_search.get_global_mouse_position()):
 			_search.release_focus()
@@ -166,8 +199,21 @@ func _input(event: InputEvent) -> void:
 		_search.release_focus()
 
 
-func _cell_clicked(view: Cells, cell: Dictionary, right: bool, double: bool) -> void:
+## `add`: Ctrl+click or Shift+click, which adds the item to your build instead.
+func _cell_clicked(view: Cells, cell: Dictionary, right: bool, double: bool, add := false) -> void:
 	var id := str(cell.id)
+	if view == _build:
+		if right:
+			_remove_from_build(int(cell.index))
+			return
+		_select(id)
+		if double:
+			_buy(id)
+		return
+	if add:
+		if id != "" and not double:
+			_add_to_build(id)
+		return
 	if view == _inv:
 		if right:
 			if id != "":
@@ -229,6 +275,176 @@ static func _sell_value(it: Dictionary) -> int:
 	return Champion.sell_value(it)
 
 
+# ------------------------------------------------------------- your build ---
+
+## Your saved build for the current character: known items only, no duplicates, at most BUILD_MAX.
+func _saved_build() -> Array:
+	var out := []
+	var ch := _champ()
+	var b = Game.prefs.builds.get(ch.char_id, []) if ch != null and Game.prefs.get("builds") is Dictionary else []
+	if b is Array or b is PackedStringArray:
+		for x in b:
+			var id := str(x)
+			if Game.items.has(id) and not out.has(id) and out.size() < BUILD_MAX:
+				out.append(id)
+	return out
+
+
+## What autobuy uses while your build is empty (cached per character).
+func _recommended() -> Array:
+	var ch := _champ()
+	if ch == null:
+		return []
+	if _rec_for != ch.char_id or not is_same(_rec_items, Game.items):
+		_rec_for = ch.char_id
+		_rec_items = Game.items
+		_rec = Champion.recommended_build(ch.def).slice(0, BUILD_MAX)
+	return _rec
+
+
+## Saves `list` as this character's build (empty = use the recommended one) and tells the host.
+func _set_build(list: Array) -> void:
+	var ch := _champ()
+	if ch == null:
+		return
+	if not Game.prefs.get("builds") is Dictionary:
+		Game.prefs.builds = {}
+	Game.prefs.builds[ch.char_id] = list.duplicate()
+	Game.save_settings()
+	world.send_build()
+	_update_build()
+	_update_add_btn()
+
+
+func _add_to_build(id: String) -> void:
+	var it = Game.items.get(id)
+	if _champ() == null or it == null:
+		return
+	if not it.buyable:
+		_flash("%s can't be bought" % it.name, RED)
+	elif _mine.has(id):
+		_flash("%s is already in your build" % it.name, ORANGE)
+	elif _mine.size() >= BUILD_MAX:
+		_flash("Your build is full (%d items) - right-click one to remove it" % BUILD_MAX, RED)
+	else:
+		var fresh := _mine.is_empty()
+		_set_build(_mine + [id])
+		_flash(("Started your own build with %s" if fresh else "Added %s to your build") % it.name, GREEN)
+
+
+## Removing or moving an entry of the recommended build turns it into your own build.
+func _remove_from_build(i: int) -> void:
+	if i < 0 or i >= _plan.size():
+		return
+	var was_rec := _plan_rec
+	var list := _plan.duplicate()
+	var id := str(list.pop_at(i))
+	_set_build(list)
+	var n := str(Game.items[id].name) if Game.items.has(id) else id
+	if was_rec:
+		_flash("Removed %s - this is your own build now" % n, GOLD)
+	elif list.is_empty():
+		_flash("Removed %s - autobuy uses the recommended build again" % n, GOLD)
+	else:
+		_flash("Removed %s from your build" % n, GOLD)
+
+
+func _move_build(from: int, to: int) -> void:
+	if from < 0 or from >= _plan.size() or to < 0 or to >= _plan.size() or from == to:
+		return
+	var was_rec := _plan_rec
+	var list := _plan.duplicate()
+	list.insert(to, list.pop_at(from))
+	_set_build(list)
+	if was_rec:
+		_flash("Reordered - this is your own build now", GOLD)
+
+
+func _use_recommended() -> void:
+	var rec := _recommended()
+	if _champ() == null or rec.is_empty():
+		return
+	_set_build(rec)
+	_flash("Copied the recommended build - now it's yours to change", GOLD)
+
+
+func _clear_build() -> void:
+	if _mine.is_empty():
+		return
+	_set_build([])
+	_flash("Build cleared - autobuy uses the recommended build again", GOLD)
+
+
+func _on_autobuy(on: bool) -> void:
+	Game.prefs.autobuy = on
+	Game.save_settings()
+	if world != null:
+		world.send_build()
+	_flash("Autobuy on - your build is bought whenever you are in your base or dead" if on else "Autobuy off", GREEN if on else MUTED)
+
+
+## The Settings menu can switch autobuy too.
+func _sync_autobuy() -> void:
+	var on := bool(Game.prefs.autobuy)
+	if _autobuy_box.button_pressed != on:
+		_autobuy_box.set_pressed_no_signal(on)
+
+
+func _update_build() -> void:
+	var ch := _champ()
+	_mine = _saved_build()
+	_plan_rec = _mine.is_empty() and ch != null
+	_plan = _recommended() if _plan_rec else _mine
+	_next = -1
+	for i in _plan.size():
+		if not _done(_plan[i]):
+			_next = i
+			break
+	_build.set_ids(_plan)
+	var rec := _recommended()
+	_use_rec_btn.disabled = rec.is_empty() or _mine == rec
+	_use_rec_btn.tooltip_text = "Copy the recommended build into your build so you can change it" if _mine.is_empty() \
+			else "Replace your build with the recommended one"
+	_clear_build_btn.disabled = _mine.is_empty()
+	_clear_build_btn.tooltip_text = "Remove every item from your build (autobuy then uses the recommended one)"
+	var col := MUTED
+	if ch == null:
+		_build_note.text = ""
+	elif _plan_rec:
+		_build_note.text = "Recommended (autobuy uses this until you make your own)"
+		col = Color(0.85, 0.78, 0.55)
+	elif _next < 0:
+		_build_note.text = "Build complete - you have every item in it"
+		col = GREEN
+	else:
+		_build_note.text = "Ctrl+click items to add, drag to reorder, right-click to remove"
+	_build_note.add_theme_color_override("font_color", col)
+
+
+## A build item you own, or one that went into an item you own (autobuy doesn't buy it again).
+func _done(id: String) -> bool:
+	return _owned.has(id) or _parts.has(id)
+
+
+## The details panel's "Add to build" button for the selected item.
+func _update_add_btn() -> void:
+	var it = Game.items.get(_sel)
+	if it == null:
+		return
+	var pos := _mine.find(_sel)
+	var full := _mine.size() >= BUILD_MAX
+	_add_btn.text = "In build" if pos >= 0 else ("Build full" if full else "Add to build")
+	_add_btn.disabled = _champ() == null or pos >= 0 or full or not it.buyable
+	if pos >= 0:
+		_add_btn.tooltip_text = "#%d in your build - right-click it there to remove it" % (pos + 1)
+	elif full:
+		_add_btn.tooltip_text = "Your build has %d items - right-click one of them to remove it" % BUILD_MAX
+	elif _mine.is_empty():
+		_add_btn.tooltip_text = "Start your own build with this item (instead of the recommended one)"
+	else:
+		_add_btn.tooltip_text = "Add it to the end of your build (or Ctrl+click any item)"
+
+
 # -------------------------------------------------------------- updating ---
 
 func _process(delta: float) -> void:
@@ -254,6 +470,7 @@ func _process(delta: float) -> void:
 ## Cheap check (gold, level, items, where you are) - only redraws when something changed.
 func _poll() -> void:
 	_tick = 0.0
+	_sync_autobuy()
 	var s := _signature()
 	if s != _sig:
 		_sig = s
@@ -285,6 +502,9 @@ func _refresh() -> void:
 		_inv.cells[i].id = str(inst.id) if inst != null else ""
 		if inst != null:
 			_owned[inst.id] = int(_owned.get(inst.id, 0)) + 1
+	_parts.clear()
+	for id in _owned:
+		_add_parts(str(id), str(id))
 	for id in _catalog:
 		_st(id)
 	_gold_shown = _gold
@@ -292,8 +512,20 @@ func _refresh() -> void:
 	for s in _sections:
 		s.queue_redraw()
 	_inv.queue_redraw()
+	_update_build()
 	_update_details()
 	_update_sell()
+
+
+## Marks the components of `id` (recursively) as having gone into the owned item `top`.
+func _add_parts(id: String, top: String) -> void:
+	var it = Game.items.get(id)
+	if it == null:
+		return
+	for c in it.from:
+		if not _parts.has(c) and not _owned.has(c):
+			_parts[c] = top
+			_add_parts(str(c), top)
 
 
 ## [your price, why you can't buy it ("" = you can)], cached until the next refresh.
@@ -325,6 +557,7 @@ func _update_details() -> void:
 	_reason.visible = st[1] != ""
 	_buy_btn.disabled = st[1] != ""
 	_buy_btn.text = ("Buy for %d gold" % price) if price > 0 else "Buy (free)"
+	_update_add_btn()
 	_tree.mark_owned(_champ())
 	_into.queue_redraw()
 	_big_icon.queue_redraw()
@@ -386,6 +619,16 @@ func _run_auto(delta: float) -> void:
 		var times := int(a.shop_gold) if str(a.shop_gold).is_valid_int() else 5
 		for i in times:
 			world.send_command("cheat", ["gold"])
+	if a.has("shop_build"):
+		var list := []
+		for raw in str(a.shop_build).split(",", false):
+			var id := raw.strip_edges()
+			if Game.items.has(id) and not list.has(id) and list.size() < BUILD_MAX:
+				list.append(id)
+			else:
+				print("[shop] build: skipped '%s'" % id)
+		_set_build(list)
+		print("[shop] build for %s: %s  autobuy: %s" % [_champ().char_id, str(_saved_build()), str(Game.prefs.autobuy)])
 	if a.has("open_shop") and not visible:
 		toggle()
 	if a.has("shop_buy"):
@@ -581,6 +824,7 @@ func _select(id: String) -> void:
 	_update_details()
 	for s in _sections:
 		s.queue_redraw()
+	_build.queue_redraw()
 
 
 func _tooltip(id: String) -> Control:
@@ -593,11 +837,47 @@ func _tooltip(id: String) -> Control:
 		notes.append(["You pay %d with the components you own" % int(st[0]), GOLD])
 	if _owned.has(id):
 		notes.append(["Owned", GREEN])
+	var pos := _plan.find(id)
+	if pos >= 0:
+		notes.append([("#%d in the recommended build" if _plan_rec else "#%d in your build") % (pos + 1), Color(0.85, 0.78, 0.55)])
 	if st[1] != "":
 		notes.append([st[1], RED])
-	else:
-		notes.append(["Right-click to buy", MUTED])
+	var hint := "Right-click to buy" if st[1] == "" else ""
+	if not _mine.has(id) and it.buyable:
+		hint += ("  -  " if hint != "" else "") + "Ctrl+click adds it to your build"
+	if hint != "":
+		notes.append([hint, MUTED])
 	return ItemUI.tooltip(it, notes)
+
+
+## The tooltip of build entry `i`.
+func _build_tooltip(i: int) -> Control:
+	var it = Game.items.get(_plan[i]) if i >= 0 and i < _plan.size() else null
+	if it == null:
+		return null
+	var id: String = _plan[i]
+	var notes := [[("#%d of the recommended build" if _plan_rec else "#%d of your build") % (i + 1), Color(0.85, 0.78, 0.55)]]
+	if _owned.has(id):
+		notes.append(["Owned", GREEN])
+	elif _parts.has(id):
+		var top = Game.items.get(_parts[id])
+		notes.append(["Built into your %s" % (top.name if top != null else _parts[id]), GREEN])
+	else:
+		if i == _next:
+			notes.append(["Autobuy buys this next" if Game.prefs.autobuy else "Next in your build (Autobuy is off)", GOLD])
+		var st := _st(id)
+		if int(st[0]) != int(it.cost):
+			notes.append(["You pay %d with the components you own" % int(st[0]), GOLD])
+		if st[1] != "":
+			notes.append([st[1], RED])
+	notes.append(["Click for details - drag to reorder - right-click to remove", MUTED])
+	if _plan_rec:
+		notes.append(["Changing it makes it your own build", MUTED])
+	return ItemUI.tooltip(it, notes)
+
+
+func _build_hint() -> String:
+	return "Ctrl+click (or Shift+click) any item to add it to your build,\nor select it and press Add to build."
 
 
 # ---------------------------------------------------------------- drawing ---
@@ -678,6 +958,36 @@ func _draw_slot(ci: CanvasItem, cell: Dictionary, hovered: bool) -> void:
 	ci.draw_string(_font, lp, str(slot + 1), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1, 0.95, 0.8))
 
 
+## Build entry `i` (or an empty place). The recommended build is greyed out; the next item autobuy
+## works toward gets a gold frame and a NEXT tag. `lifted`: it's being dragged.
+func _draw_build_cell(ci: CanvasItem, r: Rect2, i: int, hovered: bool, lifted: bool) -> void:
+	var it = Game.items.get(_plan[i]) if i < _plan.size() else null
+	if it == null:
+		ci.draw_rect(r, Color(0.035, 0.04, 0.055))
+		ci.draw_rect(r, Color(0.17, 0.19, 0.23), false, 1.0)
+		if i == _plan.size() and not _plan_rec and _champ() != null:
+			ci.draw_string(_font, Vector2(r.position.x, r.get_center().y + 7.0), "+", HORIZONTAL_ALIGNMENT_CENTER, r.size.x, 20, Color(MUTED, 0.45))
+		return
+	var id: String = _plan[i]
+	var nxt := i == _next and not lifted
+	if nxt:
+		ci.draw_rect(r.grow(4.0), Color(GOLD, 0.22))
+	elif id == _sel:
+		ci.draw_rect(r.grow(4.0), Color(1, 1, 1, 0.13))
+	ItemUI.draw_icon(ci, r, it, _plan_rec or lifted)
+	if _plan_rec:
+		ci.draw_rect(r, Color(BG, 0.4))
+	if nxt:
+		ci.draw_rect(r.grow(2.0), GOLD, false, 2.0)
+		var tag := Rect2(r.position.x + 4.0, r.end.y - 10.0, r.size.x - 8.0, 10.0)
+		ci.draw_rect(tag, GOLD.darkened(0.08))
+		ci.draw_string(_font, Vector2(tag.position.x, tag.end.y - 1.5), "NEXT", HORIZONTAL_ALIGNMENT_CENTER, tag.size.x, 9, Color(0.14, 0.1, 0.02))
+	if hovered:
+		ci.draw_rect(r.grow(2.0), Color(1, 1, 1, 0.9), false, 2.0)
+	if _done(id):
+		_draw_check(ci, r.position + Vector2(r.size.x - 3.0, 3.0), 7.0)
+
+
 func _draw_check(ci: CanvasItem, c: Vector2, rad: float) -> void:
 	ci.draw_circle(c, rad + 1.0, Color(0, 0, 0, 0.6))
 	ci.draw_circle(c, rad, Color(0.16, 0.62, 0.26))
@@ -714,22 +1024,23 @@ func _build_ui() -> void:
 	top.add_theme_constant_override("separation", 10)
 	root.add_child(top)
 	_label(top, "SHOP", 24, GOLD)
-	var help := _label(top, "Click an item for details  -  right-click or double-click to buy", 13, MUTED)
+	var help := _label(top, "Click an item for details  -  right-click or double-click to buy  -  Ctrl+click adds it to your build", 13, MUTED)
 	help.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	help.clip_text = true
 	var coin := Painter.new()
 	coin.fn = _draw_coin
 	coin.custom_minimum_size = Vector2(22, 22)
 	top.add_child(coin)
 	_gold_label = _label(top, "0", 22, GOLD)
 	_gold_label.custom_minimum_size.x = 64
-	var close := Button.new()
-	close.text = "×"
-	close.tooltip_text = "Close (P or Esc)"
-	close.focus_mode = Control.FOCUS_NONE
-	close.theme_type_variation = &"ShopClose"
-	close.custom_minimum_size = Vector2(36, 32)
-	close.pressed.connect(toggle)
-	top.add_child(close)
+	_close_btn = Button.new()
+	_close_btn.text = "×"
+	_close_btn.tooltip_text = "Close (Esc)"
+	_close_btn.focus_mode = Control.FOCUS_NONE
+	_close_btn.theme_type_variation = &"ShopClose"
+	_close_btn.custom_minimum_size = Vector2(36, 32)
+	_close_btn.pressed.connect(toggle)
+	top.add_child(_close_btn)
 
 	var body := HBoxContainer.new()
 	body.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -841,15 +1152,26 @@ func _build_details() -> Control:
 	_reason = _label(_details, "", 13, RED)
 	_reason.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_reason.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
+	var buy_row := HBoxContainer.new()
+	buy_row.add_theme_constant_override("separation", 6)
+	_details.add_child(buy_row)
 	_buy_btn = Button.new()
 	_buy_btn.text = "Buy"
 	_buy_btn.focus_mode = Control.FOCUS_NONE
 	_buy_btn.theme_type_variation = &"ShopBuy"
 	_buy_btn.custom_minimum_size.y = 44
+	_buy_btn.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_buy_btn.text_overrun_behavior = TextServer.OVERRUN_TRIM_ELLIPSIS
 	_buy_btn.pressed.connect(func() -> void: _buy(_sel))
-	_details.add_child(_buy_btn)
+	buy_row.add_child(_buy_btn)
+	_add_btn = Button.new()
+	_add_btn.text = "Add to build"
+	_add_btn.focus_mode = Control.FOCUS_NONE
+	_add_btn.custom_minimum_size = Vector2(112, 44)
+	_add_btn.pressed.connect(func() -> void: _add_to_build(_sel))
+	buy_row.add_child(_add_btn)
 
-	_placeholder = _label(panel, "Select an item to see what it does and what it builds from.\n\nRight-click any item to buy it right away.", 15, MUTED)
+	_placeholder = _label(panel, "Select an item to see what it does and what it builds from.\n\nRight-click any item to buy it right away, Ctrl+click it to add it to your build.", 15, MUTED)
 	_placeholder.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
 	_placeholder.horizontal_alignment = HORIZONTAL_ALIGNMENT_CENTER
 	_placeholder.vertical_alignment = VERTICAL_ALIGNMENT_CENTER
@@ -860,10 +1182,38 @@ func _build_details() -> Control:
 func _build_inventory() -> Control:
 	var panel := PanelContainer.new()
 	panel.add_theme_stylebox_override("panel", _box(BG_INNER, BORDER_DIM, 1, 6, 8))
+	var v := VBoxContainer.new()
+	v.add_theme_constant_override("separation", 6)
+	panel.add_child(v)
+
+	var b := HBoxContainer.new()
+	b.add_theme_constant_override("separation", 10)
+	v.add_child(b)
+	var bl := _label(b, "BUILD", 13, MUTED)
+	bl.custom_minimum_size.x = ROW_LABEL_W
+	_build = BuildRow.new(self)
+	_build.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	b.add_child(_build)
+	_build_note = _label(b, "", 12, MUTED)
+	_build_note.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	_build_note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_build_note.max_lines_visible = 2
+	_use_rec_btn = _small_button(b, "Use recommended", _use_recommended)
+	_clear_build_btn = _small_button(b, "Clear", _clear_build)
+	_autobuy_box = CheckBox.new()
+	_autobuy_box.text = "Autobuy"
+	_autobuy_box.tooltip_text = "Buys your build automatically whenever you are in your base or dead"
+	_autobuy_box.focus_mode = Control.FOCUS_NONE
+	_autobuy_box.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	_autobuy_box.button_pressed = bool(Game.prefs.autobuy)
+	_autobuy_box.toggled.connect(_on_autobuy)
+	b.add_child(_autobuy_box)
+
 	var h := HBoxContainer.new()
 	h.add_theme_constant_override("separation", 12)
-	panel.add_child(h)
-	_label(h, "YOUR ITEMS", 13, MUTED)
+	v.add_child(h)
+	var il := _label(h, "YOUR ITEMS", 13, MUTED)
+	il.custom_minimum_size.x = ROW_LABEL_W
 	_inv = InvRow.new(self)
 	h.add_child(_inv)
 	_sell_btn = Button.new()
@@ -889,6 +1239,17 @@ func _label(parent: Node, text: String, font_size: int, col: Color) -> Label:
 	l.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	parent.add_child(l)
 	return l
+
+
+func _small_button(parent: Node, text: String, cb: Callable) -> Button:
+	var b := Button.new()
+	b.text = text
+	b.focus_mode = Control.FOCUS_NONE
+	b.size_flags_vertical = Control.SIZE_SHRINK_CENTER
+	b.add_theme_font_size_override("font_size", 13)
+	b.pressed.connect(cb)
+	parent.add_child(b)
+	return b
 
 
 static func _box(bg: Color, border := Color(0, 0, 0, 0), width := 0, radius := 4, margin := 8.0, margin_y := -1.0) -> StyleBoxFlat:
@@ -921,12 +1282,13 @@ func _make_theme() -> Theme:
 	t.set_color("font_disabled_color", "Button", Color(0.45, 0.47, 0.52))
 
 	t.set_type_variation(&"ShopFilter", &"Button")
-	var on := _box(Color(GOLD, 0.13), GOLD, 0, 3, 10, 2)
+	# 1 px vertical padding: all categories still fit above the build strip.
+	var on := _box(Color(GOLD, 0.13), GOLD, 0, 3, 10, 1)
 	on.border_width_left = 3
 	var on_hover := on.duplicate() as StyleBoxFlat
 	on_hover.bg_color = Color(GOLD, 0.2)
-	t.set_stylebox("normal", &"ShopFilter", _box(Color(0, 0, 0, 0), Color(0, 0, 0, 0), 0, 3, 10, 2))
-	t.set_stylebox("hover", &"ShopFilter", _box(Color(1, 1, 1, 0.07), Color(0, 0, 0, 0), 0, 3, 10, 2))
+	t.set_stylebox("normal", &"ShopFilter", _box(Color(0, 0, 0, 0), Color(0, 0, 0, 0), 0, 3, 10, 1))
+	t.set_stylebox("hover", &"ShopFilter", _box(Color(1, 1, 1, 0.07), Color(0, 0, 0, 0), 0, 3, 10, 1))
 	t.set_stylebox("pressed", &"ShopFilter", on)
 	t.set_stylebox("hover_pressed", &"ShopFilter", on_hover)
 	t.set_color("font_color", &"ShopFilter", Color(0.78, 0.8, 0.85))
@@ -960,6 +1322,23 @@ func _make_theme() -> Theme:
 	t.set_color("font_hover_color", &"ShopLink", GOLD.lightened(0.2))
 	t.set_font_size("font_size", &"ShopLink", 13)
 
+	var cb := _box(Color(0, 0, 0, 0), Color(0, 0, 0, 0), 0, 4, 6, 4)
+	var cb_hover := _box(Color(1, 1, 1, 0.07), Color(0, 0, 0, 0), 0, 4, 6, 4)
+	for s in ["normal", "pressed", "disabled"]:
+		t.set_stylebox(s, "CheckBox", cb)
+	for s in ["hover", "hover_pressed"]:
+		t.set_stylebox(s, "CheckBox", cb_hover)
+	t.set_stylebox("focus", "CheckBox", StyleBoxEmpty.new())
+	# The default check box icons are barely visible on the dark shop.
+	t.set_icon("unchecked", "CheckBox", _check_icon(false))
+	t.set_icon("checked", "CheckBox", _check_icon(true))
+	t.set_constant("h_separation", "CheckBox", 6)
+	t.set_color("font_color", "CheckBox", Color(0.78, 0.8, 0.85))
+	t.set_color("font_hover_color", "CheckBox", Color.WHITE)
+	t.set_color("font_pressed_color", "CheckBox", GOLD)
+	t.set_color("font_hover_pressed_color", "CheckBox", GOLD.lightened(0.2))
+	t.set_font_size("font_size", "CheckBox", 14)
+
 	t.set_stylebox("normal", "LineEdit", _box(Color(0.03, 0.035, 0.05), BORDER, 1, 4, 8, 5))
 	t.set_stylebox("focus", "LineEdit", _box(Color(0, 0, 0, 0), GOLD.darkened(0.2), 1, 4, 8, 5))
 	t.set_color("font_color", "LineEdit", TEXT)
@@ -984,6 +1363,29 @@ func _make_theme() -> Theme:
 	t.set_font_size("italics_font_size", "RichTextLabel", 15)
 	t.set_constant("line_separation", "RichTextLabel", 2)
 	return t
+
+
+## A 16x16 check box icon: a dark rounded box, or a gold one with a check mark.
+static func _check_icon(on: bool) -> ImageTexture:
+	var img := Image.create(16, 16, false, Image.FORMAT_RGBA8)
+	var fill := GOLD if on else Color(0.03, 0.035, 0.05)
+	var edge := GOLD if on else Color(0.5, 0.52, 0.58)
+	var a := Vector2(4.2, 8.3)
+	var b := Vector2(6.9, 11.0)
+	var c := Vector2(11.8, 5.2)
+	for y in 16:
+		for x in 16:
+			var p := Vector2(x + 0.5, y + 0.5)
+			# Signed distance to a 14x14 box with 3 px rounded corners.
+			var q := (p - Vector2(8, 8)).abs() - Vector2(4, 4)
+			var d := Vector2(maxf(q.x, 0.0), maxf(q.y, 0.0)).length() + minf(maxf(q.x, q.y), 0.0) - 3.0
+			var col := edge if d > -1.5 else fill
+			col.a *= clampf(0.5 - d, 0.0, 1.0)
+			if on:
+				var dc := minf(Geometry2D.get_closest_point_to_segment(p, a, b).distance_to(p), Geometry2D.get_closest_point_to_segment(p, b, c).distance_to(p))
+				col = col.lerp(Color(0.14, 0.1, 0.02), clampf(1.9 - dc, 0.0, 1.0))
+			img.set_pixel(x, y, col)
+	return ImageTexture.create_from_image(img)
 
 
 # ---------------------------------------------------------- inner views ---
@@ -1027,7 +1429,9 @@ class Cells extends Control:
 			var i := cell_at(ev.position)
 			if i >= 0 and (ev.button_index == MOUSE_BUTTON_LEFT or ev.button_index == MOUSE_BUTTON_RIGHT):
 				accept_event()
-				shop._cell_clicked(self, cells[i], ev.button_index == MOUSE_BUTTON_RIGHT, ev.double_click)
+				var right: bool = ev.button_index == MOUSE_BUTTON_RIGHT
+				var add: bool = not right and (ev.is_command_or_control_pressed() or ev.shift_pressed)
+				shop._cell_clicked(self, cells[i], right, ev.double_click, add)
 
 	func _notification(what: int) -> void:
 		if what == NOTIFICATION_MOUSE_EXIT and hover >= 0:
@@ -1296,3 +1700,94 @@ class InvRow extends Cells:
 			var r := Rect2(drag_pos - Vector2(S, S) * 0.5, Vector2(S, S))
 			draw_rect(r.grow(3.0), Color(0, 0, 0, 0.5))
 			ItemUI.draw_icon(self, r, it)
+
+
+## Your build: up to BUILD_MAX small icons in the order autobuy buys them. Click one for details,
+## drag it onto another place to move it there, right-click removes it.
+class BuildRow extends Cells:
+	const S := 32.0
+	const GAP := 5.0
+	var count := 0          # cells in use; the rest are empty places
+	var drag_from := -1
+	var dragging := false
+	var drag_pos := Vector2.ZERO
+
+	func _init(s: Shop) -> void:
+		super(s)
+		custom_minimum_size = Vector2(BUILD_MAX * (S + GAP) - GAP + 4.0, S + 4.0)
+		for i in BUILD_MAX:
+			cells.append({"r": Rect2(2.0 + i * (S + GAP), 2.0, S, S), "id": "", "index": i})
+
+	func set_ids(list: Array) -> void:
+		count = mini(list.size(), BUILD_MAX)
+		for i in cells.size():
+			cells[i].id = str(list[i]) if i < count else ""
+		if hover >= count:
+			hover = -1
+		if drag_from >= count:
+			drag_from = -1
+			dragging = false
+		queue_redraw()
+
+	func cell_at(p: Vector2) -> int:
+		for i in count:
+			if cells[i].r.has_point(p):
+				return i
+		return -1
+
+	## The place a dragged entry moves to: the one under the cursor, clamped to the list.
+	func drop_index(p: Vector2) -> int:
+		return clampi(floori((p.x - 2.0 + GAP * 0.5) / (S + GAP)), 0, count - 1)
+
+	func _gui_input(ev: InputEvent) -> void:
+		super(ev)
+		# While the button is held, Godot keeps sending motion/release here even outside the row.
+		if ev is InputEventMouseButton and ev.button_index == MOUSE_BUTTON_LEFT:
+			if ev.pressed:
+				var i := cell_at(ev.position)
+				drag_from = i if i >= 0 and count > 1 else -1
+				return
+			# Dropping it far away from the row cancels the drag.
+			if dragging and Rect2(Vector2.ZERO, size).grow(24.0).has_point(ev.position):
+				var to := drop_index(ev.position)
+				if to != drag_from:
+					shop._move_build(drag_from, to)
+			drag_from = -1
+			dragging = false
+			queue_redraw()
+		elif ev is InputEventMouseMotion and drag_from >= 0:
+			drag_pos = ev.position
+			if not dragging and drag_pos.distance_to(cells[drag_from].r.get_center()) > 10.0:
+				dragging = true
+			if dragging:
+				queue_redraw()
+
+	func _get_tooltip(at: Vector2) -> String:
+		var i := cell_at(at)
+		if i >= 0:
+			return "#%d:%s" % [i, cells[i].id]
+		for c in cells:
+			if c.r.has_point(at):
+				return shop._build_hint()   # an empty place: the default text tooltip
+		return ""
+
+	func _make_custom_tooltip(for_text: String) -> Object:
+		if for_text.begins_with("#"):
+			return shop._build_tooltip(int(for_text.substr(1).get_slice(":", 0)))
+		return null
+
+	func _draw() -> void:
+		for i in cells.size():
+			shop._draw_build_cell(self, cells[i].r, i, i == hover and not dragging, dragging and i == drag_from)
+		if not dragging:
+			return
+		var to := drop_index(drag_pos)
+		if to != drag_from:
+			var r: Rect2 = cells[to].r
+			var x := r.end.x + GAP * 0.5 if to > drag_from else r.position.x - GAP * 0.5
+			draw_line(Vector2(x, 0.0), Vector2(x, size.y), GOLD, 3.0)
+		var it = Game.items.get(cells[drag_from].id)
+		if it != null:
+			var dr := Rect2(drag_pos - Vector2(S, S) * 0.5, Vector2(S, S))
+			draw_rect(dr.grow(3.0), Color(0, 0, 0, 0.5))
+			ItemUI.draw_icon(self, dr, it)
