@@ -880,7 +880,7 @@ func aim_ability(slot: String):
 	if slot.begins_with("i"):
 		var it = local_champion.item_def(int(slot.substr(1)))
 		return it.active if it != null else null
-	return local_champion.def.abilities.get(slot)
+	return local_champion.active_ability(slot)
 
 
 func _right_click(with_fx: bool) -> void:
@@ -1012,7 +1012,8 @@ func _draw_indicator(n: Node2D) -> void:
 					a = TAU * k / count if spread >= TAU - 0.01 else -spread * 0.5 + spread * k / (count - 1)
 				_draw_lane(n, p, dir.rotated(a), rng, maxf(float(ind.get("width", 24.0)), 8.0), col)
 		"dash":
-			var length := minf(to.length(), float(ind.get("length", 350.0)))
+			var full_len := Effects.num(ind.get("length", 350.0), {"caster": c, "target": c, "rank": maxi(int(c.ranks.get(aim_slot, 1)), 1)}, 350.0)
+			var length := full_len if ind.get("full", false) else minf(to.length(), full_len)
 			var tip := p + dir * length
 			_draw_lane(n, p, dir, length, c.radius * 2.0, col)
 			if r > 0.0:

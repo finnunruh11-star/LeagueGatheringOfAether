@@ -28,10 +28,12 @@ const F_UNTARGETABLE := 262144
 const F_REVEAL0 := 524288     # revealed to team 0 ("reveal" effect); F_REVEAL0 << team
 const F_REVEAL1 := 1048576
 const F_DEBUFF := 2097152     # a stat buff applied by an enemy (shred, curses, slows of attack speed...)
-const NET_BASE := 9
+const NET_BASE := 10
 const HARD_CC := ["stun", "root", "slow", "silence", "dot", "grievous"]
 const CC_TYPES := ["stun", "root", "slow", "silence"]
 const COMBAT_TIME := 3.0
+const BOND_CAP := 2.0       # Bond of Life can't grow past this many times max HP (unless an effect sets "max")
+const BOND_COLOR := Color(0.9, 0.18, 0.38)
 
 var world: World
 var net_id := 0
@@ -55,6 +57,7 @@ var pre_mult := {}          # stats before multipliers (only filled when some mu
 var hp := 100.0
 var mana := 0.0
 var shield := 0.0
+var bond := 0.0             # Bond of Life: healing pays this off first instead of restoring HP
 var flags := 0
 var dead := false
 var statuses: Array = []
@@ -70,6 +73,7 @@ var move_goal = null
 var attack_target = null
 var attack_cd := 0.0
 var attack_def := {"ranged": false, "speed": 1000.0, "color": Color.WHITE, "size": 6.0, "sprite": "", "char": "", "on_hit": []}
+var own_attack = null       # the unit's own basic attack while a buff's "attack" overrides attack_def
 var forced = null
 var path := PackedVector2Array()
 var path_goal := Vector2.INF
@@ -309,19 +313,26 @@ func enter_combat() -> void:
 func perform_attack(t: Unit) -> void:
 	attack_cd = 1.0 / maxf(stats.attack_speed, 0.05)
 	set_anim_lock(ANIM_ATTACK, minf(0.3, attack_cd * 0.8))
+	var a: Dictionary = attack_def
 	var dmg := attack_damage_against(t)
+	if a.has("damage"):
+		dmg = maxf(Effects.num(a.damage, attack_ctx(t, a), dmg), 0.0)
+	# Decided when the attack starts, like its damage (not when a projectile lands).
+	var pierce: bool = a.has("pierce") and Effects.num(a.pierce, attack_ctx(t, a), 0.0) != 0.0
 	var crit: bool = stats.crit_chance > 0.0 and randf() < stats.crit_chance
 	if crit:
 		dmg *= stats.crit_damage
 	trigger("attack_launch", t, null, {"crit_hit": crit})
-	if attack_def.ranged:
+	if a.ranged:
 		var p = world.spawn("projectile", {
 			"pos": muzzle(), "dir": (t.global_position - global_position).normalized(), "team": team,
-			"radius": attack_def.size * (1.4 if crit else 1.0), "color": attack_def.color, "sprite": attack_def.sprite, "char": attack_def.char,
+			"radius": a.size * (1.4 if crit else 1.0) * (1.3 if pierce else 1.0), "color": a.color, "sprite": a.sprite, "char": a.char,
 		})
-		p.init_attack(self, t, dmg, attack_def.speed, crit)
+		p.init_attack(self, t, dmg, a.speed, crit)
+		p.attack = a
+		p.attack_pierce = pierce
 	else:
-		land_attack(t, dmg, crit)
+		land_attack(t, dmg, crit, a, pierce)
 
 
 ## Where ranged attacks leave from.
@@ -334,34 +345,61 @@ func attack_damage_against(_t) -> float:
 
 
 ## Visual style of this unit's basic-attack hits (see Vfx / World._hit_fx).
-func attack_hit_style() -> String:
-	var v := str(attack_def.get("hit_vfx", ""))
+func attack_hit_style(a = null) -> String:
+	var ad: Dictionary = a if a is Dictionary else attack_def
+	var v := str(ad.get("hit_vfx", ""))
 	if v != "":
 		return v
 	if is_structure:
 		return "burst"
-	if attack_def.ranged:
+	if ad.ranged:
 		return "twinkle" if is_champion else "spark"
 	return "slash" if is_champion or self is Summon else "spark"
 
 
-func land_attack(t, dmg: float, crit := false) -> void:
+## `a` is the attack the hit was fired with (projectiles keep it even if a buff ended meanwhile).
+## `shot_dir`: the direction a projectile was flying when it hit (pierce follows it).
+func land_attack(t, dmg: float, crit := false, a = null, pierce := false, shot_dir := Vector2.ZERO) -> void:
 	if not is_instance_valid(t) or t.dead:
 		return
+	var ad: Dictionary = a if a is Dictionary else attack_def
 	var dir: Vector2 = t.global_position - global_position
-	t.take_damage(dmg, self, "physical", {"vfx": attack_hit_style(), "col": attack_def.color, "dir": dir.angle(), "attack": true, "crit": crit})
-	if not attack_def.on_hit.is_empty():
-		var c := attack_ctx(t)
+	var dtype := Effects.damage_type(ad.get("damage_type"), attack_ctx(t, ad), "physical")
+	t.take_damage(dmg, self, dtype, {"vfx": attack_hit_style(ad), "col": ad.color, "dir": dir.angle(), "attack": true, "crit": crit})
+	if pierce:
+		_pierce(t, dmg, dtype, ad, crit, shot_dir)
+	if not ad.on_hit.is_empty():
+		var c := attack_ctx(t, ad)
 		c.crit_hit = crit
 		c.onhit = true
-		Effects.run(attack_def.on_hit, c)
+		Effects.run(ad.on_hit, c)
 	on_attack_hit(t, crit)
 
 
-func attack_ctx(t) -> Dictionary:
+## A piercing attack also hits every other enemy in a line behind its target, for the same
+## damage (without on-hit effects). The line continues the shot's path (`shot_dir`), or for
+## melee hits the line from the attacker through the target.
+func _pierce(t: Unit, dmg: float, dtype: String, a: Dictionary, crit: bool, shot_dir := Vector2.ZERO) -> void:
+	var at: Vector2 = t.global_position
+	var dir := shot_dir.normalized() if shot_dir != Vector2.ZERO else (at - global_position).normalized()
+	if dir == Vector2.ZERO:
+		dir = Vector2(facing, 0)
+	var ctx := attack_ctx(t, a)
+	var end := at + dir * Effects.num(a.get("pierce_range"), ctx, 350.0)
+	world.fx("beam", {"from": at, "to": end, "color": a.color, "width": 10.0, "team": team})
+	for u in world.query_line(at, end, Effects.num(a.get("pierce_width"), ctx, 60.0) * 0.5, team):
+		if u != t:
+			u.take_damage(dmg, self, dtype, {"vfx": attack_hit_style(a), "col": a.color, "dir": dir.angle(), "crit": crit, "aoe": true})
+
+
+func attack_ctx(t, a = null) -> Dictionary:
 	var tp: Vector2 = t.global_position if is_instance_valid(t) else global_position
-	return {"caster": self, "team": team, "target": t, "pos": tp, "origin": global_position, "src_slot": "attack",
+	var c := {"caster": self, "team": team, "target": t, "pos": tp, "origin": global_position, "src_slot": "attack",
 		"dir": (tp - global_position).normalized(), "ability": "attack", "char": char_id, "color": color, "range": stats.attack_range}
+	var ad: Dictionary = a if a is Dictionary else attack_def
+	if ad.has("rank"):
+		c.rank = ad.rank
+	return c
 
 
 func on_attack_hit(_t, _crit := false) -> void:
@@ -384,6 +422,8 @@ func take_damage(amount: float, source = null, dtype := "physical", hit := {}) -
 	if dead or puppet or amount <= 0.0:
 		return 0.0
 	if flags & (F_STASIS | F_INVULN) or has_status("invulnerable") or has_status("stasis") or is_protected():
+		if not is_protected() and is_instance_valid(source) and source != self and source.team != team:
+			trigger("blocked", source, null, _hit_vars(hit, amount, dtype))
 		return 0.0
 	var src = source if is_instance_valid(source) and source != self else null
 	var raw := bool(hit.get("raw", false))
@@ -482,7 +522,9 @@ func _cheat_death() -> bool:
 
 
 ## Heals after healing modifiers (heal_received, grievous wounds). Returns the amount healed.
-func heal(amount: float, _source = null, show := true) -> float:
+## Bond of Life soaks up the (already modified) heal before any HP is restored, and while
+## heal_to_bond > 0 the heal turns into Bond of Life instead (unless `convert` is false).
+func heal(amount: float, _source = null, show := true, convert := true) -> float:
 	if dead or puppet or amount <= 0.0:
 		return 0.0
 	amount *= 1.0 + stats.get("heal_received", 0.0)
@@ -491,6 +533,18 @@ func heal(amount: float, _source = null, show := true) -> float:
 		if s.type == "grievous":
 			g = maxf(g, s.amount)
 	amount *= 1.0 - clampf(g, 0.0, 1.0)
+	var conv := clampf(stats.get("heal_to_bond", 0.0), 0.0, 1.0)
+	if convert and conv > 0.0:
+		if Game.debug_log and amount >= 0.5:
+			print("[bond] t=%.2f %s heal %.1f converted to bond" % [world.time, display_name, amount * conv])
+		add_bond(amount * conv)
+		return 0.0
+	if bond > 0.0 and amount > 0.0:
+		var paid := minf(bond, amount)
+		amount -= paid
+		if Game.debug_log:
+			print("[bond] t=%.2f %s heal pays off %.1f bond (%.1f left to heal)" % [world.time, display_name, paid, amount])
+		set_bond(bond - paid)
 	var before := hp
 	hp = minf(hp + amount, stats.max_hp)
 	if Game.debug_log and hp - before >= 0.5:
@@ -498,6 +552,29 @@ func heal(amount: float, _source = null, show := true) -> float:
 	if show and hp - before >= 1.0 and (is_champion or self is Summon):
 		world.fx("heal", {"p": global_position, "a": hp - before, "v": net_id, "r": radius})
 	return hp - before
+
+
+func add_bond(amount: float, cap := -1.0) -> void:
+	set_bond(bond + amount, cap)
+
+
+## Sets Bond of Life (clamped to 0..cap; default cap BOND_CAP x max HP). Paying it off
+## completely fires the "bond_cleared" trigger.
+func set_bond(value: float, cap := -1.0) -> void:
+	if dead or puppet:
+		return
+	var before := bond
+	if value > before:
+		var limit: float = cap if cap >= 0.0 else float(stats.max_hp) * BOND_CAP
+		bond = maxf(minf(value, limit), before)
+	else:
+		bond = maxf(value, 0.0)
+	if bond < 0.01:
+		bond = 0.0
+	if Game.debug_log and absf(bond - before) >= 0.5:
+		print("[bond] t=%.2f %s bond %.1f -> %.1f (%.0f%% max HP)" % [world.time, display_name, before, bond, 100.0 * bond / maxf(stats.max_hp, 1.0)])
+	if before > 0.0 and bond <= 0.0:
+		trigger("bond_cleared", self)
 
 
 func restore_mana(amount: float) -> void:
@@ -516,6 +593,7 @@ func die(killer = null) -> void:
 	move_goal = null
 	velocity = Vector2.ZERO
 	shield = 0.0
+	bond = 0.0
 	anim = ANIM_DEAD
 	flags = F_DEAD
 	if is_structure:
@@ -539,6 +617,8 @@ func add_status(s: Dictionary, source = null, key := "") -> void:
 	if is_structure and not s.type in ["shield", "buff", "hot", "mark"]:
 		return
 	if s.type in CC_TYPES and (has_status("stasis") or has_status("invulnerable")) and source != self:
+		if is_instance_valid(source) and source.team != team:
+			trigger("blocked", source, null, {"cc": s.type})
 		return
 	s["source"] = source if is_instance_valid(source) else null
 	s["key"] = key
@@ -667,7 +747,26 @@ func recompute_stats() -> void:
 		mana += st.max_mana - old_mana
 	mana = clampf(mana, 0.0, st.max_mana)
 	set_radius(base_radius * st.size)
+	_refresh_attack()
 	stats_dirty = false
+
+
+## Buffs with an "attack" override replace the basic attack while they last (the newest wins).
+func _refresh_attack() -> void:
+	var ov = null
+	for s in statuses:
+		if s.type == "buff" and s.has("attack"):
+			ov = s.attack
+	if ov == null:
+		if own_attack != null:
+			attack_def = own_attack
+			own_attack = null
+		return
+	if own_attack == null:
+		own_attack = attack_def
+	var a: Dictionary = own_attack.duplicate()
+	a.merge(ov, true)
+	attack_def = a
 
 
 func set_radius(r: float) -> void:
@@ -778,7 +877,7 @@ func _update_anim() -> void:
 # ---------------------------------------------------------------- network ---
 
 func net_state() -> PackedFloat32Array:
-	return PackedFloat32Array([global_position.x, global_position.y, hp, stats.max_hp, shield, flags, facing, anim, stats.size])
+	return PackedFloat32Array([global_position.x, global_position.y, hp, stats.max_hp, shield, flags, facing, anim, stats.size, bond])
 
 
 func apply_net_state(s: PackedFloat32Array) -> void:
@@ -799,6 +898,7 @@ func apply_net_state(s: PackedFloat32Array) -> void:
 	if absf(stats.size - s[8]) > 0.001:
 		stats.size = s[8]
 		set_radius(base_radius * s[8])
+	bond = s[9]
 	dead = flags & F_DEAD != 0
 
 
@@ -1101,6 +1201,8 @@ func _draw_overlay(n: Node2D) -> void:
 	n.draw_rect(Rect2(x, top, hw, maxf(h * 0.35, 1.0)), col.lightened(0.35))
 	if shield > 0.0:
 		n.draw_rect(Rect2(x + hw, top, w * shield / total, h), Color(0.92, 0.94, 1.0))
+	if bond > 0.0:
+		_draw_bond(n, Rect2(x, top, w, h))
 	if is_champion:
 		var v := 100.0
 		while v < total:
@@ -1112,6 +1214,19 @@ func _draw_overlay(n: Node2D) -> void:
 	_draw_status_icons(n, icon_y(top))
 
 
+## Bond of Life: a crimson strip along the bottom of the health bar (full width = 100% max HP),
+## with a brighter line for anything above 100% and a pulsing outline once it reaches 100%.
+func _draw_bond(n: CanvasItem, r: Rect2) -> void:
+	var frac := bond / maxf(float(stats.max_hp), 1.0)
+	var sh := maxf(r.size.y * 0.45, 2.0)
+	n.draw_rect(Rect2(r.position.x, r.end.y - sh, r.size.x * minf(frac, 1.0), sh), BOND_COLOR)
+	if frac > 1.0:
+		n.draw_rect(Rect2(r.position.x, r.end.y - sh, r.size.x * minf(frac - 1.0, 1.0), maxf(sh * 0.4, 1.0)), BOND_COLOR.lightened(0.55))
+	if frac >= 1.0:
+		var pulse := 0.55 + 0.45 * sin(life * 8.0)
+		n.draw_rect(r.grow(1.5), Color(BOND_COLOR.lightened(0.3), pulse), false, 1.5)
+
+
 func _draw_status_icons(n: Node2D, y: float) -> void:
 	var icons := []
 	for pair in [[F_STUN, "stun"], [F_ROOT, "root"], [F_SILENCE, "silence"], [F_SLOW, "slow"], [F_DOT, "dot"],
@@ -1120,6 +1235,8 @@ func _draw_status_icons(n: Node2D, y: float) -> void:
 			icons.append(pair[1])
 	if shield > 0.0:
 		icons.append("shield")
+	if bond > 0.0:
+		icons.append("bond")
 	var x := -(icons.size() - 1) * 8.0
 	for ic in icons:
 		StatusIcons.draw(n, Vector2(x, y), ic)

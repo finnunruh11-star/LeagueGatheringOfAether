@@ -39,6 +39,7 @@ const DEFAULT_STATS := {
 	"omnivamp": 0.0,             # heals % of all damage
 	"heal_power": 0.0,           # heal & shield power of heals/shields you give
 	"heal_received": 0.0,        # bonus healing & shielding you receive
+	"heal_to_bond": 0.0,         # fraction of healing received that becomes Bond of Life instead (no HP restored)
 	"tenacity": 0.0,             # shortens stuns/roots/silences/slows
 	"slow_resist": 0.0,
 	"vision": 900.0,             # sight radius (fog of war)
@@ -58,9 +59,11 @@ const EFFECT_TYPES := [
 	"cooldown", "text", "sound",
 	"mana", "gold", "mark", "remove", "counter", "stasis", "stealth", "spellshield", "grievous",
 	"untargetable", "modify_damage", "transform", "vfx", "attack_reset", "item_cooldown",
-	"shield_break", "fire_event", "passive_cooldown", "reveal", "level_up", "xp",
+	"shield_break", "fire_event", "passive_cooldown", "reveal", "level_up", "xp", "bond_of_life",
 ]
 const NESTED_KEYS := ["effects", "on_hit", "on_end", "on_expire", "on_death", "options"]
+## Optional basic-attack keys evaluated when the attack happens (numbers or expressions).
+const ATTACK_EXTRA_KEYS := ["damage", "damage_type", "pierce", "pierce_range", "pierce_width"]
 const ITEM_RARITIES := ["basic", "epic", "legendary", "mythic", "boots", "starter", "consumable", "jungle", "transform"]
 
 
@@ -335,6 +338,9 @@ static func build_character(pack: Dictionary, errors: PackedStringArray):
 		"on_hit": atk.get("on_hit", []),
 		"char": id,
 	}
+	for k in ATTACK_EXTRA_KEYS:
+		if atk.has(k):
+			def.attack[k] = atk[k]
 	_validate(def.attack.on_hit, id + " attack.on_hit", errors)
 
 	var passive = raw.get("passive", null)
@@ -376,6 +382,34 @@ static func build_character(pack: Dictionary, errors: PackedStringArray):
 	return def
 
 
+## A buff's "attack" override: the basic-attack keys it sets (same names as a character's
+## "attack"), converted to the attack's internal form. Keys it doesn't set keep the unit's own.
+static func attack_override(raw: Dictionary, char_id: String) -> Dictionary:
+	var out := {}
+	for k in raw:
+		var v = raw[k]
+		match str(k):
+			"ranged":
+				out.ranged = bool(v)
+			"projectile_speed":
+				out.speed = float(v)
+			"projectile_color":
+				out.color = parse_color(v, Color.WHITE)
+			"projectile_size":
+				out.size = float(v)
+			"projectile_sprite":
+				out.sprite = str(v)
+				out.char = char_id
+			"hit_vfx":
+				out.hit_vfx = str(v)
+			"on_hit":
+				out.on_hit = v if v is Array else [v]
+			_:
+				if str(k) in ATTACK_EXTRA_KEYS:
+					out[str(k)] = v
+	return out
+
+
 static func _ability(a: Dictionary, slot: String, def: Dictionary, errors: PackedStringArray) -> Dictionary:
 	var ab := a.duplicate(true)
 	ab.slot = slot
@@ -403,6 +437,17 @@ static func _ability(a: Dictionary, slot: String, def: Dictionary, errors: Packe
 	# Indicator hint: radius of the first area/zone effect, if any.
 	ab.indicator_radius = _find_radius(effects)
 	ab.indicator = _indicator(effects)
+	# A recast is a second ability on the same slot, usable for a while after casting this one.
+	ab.erase("recast")
+	if a.get("recast") is Dictionary and slot in SLOTS:
+		var rc := _ability(a.recast, slot, def, errors)
+		rc.erase("recast")
+		rc.cooldown = a.recast.get("cooldown", 0.5)
+		if not a.recast.has("auto_rank"):
+			rc.auto_rank = ab.auto_rank
+		ab.recast = rc
+	elif a.has("recast"):
+		errors.append("%s %s: \"recast\" must be an ability { ... } on q, w, e or r" % [def.id, slot])
 	return ab
 
 
@@ -440,7 +485,8 @@ static func _indicator(list) -> Dictionary:
 			"beam":
 				return {"shape": "line", "width": _n(e.get("width"), 70.0), "count": 1, "spread": 0.0}
 			"dash":
-				return {"shape": "dash", "length": _n(e.get("distance"), 350.0), "radius": _find_radius(e.get("on_end"))}
+				return {"shape": "dash", "length": e.get("distance", 350.0), "radius": _find_radius(e.get("on_end")),
+					"full": str(e.get("to", "aim")) == "direction"}
 			"area":
 				var r := _n(e.get("radius"), 150.0) + _n(e.get("scatter"), 0.0)
 				if _n(e.get("angle"), 360.0) < 359.0:
@@ -492,6 +538,8 @@ static func _validate(list, where: String, errors: PackedStringArray) -> void:
 		var t := str(e.get("type", ""))
 		if not EFFECT_TYPES.has(t):
 			errors.append("%s: unknown effect type '%s'" % [where, t])
+		if e.get("attack") is Dictionary and e.attack.has("on_hit"):
+			_validate(e.attack.on_hit, where + " > attack.on_hit", errors)
 		if e.get("triggers") is Array:
 			for tr in e.triggers:
 				if tr is Dictionary:

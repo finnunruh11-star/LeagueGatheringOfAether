@@ -211,6 +211,9 @@ func _show_details(id: String) -> void:
 		if ab == null:
 			continue
 		t += "[b][color=#7fc8ff]%s - %s[/color][/b]  [color=#9aa3b5](%ss)[/color]\n%s\n\n" % [slot.to_upper(), ab.name, _per_rank(ab.cooldown), ab.description]
+		if ab.get("recast") is Dictionary:
+			t += "[b][color=#f080ff]%s recast - %s[/color][/b]  [color=#9aa3b5](%ss)[/color]\n%s\n\n" % [slot.to_upper(), ab.recast.name,
+				_per_rank(ab.recast.cooldown), ab.recast.description]
 	details.text = t
 
 

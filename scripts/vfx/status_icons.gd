@@ -35,3 +35,6 @@ static func draw(n: CanvasItem, c: Vector2, kind: String) -> void:
 		"shield":
 			n.draw_circle(c, 4.5, Color(0.75, 0.88, 1.0, 0.6))
 			n.draw_arc(c, 4.5, 0, TAU, 12, Color(0.95, 0.97, 1.0), 1.5)
+		"bond":
+			n.draw_arc(c + Vector2(-2, 0), 3.2, 0, TAU, 10, Unit.BOND_COLOR.lightened(0.2), 1.8)
+			n.draw_arc(c + Vector2(2, 0), 3.2, 0, TAU, 10, Unit.BOND_COLOR.lightened(0.2), 1.8)

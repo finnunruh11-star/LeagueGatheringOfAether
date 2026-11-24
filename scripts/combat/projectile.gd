@@ -16,6 +16,8 @@ var source = null
 var target = null
 var damage := 0.0
 var crit := false
+var attack = null           # basic attacks: the attack definition it was fired with
+var attack_pierce := false
 var speed := 1000.0
 var effect := {}
 var ctx := {}
@@ -144,7 +146,7 @@ func _attack_step(delta: float) -> void:
 	var step := speed * delta
 	if to.length() <= step + target.radius * 0.5:
 		if is_instance_valid(source):
-			source.land_attack(target, damage, crit)
+			source.land_attack(target, damage, crit, attack, attack_pierce, to if to.length() > 1.0 else dir)
 		else:
 			target.take_damage(damage, null, "physical", {"attack": true})
 		world.despawn(self)

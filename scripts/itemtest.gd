@@ -9,6 +9,7 @@ extends Node
 ##   cast:q         A casts q at the enemy (cooldown/mana reset)  enemy_cast:q    the enemy casts q at A
 ##   cast_now:q     like cast, without waiting afterwards         heal:X          A is healed for X (no source)
 ##   try:q          A casts q without resetting its cooldown (prints whether it worked)   pos   print A's and B's positions
+##   side:D         A jumps D units sideways (perpendicular to the line to the enemy)
 ##   behind         spawn a training dummy behind the enemy (seen from A)
 ##   net            print what clients would see of A (its network snapshot applied to a copy)
 ##   aim:q          show A's aiming indicator for q toward the enemy (aim: hides it) - for screenshots
@@ -87,6 +88,8 @@ func _ready() -> void:
 				await _wait(0.05)
 			"pos":
 				print("[itemtest] pos A=%s B=%s dist=%.0f" % [str(a.global_position.round()), str(b.global_position.round()), a.global_position.distance_to(b.global_position)])
+			"side":
+				a.teleport(a.global_position + (b.global_position - a.global_position).normalized().orthogonal() * v)
 			"heal":
 				print("[itemtest] A is healed for %d -> healed %.1f" % [int(v), a.heal(v, null, true)])
 				await _wait(0.1)

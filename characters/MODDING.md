@@ -35,6 +35,13 @@ Lines starting with `//` are treated as comments.
 
 A string ability (`"w": "fireball"`) loads `abilities/fireball.json`.
 
+Optional `attack` keys (numbers or expressions, checked when each attack starts):
+`damage` replaces the attack's damage (default: your AD), e.g. `"0.6 * ad + 0.3 * ap"`;
+`damage_type` "physical" (default) / "magic" / "true" (or an expression returning one);
+`pierce` (true or an expression) also hits every enemy in a line behind the target for the same damage
+(no on-hit), `pierce_range` 350 long and `pierce_width` 60 wide.
+A `buff` can swap your basic attack for its duration (see `buff`'s `attack`).
+
 ### Stats
 Percent stats are fractions (`0.3` = 30%). Regen is per second.
 
@@ -53,6 +60,7 @@ Percent stats are fractions (`0.3` = 30%). Regen is per second.
 | `magic_pen`, `magic_pen_percent` | 0, 0 | flat / percent magic resist ignored |
 | `lifesteal`, `omnivamp` | 0, 0 | heal % of basic-attack (and on-hit) damage / of all damage |
 | `heal_power`, `heal_received` | 0, 0 | boosts heals & shields you give / receive |
+| `heal_to_bond` | 0 | while above 0, healing you receive restores no HP; you gain that fraction of it as Bond of Life instead |
 | `tenacity`, `slow_resist` | 0, 0 | shortens stuns/roots/silences/slows / weakens slows |
 | `size`, `damage_mult`, `damage_taken_mult`, `cooldown_mult` | 1 | fun multipliers (0.5 cooldown_mult = half cooldowns) |
 | `vision` | 900 | sight radius for fog of war (minions 650, towers 900, summons 600) |
@@ -80,6 +88,14 @@ All stats can be changed temporarily with the `buff` effect.
   so `{"type": "shield"}` shields yourself. Inside projectiles/areas/zones the target is whoever got hit.
 
 Players hold Q/W/E/R to see the range indicator and release to cast.
+
+#### Recasts
+Give an ability a `"recast": { ... }` (any ability keys) to make it castable again for a while:
+after casting, the slot turns into the recast for `window` seconds (default 3) - or, with
+`"status": "id"`, for as long as you have that status (apply it in the ability's effects) - up to
+`charges` times (default 1, `0` = unlimited). Each recast uses its own `cooldown` (default 0.5), also
+before the first one. The ability's full cooldown starts when the recast ends (time up, status gone,
+no charges left or death). The HUD shows the recast's name with a draining bar. See `clorinde/`.
 
 #### Ranks (leveling abilities)
 Everything starts at rank 0 (not castable). You get one skill point per level up to 18 and spend it
@@ -125,6 +141,7 @@ dashes, delays and repeats contain their own effect lists. Any effect may also h
 | `at_base` | 1 while you stand in your fountain |
 | `t_summon` | 1 if the target is a summon (turrets, wards, pets...) |
 | `t_ward` | 1 if the target is a ward |
+| `bond`, `t_bond` | your / the target's Bond of Life (in HP, so `bond >= max_hp` means 100%) |
 
 Functions: `has('id')` (you have a status/mark with that id or type), `t_has('id')` (target has it, from
 you - or any status of that type like `'stun'`), `t_has_any('id')`, `stacks('id')`, `t_stacks('id')`,
@@ -138,8 +155,9 @@ Godot math and logic work too (write decimals like `10.0` in `clamp`/`min`/`max`
 ### On a unit (the current target, or yourself with `"target": "self"`)
 | type | keys (defaults) |
 |---|---|
-| `damage` | `amount` 50, `damage_type` "magic" / "physical" / "true"; `can_crit` (rolls your crit), `attack` (counts as a basic attack: lifesteal, "attacked" triggers), `onhit` (lifesteal applies), `raw` (skips damage modifiers) |
-| `heal` | `amount` 50 (boosted by your `heal_power`) |
+| `damage` | `amount` 50, `damage_type` "magic" / "physical" / "true" (or an expression returning one, e.g. `"'physical' if ad > ap else 'magic'"`); `can_crit` (rolls your crit), `attack` (counts as a basic attack: lifesteal, "attacked" triggers), `onhit` (lifesteal applies), `raw` (skips damage modifiers) |
+| `heal` | `amount` 50 (boosted by your `heal_power`); `convert` false = not turned into Bond of Life by `heal_to_bond` |
+| `bond_of_life` | adds Bond of Life: `amount` (HP), or `set` it (e.g. 0 to clear); capped at `max` (default 200% of the target's max HP) |
 | `shield` | `amount` 100, `duration` 3, `damage_type` "all" / "magic" / "physical" (only blocks that type), `decay` (shrinks to 0 over the duration) |
 | `stun`, `root`, `silence` | `duration` 1 (shortened by tenacity) |
 | `invulnerable`, `stasis`, `untargetable`, `stealth` | `duration` 1. Stasis = invulnerable + untargetable + can't act (Zhonya's) |
@@ -147,7 +165,7 @@ Godot math and logic work too (write decimals like `10.0` in `clamp`/`min`/`max`
 | `grievous` | healing reduction: `amount` 0.4, `duration` 3 |
 | `slow` | `amount` 0.3 (0-1), `duration` 2, `decay` (fades out over the duration) |
 | `dot` / `hot` | `amount` per second 20, `duration` 3, `interval` 0.5, `damage_type`, `raw` |
-| `buff` | `duration` 4, `add` {stat: value}, `multiply` {stat: factor}; stacking: `max_stacks` 5 (+`stacks` per application, `refresh` true) - each stack adds the values again; `hidden` (no buff icon/particles) |
+| `buff` | `duration` 4, `add` {stat: value}, `multiply` {stat: factor}; stacking: `max_stacks` 5 (+`stacks` per application, `refresh` true) - each stack adds the values again; `hidden` (no buff icon/particles); `attack` {...}: replaces basic-attack keys while it lasts (same keys as the character's `attack`, e.g. `{"ranged": true, "damage": "...", "damage_type": "magic", "on_hit": [...]}` - add `attack_range` with `add`) |
 | `mark` | invisible stackable marker for bookkeeping: `id` (required), `duration` 5, `stacks` 1, `max_stacks` |
 | `remove` | removes your status with `id` from the target (`any_source`: from anyone), or `status`: "slow" (a whole type) |
 | `shield_break` | reduces the target's current shields by `amount` (0.5 = half); with `duration`, shields they gain meanwhile are reduced too |
@@ -164,6 +182,12 @@ Repeated statuses from the same ability refresh instead of stacking. Add `"stack
 them stack, or `"id": "burn"` to share one status between abilities; `"keep_longer": true` keeps the
 longer of the old and new duration when refreshing, and `"persist": true` keeps a status through death. (Marks add a stack each time they are applied.) Enemy spell shields block
 ability effects (not basic attacks or item effects).
+
+**Bond of Life** (from Genshin Impact) is healing debt, shown as a crimson strip on the health bar
+(outlined once it reaches 100% of max HP). Healing - after `heal_power`, `heal_received` and grievous
+wounds - pays it off first and only the rest restores HP, so heal bonuses matter a lot to champions
+that heal themselves for more than their Bond. It lasts until paid off (or death). Paying it off
+completely fires the `bond_cleared` trigger.
 
 ### You / your champion
 | type | keys |
@@ -250,6 +274,8 @@ Inside a trigger, `rank` is your level, so `[..18 values..]` lists scale with le
 | `cc_received` | an enemy champion's effect stunned/rooted/slowed/silenced/knocked you back (target = them, `cc`) |
 | `buff_ally` | you gave a `buff` to another allied champion (target = ally) |
 | `spellshield_pop` | your spell shield blocked something |
+| `blocked` | your `invulnerable`/`stasis` stopped an enemy's damage or crowd control (target = them; `dmg`... or `cc`) - parries |
+| `bond_cleared` | your Bond of Life was fully paid off |
 | `interval` | every `interval` seconds |
 | `dash` | you dashed, blinked or teleported (target = you, `pos` = destination) |
 | `spawn`, `level_up`, `rank_up`, `buy`, `item_used` | as named |
@@ -344,5 +370,12 @@ Only `idle` is required. See `honk_lord/` for a working example.
 Run the self-test, which casts each ability at a training dummy and prints damage dealt:
 ```
 godot --path <project folder> -- --auto=practice --map=arena --selftest --only=my_character
+```
+For combos, the item test harness also works without items and logs every hit, heal, status and
+Bond of Life change, e.g. Clorinde's Night Vigil loop (`behind` puts a dummy behind the enemy to
+check piercing, `cast:e` during Vigil recasts):
+```
+godot --headless --path . -- --auto=practice --map=arena --itemtest= --char=clorinde --level=11
+    --steps=behind,cast:e,attack:2.4,cast:e,stats
 ```
 Or just pick Practice, choose the Training Arena map and hit the dummies (they show DPS).

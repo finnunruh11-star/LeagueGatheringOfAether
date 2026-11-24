@@ -53,6 +53,8 @@ var banner: Label
 var _banner_t := 9.0
 var _prev_cd := {}
 var _ready_flash := {}
+var _recast_total := {}   # slot -> longest recast time seen in the current window (for the timer bar)
+const RECAST_COLOR := Color(0.95, 0.5, 1.0)
 
 const DESAT_SHADER := """
 shader_type canvas_item;
@@ -448,6 +450,10 @@ func _build_tooltips(ch: Champion) -> void:
 		meta += "   Range: %d" % int(Effects.num(ab.range, {"caster": ch, "rank": maxi(r, 1)}, 700.0))
 		lines.append(meta)
 		lines.append(str(ab.description))
+		var rc = ab.get("recast")
+		if rc is Dictionary:
+			lines.append("Recast - %s   (cooldown %.1fs)" % [rc.name, ch.ability_cooldown(rc)])
+			lines.append(str(rc.description))
 		if r == 0:
 			lines.append("Not learned yet: press Ctrl+%s or the + button when you have a skill point." % slot.to_upper())
 		elif ab.get("auto_rank", false) and r < int(ab.max_rank):
@@ -534,6 +540,15 @@ func _draw_bar(c: Control) -> void:
 	c.draw_rect(Rect2(hb.position, Vector2(hb.size.x * ch.hp / total, hb.size.y)), Color(0.25, 0.75, 0.3))
 	if ch.shield > 0.0:
 		c.draw_rect(Rect2(hb.position + Vector2(hb.size.x * ch.hp / total, 0), Vector2(hb.size.x * ch.shield / total, hb.size.y)), Color(0.9, 0.9, 0.95))
+	if ch.bond > 0.0:
+		var bf := ch.bond / maxf(float(ch.stats.max_hp), 1.0)
+		c.draw_rect(Rect2(hb.position.x, hb.end.y - 6.0, hb.size.x * minf(bf, 1.0), 6.0), Unit.BOND_COLOR)
+		if bf > 1.0:
+			c.draw_rect(Rect2(hb.position.x, hb.end.y - 6.0, hb.size.x * minf(bf - 1.0, 1.0), 2.0), Unit.BOND_COLOR.lightened(0.55))
+		if bf >= 1.0:
+			c.draw_rect(hb.grow(1.0), Color(Unit.BOND_COLOR.lightened(0.3), 0.55 + 0.45 * sin(Time.get_ticks_msec() / 125.0)), false, 2.0)
+		c.draw_string_outline(font, hb.position + Vector2(4, 13), "Bond %d%%" % roundi(bf * 100.0), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, 3, Color.BLACK)
+		c.draw_string(font, hb.position + Vector2(4, 13), "Bond %d%%" % roundi(bf * 100.0), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Unit.BOND_COLOR.lightened(0.6))
 	c.draw_string(font, hb.position + Vector2(0, 13), "%d / %d" % [int(ch.hp), int(ch.stats.max_hp)], HORIZONTAL_ALIGNMENT_CENTER, hb.size.x, 13)
 	c.draw_string(font, hb.position + Vector2(0, 13), "+%.1f " % ch.stats.get("hp_regen", 0.0), HORIZONTAL_ALIGNMENT_RIGHT, hb.size.x, 11, Color(0.8, 1, 0.8, 0.8))
 	var mb := Rect2(SLOT_X, 112, bw, 13)
@@ -592,11 +607,12 @@ func _draw_slot(c: Control, slot: String) -> void:
 		return
 	var icon: Texture2D = null
 	var nm := ""
+	var recast_t: float = ch.recast_left.get(slot, 0.0) if slot != "p" else 0.0
 	if slot == "p":
 		icon = ch.def.passive.get("icon")
 		nm = ch.def.passive.name
 	else:
-		var ab = ch.def.abilities.get(slot)
+		var ab = ch.active_ability(slot)
 		if ab != null:
 			icon = ab.icon
 			nm = ab.name
@@ -606,6 +622,8 @@ func _draw_slot(c: Control, slot: String) -> void:
 		c.draw_texture_rect(icon, r.grow(-3), false)
 	elif nm != "":
 		var base := ch.color.darkened(0.5)
+		if recast_t > 0.0:
+			base = ch.color.lerp(RECAST_COLOR, 0.5).darkened(0.25)
 		c.draw_rect(r.grow(-3), base)
 		c.draw_rect(Rect2(3, 3, c.size.x - 6, (c.size.y - 6) * 0.45), base.lightened(0.12))
 		var abbr := ""
@@ -632,19 +650,33 @@ func _draw_slot(c: Control, slot: String) -> void:
 		if ch.can_rank_up(slot):
 			c.draw_string(font, Vector2(0, 42), "+", HORIZONTAL_ALIGNMENT_CENTER, c.size.x, 26, Color(1, 0.85, 0.4))
 	elif slot != "p":
-		var ab = ch.def.abilities.get(slot)
+		var ab = ch.active_ability(slot)
 		var cost := ch.ability_cost(ab) if ab != null else 0.0
 		if cost > 0.0:
 			if not ch.can_pay(ab) and cd <= 0.0:
 				c.draw_rect(r, Color(0.05, 0.1, 0.45, 0.55) if ab.cost_type != "health" else Color(0.45, 0.05, 0.08, 0.55))
 			c.draw_string_outline(font, Vector2(0, c.size.y - 4), str(int(cost)), HORIZONTAL_ALIGNMENT_CENTER, c.size.x, 12, 3, Color.BLACK)
 			c.draw_string(font, Vector2(0, c.size.y - 4), str(int(cost)), HORIZONTAL_ALIGNMENT_CENTER, c.size.x, 12, Color(0.55, 0.75, 1.0))
+	if recast_t > 0.0:
+		# Recast available: a bar that drains while the window lasts, plus charges left.
+		_recast_total[slot] = maxf(float(_recast_total.get(slot, 0.0)), recast_t)
+		var rf := clampf(recast_t / maxf(float(_recast_total[slot]), 0.01), 0.0, 1.0)
+		c.draw_rect(Rect2(3, c.size.y - 7, c.size.x - 6, 4), Color(0, 0, 0, 0.7))
+		c.draw_rect(Rect2(3, c.size.y - 7, (c.size.x - 6) * rf, 4), RECAST_COLOR)
+		var charges := int(ch.recast_charges.get(slot, 0))
+		if charges > 0:
+			c.draw_string_outline(font, Vector2(0, 15), str(charges), HORIZONTAL_ALIGNMENT_RIGHT, c.size.x - 4, 13, 3, Color.BLACK)
+			c.draw_string(font, Vector2(0, 15), str(charges), HORIZONTAL_ALIGNMENT_RIGHT, c.size.x - 4, 13, RECAST_COLOR.lightened(0.4))
+	else:
+		_recast_total.erase(slot)
 	var fl: float = _ready_flash.get(slot, 0.0)
 	if fl > 0.0:
 		c.draw_rect(r, Color(1, 1, 1, 0.45 * fl))
 	var border := Color(0.35, 0.37, 0.42)
 	if world.aim_slot == slot:
 		border = Color(0.45, 0.8, 1.0)
+	elif recast_t > 0.0:
+		border = RECAST_COLOR.lerp(Color.WHITE, 0.25 + 0.25 * sin(Time.get_ticks_msec() / 110.0))
 	elif slot != "p" and cd <= 0.0 and learned and ch.def.abilities.has(slot):
 		border = Color(0.85, 0.75, 0.45).lerp(Color.WHITE, fl)
 	c.draw_rect(r, border, false, 2.0 + 2.0 * fl)

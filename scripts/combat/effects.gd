@@ -16,8 +16,9 @@ const VARS := [
 	"t_mr", "t_mana", "t_max_mana", "t_champion", "t_minion", "t_structure", "t_ranged", "t_level", "t_bonus_hp", "t_ms",
 	"dmg", "dtype", "crit_hit", "is_attack", "is_ability", "is_dot", "is_aoe", "slot", "amount",
 	"in_combat", "combat_time", "since_hit", "since_combat", "gold", "kills", "deaths", "assists", "energy", "legendaries", "moving",
-	"cc", "t_self", "at_base", "t_summon", "dmg_raw", "shield", "t_shield", "t_ward",
+	"cc", "t_self", "at_base", "t_summon", "dmg_raw", "shield", "t_shield", "t_ward", "bond", "t_bond",
 ]
+const DAMAGE_TYPES := ["physical", "magic", "true"]
 
 
 ## Functions usable inside expressions, e.g. "has('spellblade')" or "30 * t_stacks('kraken')".
@@ -162,32 +163,52 @@ static func num(v, ctx: Dictionary, def := 0.0) -> float:
 	if v is String:
 		if v.is_valid_float():
 			return v.to_float()
-		if _bad.has(v):
-			return def
-		var e: Expression = _cache.get(v)
-		if e == null:
-			e = Expression.new()
-			if e.parse(_ternary(v), VARS) != OK:
-				_bad[v] = true
-				push_warning("Bad expression \"%s\": %s" % [v, e.get_error_text()])
-				return def
-			_cache[v] = e
-		if _env == null:
-			_env = Env.new()
-		var prev := _env.ctx
-		_env.ctx = ctx
-		var r = e.execute(_values(ctx), _env, false)
-		_env.ctx = prev
-		if e.has_execute_failed():
-			if not _failed.has(v):
-				_failed[v] = true
-				push_warning("Expression failed \"%s\": %s" % [v, e.get_error_text()])
-			return def
+		var r = _eval(v, ctx)
 		if r is bool:
 			return 1.0 if r else 0.0
 		if r is float or r is int:
 			return float(r)
 	return def
+
+
+## A damage type: "physical" / "magic" / "true", or an expression returning one of them,
+## e.g. "'physical' if ad > ap else 'magic'".
+static func damage_type(v, ctx: Dictionary, def := "magic") -> String:
+	if v == null:
+		return def
+	var s := str(v)
+	if s in DAMAGE_TYPES:
+		return s
+	var r = _eval(s, ctx)
+	var out := str(r) if r is String or r is StringName else ""
+	return out if out in DAMAGE_TYPES else def
+
+
+## Runs an expression (parsed once, then cached) and returns its raw result, or null if it
+## is invalid or fails.
+static func _eval(v: String, ctx: Dictionary):
+	if _bad.has(v):
+		return null
+	var e: Expression = _cache.get(v)
+	if e == null:
+		e = Expression.new()
+		if e.parse(_ternary(v), VARS) != OK:
+			_bad[v] = true
+			push_warning("Bad expression \"%s\": %s" % [v, e.get_error_text()])
+			return null
+		_cache[v] = e
+	if _env == null:
+		_env = Env.new()
+	var prev := _env.ctx
+	_env.ctx = ctx
+	var r = e.execute(_values(ctx), _env, false)
+	_env.ctx = prev
+	if e.has_execute_failed():
+		if not _failed.has(v):
+			_failed[v] = true
+			push_warning("Expression failed \"%s\": %s" % [v, e.get_error_text()])
+		return null
+	return r
 
 
 ## Godot's Expression has no "a if c else b": rewrite it to iff(c, a, b) before parsing.
@@ -396,6 +417,8 @@ static func _values(ctx: Dictionary) -> Array:
 	vals[70] = c.shield if cv else 0.0
 	vals[71] = t.shield if tv else 0.0
 	vals[72] = 1.0 if tv and t.is_ward else 0.0
+	vals[73] = c.bond if cv else 0.0
+	vals[74] = t.bond if tv else 0.0
 	return vals
 
 
@@ -438,7 +461,7 @@ static func _one(e: Dictionary, ctx: Dictionary) -> void:
 				if bool(e.get("can_crit", false)) and c and randf() < c.stats.crit_chance:
 					amt *= c.stats.crit_damage
 					hit.crit = true
-				u.take_damage(amt, c, str(e.get("damage_type", "magic")), hit)
+				u.take_damage(amt, c, damage_type(e.get("damage_type"), ctx), hit)
 		"heal":
 			var u := _unit(e, ctx)
 			if u:
@@ -446,9 +469,17 @@ static func _one(e: Dictionary, ctx: Dictionary) -> void:
 				var amt := num(e.get("amount"), ctx, 50.0) * rmult
 				if c:
 					amt *= 1.0 + c.stats.get("heal_power", 0.0)
-				var healed := u.heal(amt, c, bool(e.get("show", true)))
+				var healed := u.heal(amt, c, bool(e.get("show", true)), bool(e.get("convert", true)))
 				if c and u != c and u.is_champion and healed > 0.0:
 					c.trigger("heal_ally", u, null, {"amount": healed, "is_proc": bool(ctx.get("proc", false))})
+		"bond_of_life":
+			var u := _unit(e, ctx)
+			if u and (u.team == int(ctx.get("team", -1)) or not _blocked(u, ctx)):
+				var cap := num(e.get("max"), ctx, float(u.stats.max_hp) * Unit.BOND_CAP)
+				if e.has("set"):
+					u.set_bond(num(e.get("set"), ctx, 0.0), cap)
+				else:
+					u.add_bond(num(e.get("amount"), ctx, 0.0), cap)
 		"shield":
 			var u := _unit(e, ctx)
 			if u:
@@ -544,6 +575,9 @@ static func _one(e: Dictionary, ctx: Dictionary) -> void:
 					s.hidden = true
 				if e.get("triggers") is Array:
 					s.triggers = e.triggers
+				if e.get("attack") is Dictionary:
+					s.attack = Content.attack_override(e.attack, str(ctx.get("char", "")))
+					s.attack.rank = int(ctx.get("rank", 1))
 				_add(u, s, e, ctx)
 				var c := _caster(ctx)
 				if c and u != c and u.is_champion and u.team == c.team:

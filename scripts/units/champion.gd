@@ -18,6 +18,9 @@ var player_name := ""
 var is_bot := false
 var cooldowns := {"q": 0.0, "w": 0.0, "e": 0.0, "r": 0.0}
 var cd_total := {"q": 1.0, "w": 1.0, "e": 1.0, "r": 1.0}
+var recasts := {}              # host: slot -> {until, charges (-1 = unlimited), status} while its recast is available
+var recast_left := {"q": 0.0, "w": 0.0, "e": 0.0, "r": 0.0}     # seconds the recast stays available (replicated)
+var recast_charges := {"q": 0, "w": 0, "e": 0, "r": 0}         # recasts left, -1 = unlimited (replicated)
 var ranks := {"q": 0, "w": 0, "e": 0, "r": 0}
 var skill_points := 1
 var level := 1
@@ -165,9 +168,10 @@ func command(cmd: String, args: Array) -> void:
 
 
 func cast(slot: String, aim: Vector2, tid: int) -> bool:
-	var ab = def.abilities.get(slot)
+	var ab = active_ability(slot)
 	if ab == null or int(ranks.get(slot, 0)) <= 0 or dead or cooldowns.get(slot, 0.0) > 0.0 or not can_cast() or casting != null:
 		return false
+	var is_recast := recasts.has(slot) and not is_same(ab, def.abilities.get(slot))
 	var ctx := _make_ctx(ab, aim, tid)
 	if ctx.is_empty():
 		return false
@@ -185,6 +189,8 @@ func cast(slot: String, aim: Vector2, tid: int) -> bool:
 	var cd := ability_cooldown(ab, ctx)
 	cooldowns[slot] = cd
 	cd_total[slot] = maxf(cd, 0.01)
+	if is_recast:
+		_spend_recast(slot)
 	_cancel_recall()
 	face(ctx.pos)
 	var ct := Effects.num(ab.cast_time, ctx, 0.0)
@@ -235,6 +241,67 @@ func _execute(ab: Dictionary, ctx: Dictionary) -> void:
 	world.fx("cast", {"p": global_position, "c": color, "v": net_id, "d": Vector2(ctx.dir).angle(), "s": ab.slot})
 	Effects.run(ab.effects, ctx)
 	trigger("cast", self, ctx.pos, {"cast_slot": ab.slot, "amount": float(ctx.get("cost_paid", 0.0))})
+	if ab.get("recast") is Dictionary and not dead:
+		_open_recast(ab, ctx)
+
+
+# ---------------------------------------------------------------- recasts ---
+
+## The ability a slot casts right now: its "recast" while that is available.
+func active_ability(slot: String):
+	var ab = def.abilities.get(slot)
+	if ab != null and ab.get("recast") is Dictionary and float(recast_left.get(slot, 0.0)) > 0.0:
+		return ab.recast
+	return ab
+
+
+## After casting an ability with a "recast", the slot casts the recast for `window` seconds
+## (or while you have its `status`) up to `charges` times. Its full cooldown waits until then.
+func _open_recast(ab: Dictionary, ctx: Dictionary) -> void:
+	var rc: Dictionary = ab.recast
+	var status := str(rc.get("status", ""))
+	var window := Effects.num(rc.get("window"), ctx, 1.0e9 if status != "" else 3.0)
+	var charges := int(Effects.num(rc.get("charges"), ctx, 1.0))
+	recasts[ab.slot] = {"until": world.time + window, "charges": charges if charges > 0 else -1, "status": status}
+	recast_charges[ab.slot] = recasts[ab.slot].charges
+	var gap := ability_cooldown(rc, ctx)
+	cooldowns[ab.slot] = gap
+	cd_total[ab.slot] = maxf(gap, 0.01)
+	_update_recasts()
+
+
+func _spend_recast(slot: String) -> void:
+	var r: Dictionary = recasts[slot]
+	if int(r.charges) > 0:
+		r.charges = int(r.charges) - 1
+		recast_charges[slot] = r.charges
+		if int(r.charges) == 0:
+			_close_recast(slot)
+
+
+func _update_recasts() -> void:
+	for slot in recasts.keys():
+		var r: Dictionary = recasts[slot]
+		var left: float = r.until - world.time
+		if r.status != "":
+			var s := find_status(r.status)
+			left = minf(left, float(s.time)) if not s.is_empty() else 0.0
+		if left <= 0.0:
+			_close_recast(slot)
+		else:
+			recast_left[slot] = left
+
+
+## The recast is over: the ability's full cooldown starts now.
+func _close_recast(slot: String) -> void:
+	recasts.erase(slot)
+	recast_left[slot] = 0.0
+	recast_charges[slot] = 0
+	var ab = def.abilities.get(slot)
+	if ab != null:
+		var cd := ability_cooldown(ab)
+		cooldowns[slot] = cd
+		cd_total[slot] = maxf(cd, 0.01)
 
 
 func _make_ctx(ab: Dictionary, aim: Vector2, tid: int) -> Dictionary:
@@ -795,6 +862,8 @@ func _think(delta: float) -> void:
 	for s in SLOTS:
 		if cooldowns[s] > 0.0:
 			cooldowns[s] = maxf(cooldowns[s] - delta, 0.0)
+	if not recasts.is_empty():
+		_update_recasts()
 	_tick_items(delta)
 	if _energy_pos != Vector2.INF:
 		energy = minf(energy + global_position.distance_to(_energy_pos) / 24.0, 100.0)
@@ -905,6 +974,8 @@ func _on_death() -> void:
 	recall_timer = 0.0
 	amove = null
 	energy = 0.0
+	for slot in recasts.keys():
+		_close_recast(slot)
 	respawn_timer = world.respawn_time(level)
 	trigger("death", self)
 
@@ -968,6 +1039,8 @@ func net_state() -> PackedFloat32Array:
 		elif k == "mana_regen":
 			v *= 1.0 + stats.mana_regen_percent
 		s.append(v)
+	for k in SLOTS:
+		s.append_array([recast_left[k], recast_charges[k]])
 	return s
 
 
@@ -1040,6 +1113,11 @@ func apply_net_state(s: PackedFloat32Array) -> void:
 	for i in HUD_STATS.size():
 		if o + i < s.size():
 			stats[HUD_STATS[i]] = s[o + i]
+	o += HUD_STATS.size()
+	if o + 8 <= s.size():
+		for i in 4:
+			recast_left[SLOTS[i]] = s[o + i * 2]
+			recast_charges[SLOTS[i]] = int(s[o + i * 2 + 1])
 	if changed:
 		_rebuild_triggers()
 
@@ -1184,7 +1262,7 @@ func _bot_cast(foe: Unit) -> void:
 	order.shuffle()
 	var d := global_position.distance_to(foe.global_position)
 	for slot in order:
-		var ab = def.abilities.get(slot)
+		var ab = active_ability(slot)
 		if ab == null or cooldowns[slot] > 0.0 or int(ranks[slot]) <= 0 or not can_pay(ab):
 			continue
 		var rng := Effects.num(ab.range, {"caster": self, "target": foe, "rank": ranks[slot]}, 700.0)

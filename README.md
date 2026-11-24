@@ -61,15 +61,18 @@ all join the same virtual LAN, e.g. [Tailscale](https://tailscale.com) or ZeroTi
 ## Make your own characters
 See **[characters/MODDING.md](characters/MODDING.md)** - stats, abilities, the effect building
 blocks (projectiles, explosions, dashes, teleports, shields, heals, stuns, slows, DoTs, summons,
-traps, knockbacks, beams, zones...), passives and sprites. The five example characters show most of it:
+traps, knockbacks, beams, zones...), passives and sprites. The six example characters show most of it:
 
 - **Sir Bonk** - melee bruiser (dash, shield, spin, leap-slam, every-3rd-hit stun)
 - **Ember** - fire mage (fireball, burning ground, blink, meteor shower; abilities in separate files)
 - **Gizmo** - marksman (piercing bolt, hidden bear traps, rocket jump, turret)
 - **Mender** - support (heal-or-damage orb, hook, healing zone, team shield)
 - **Honk Lord** - a goose. Custom pixel-art sprite sheet and goslings.
+- **Clorinde** - Genshin Impact's duelist: a recast ability (Night Vigil turns her sword into piercing
+  pistol shots, recast to lunge), Bond of Life (healing debt that heal bonuses turn into huge heals),
+  a parry that stuns if it blocked a champion, and adaptive AD/AP damage
 
-Ember shows explicit per-rank numbers (`[70, 105, 140, 175, 210]`); the others scale automatically.
+Ember and Clorinde show explicit per-rank numbers (`[70, 105, 140, 175, 210]`); the others scale automatically.
 
 ## Items
 `items/*.json` - one file per item, same effect system as abilities (passives are triggers, actives
