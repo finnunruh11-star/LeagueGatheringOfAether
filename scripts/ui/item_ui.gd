@@ -63,36 +63,145 @@ static func _fmt(f: float) -> String:
 	return str(int(round(f))) if absf(f - round(f)) < 0.05 else "%.1f" % f
 
 
-## Multi-line plain-text description: stats, passives, active, recipe notes.
-static func describe(it: Dictionary, with_header := true) -> String:
-	var lines := PackedStringArray()
-	if with_header:
-		lines.append("%s   (%s, %d gold)" % [it.name, str(it.rarity).capitalize(), int(it.cost)])
+## The pieces of an item's description, in display order:
+## ["stat", text] / ["mythic", text] / ["passive", name, description] /
+## ["active", name, description, cooldown text or ""] / ["text", text] / ["limit", text]
+static func parts(it: Dictionary) -> Array:
+	var out := []
 	for k in it.stats:
-		lines.append(stat_line(k, it.stats[k]))
+		out.append(["stat", stat_line(k, it.stats[k])])
 	for k in it.get("stats_mult", {}):
 		var v = it.stats_mult[k]
 		if v is float:
-			lines.append("x%s %s" % [_fmt(v), STAT_NAMES.get(k, [k])[0]])
+			out.append(["stat", "x%s %s" % [_fmt(v), STAT_NAMES.get(k, [k])[0]]])
 	if not it.get("mythic_stats", {}).is_empty():
-		var parts := PackedStringArray()
+		var bonus := PackedStringArray()
 		for k in it.mythic_stats:
-			parts.append(stat_line(k, it.mythic_stats[k]))
-		lines.append("Mythic: each other Legendary item grants " + ", ".join(parts))
+			bonus.append(stat_line(k, it.mythic_stats[k]))
+		out.append(["mythic", "Mythic: each other Legendary item grants " + ", ".join(bonus)])
 	var shown := {}
 	for p in it.get("passives", []):
 		var n := str(p.get("name", ""))
 		if n == "" or shown.has(n):
 			continue
 		shown[n] = true
-		var d := str(p.get("description", ""))
-		lines.append(("[%s] %s" % [n, d]) if d != "" else "[%s]" % n)
+		out.append(["passive", n, str(p.get("description", ""))])
 	if it.get("active") != null:
 		var a: Dictionary = it.active
 		var cd = a.get("cooldown", 0)
-		lines.append("Active - %s: %s%s" % [a.name, a.description, ("  (%ss cooldown)" % str(cd)) if not (cd is float and cd <= 0.0) else ""])
+		var cd_text := (_fmt(float(cd)) if cd is float or cd is int else str(cd)) + "s cooldown"
+		out.append(["active", str(a.name), str(a.description), cd_text if not ((cd is float or cd is int) and cd <= 0) else ""])
 	if str(it.get("description", "")) != "":
-		lines.append(str(it.description))
+		out.append(["text", str(it.description)])
 	if not it.get("groups", []).is_empty():
-		lines.append("Limit: one %s item" % ", ".join(it.groups).replace("_", " "))
+		out.append(["limit", "Limit: one %s item" % ", ".join(it.groups).replace("_", " ")])
+	return out
+
+
+## Multi-line plain-text description: stats, passives, active, recipe notes.
+static func describe(it: Dictionary, with_header := true) -> String:
+	var lines := PackedStringArray()
+	if with_header:
+		lines.append("%s   (%s, %d gold)" % [it.name, str(it.rarity).capitalize(), int(it.cost)])
+	for p in parts(it):
+		match p[0]:
+			"passive":
+				lines.append(("[%s] %s" % [p[1], p[2]]) if p[2] != "" else "[%s]" % p[1])
+			"active":
+				lines.append("Active - %s: %s%s" % [p[1], p[2], ("  (%s)" % p[3]) if p[3] != "" else ""])
+			_:
+				lines.append(p[1])
 	return "\n".join(lines)
+
+
+## describe() as colored BBCode for a RichTextLabel (stats, then passives/active/notes).
+static func describe_bbcode(it: Dictionary) -> String:
+	var stats := PackedStringArray()
+	var rest := PackedStringArray()
+	for p in parts(it):
+		match p[0]:
+			"stat":
+				stats.append("[color=#cfe8c8]%s[/color]" % _bb(p[1]))
+			"mythic":
+				rest.append("[color=#d39bff]%s[/color]" % _bb(p[1]))
+			"passive":
+				rest.append("[color=#ffd27a][b]%s[/b][/color]%s" % [_bb(p[1]), (": " + _bb(p[2])) if p[2] != "" else ""])
+			"active":
+				rest.append("[color=#8fd3ff][b]Active - %s[/b][/color]%s%s" % [_bb(p[1]), (": " + _bb(p[2])) if p[2] != "" else "",
+					("  [color=#8a90a0](%s)[/color]" % _bb(p[3])) if p[3] != "" else ""])
+			"text":
+				rest.append("[color=#a9adb6][i]%s[/i][/color]" % _bb(p[1]))
+			"limit":
+				rest.append("[color=#ffa36b]%s[/color]" % _bb(p[1]))
+	var blocks := PackedStringArray()
+	if not stats.is_empty():
+		blocks.append("\n".join(stats))
+	if not rest.is_empty():
+		blocks.append("\n\n".join(rest))
+	return "\n\n".join(blocks) if not blocks.is_empty() else "[color=#8a90a0]No stats.[/color]"
+
+
+static func _bb(s: String) -> String:
+	return s.replace("[", "[lb]")
+
+
+## A custom tooltip body (return it from Control._make_custom_tooltip): name, rarity and cost,
+## then the description, colored like the shop. `notes` are extra [text, color] lines.
+static func tooltip(it: Dictionary, notes: Array = []) -> Control:
+	var t := Tip.new()
+	t.add(str(it.name), rarity_color(it), 17)
+	t.add("%s  -  %d gold" % [str(it.rarity).capitalize(), int(it.cost)], Color(1, 0.85, 0.4), 13, 2.0)
+	var prev := ""
+	for p in parts(it):
+		var gap := 0.0 if p[0] == "stat" and prev == "stat" else 7.0
+		prev = p[0]
+		match p[0]:
+			"stat":
+				t.add(p[1], Color(0.82, 0.93, 0.8), 14, gap)
+			"mythic":
+				t.add(p[1], Color(0.83, 0.61, 1.0), 13, gap)
+			"passive":
+				t.add(p[1], Color(1, 0.82, 0.48), 14, gap)
+				t.add(p[2], Color(0.82, 0.84, 0.88), 13, 1.0)
+			"active":
+				t.add("Active - " + p[1] + (("  (%s)" % p[3]) if p[3] != "" else ""), Color(0.56, 0.83, 1.0), 14, gap)
+				t.add(p[2], Color(0.82, 0.84, 0.88), 13, 1.0)
+			"text":
+				t.add(p[1], Color(0.66, 0.68, 0.72), 13, gap)
+			"limit":
+				t.add(p[1], Color(1, 0.64, 0.42), 13, gap)
+	for i in notes.size():
+		t.add(str(notes[i][0]), notes[i][1], 13, 8.0 if i == 0 else 1.0)
+	t.finish()
+	return t
+
+
+class Tip extends Control:
+	const MAX_W := 340.0
+	var rows: Array = []   # [text, color, font size, gap above]
+
+	func add(text: String, color: Color, font_size: int, gap := 0.0) -> void:
+		if text != "":
+			rows.append([text, color, font_size, gap])
+
+	func finish() -> void:
+		var font := ThemeDB.fallback_font
+		var w := 0.0
+		for r in rows:
+			w = maxf(w, font.get_multiline_string_size(r[0], HORIZONTAL_ALIGNMENT_LEFT, -1, r[2]).x)
+		w = minf(ceilf(w) + 2.0, MAX_W)
+		var h := 0.0
+		for r in rows:
+			h += r[3] + font.get_multiline_string_size(r[0], HORIZONTAL_ALIGNMENT_LEFT, w, r[2]).y
+		custom_minimum_size = Vector2(w, ceilf(h))
+		size = custom_minimum_size
+		mouse_filter = Control.MOUSE_FILTER_IGNORE
+
+	func _draw() -> void:
+		var font := ThemeDB.fallback_font
+		var w := custom_minimum_size.x
+		var y := 0.0
+		for r in rows:
+			y += r[3]
+			draw_multiline_string(font, Vector2(0, y + font.get_ascent(r[2])), r[0], HORIZONTAL_ALIGNMENT_LEFT, w, r[2], -1, r[1])
+			y += font.get_multiline_string_size(r[0], HORIZONTAL_ALIGNMENT_LEFT, w, r[2]).y
