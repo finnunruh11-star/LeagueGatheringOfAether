@@ -1,8 +1,9 @@
 class_name Controls
 extends RefCounted
-## Rebindable game controls on top of Godot's InputMap. Each action has one key (or an extra mouse
-## button). Bindings are saved in the [keys] section of user://settings.cfg as "key:<keycode>" or
-## "mouse:<button>" ("" = unbound). Left/right click, the mouse wheel, Esc, Ctrl (level up), the arrow
+## Rebindable game controls on top of Godot's InputMap. Each action has a key (or an extra mouse
+## button); defaults may have two ("Y|Z": Y and Z both work, for QWERTY and QWERTZ keyboards).
+## Bindings are saved in the [keys] section of user://settings.cfg as "key:<keycode>" or
+## "mouse:<button>", several joined with "|" ("" = unbound). Left/right click, the mouse wheel, Esc, Ctrl (level up), the arrow
 ## keys (camera) and F1-F4 (practice cheats) are fixed.
 
 ## [action, label, classic default, WASD default]
@@ -23,7 +24,7 @@ const ACTIONS := [
 	["stop", "Stop", "S", ""],
 	["recall", "Recall", "B", "B"],
 	["shop", "Shop", "P", "P"],
-	["camera_lock", "Lock / unlock camera", "Y", "Y"],
+	["camera_lock", "Lock / unlock camera", "Y|Z", "Y|Z"],
 	["camera_center", "Center camera (hold)", "Space", ""],
 	["scoreboard", "Scoreboard (hold)", "Tab", "Tab"],
 	["move_up", "Move up (WASD mode)", "W", "W"],
@@ -54,14 +55,25 @@ static func defaults(mode: String) -> Dictionary:
 	return out
 
 
-## Replaces an action's binding. `code` is "key:<keycode>", "mouse:<button>" or "" (unbound).
+## Replaces an action's binding. `code` is "key:<keycode>", "mouse:<button>" (several joined with
+## "|") or "" (unbound).
 static func bind(action: String, code: String) -> void:
 	if not InputMap.has_action(action):
 		InputMap.add_action(action, 0.2)
 	InputMap.action_erase_events(action)
-	var ev := event_from_code(code)
-	if ev != null:
-		InputMap.action_add_event(action, ev)
+	for c in code.split("|", false):
+		var ev := event_from_code(c)
+		if ev != null:
+			InputMap.action_add_event(action, ev)
+
+
+## Removes one key from an action, keeping its other keys.
+static func unbind_code(action: String, code: String) -> void:
+	var rest := codes_of(action)
+	var i := rest.find(code)
+	if i >= 0:
+		rest.remove_at(i)
+	bind(action, "|".join(rest))
 
 
 static func bindings() -> Dictionary:
@@ -71,20 +83,26 @@ static func bindings() -> Dictionary:
 	return out
 
 
+static func codes_of(action: String) -> PackedStringArray:
+	var out := PackedStringArray()
+	if InputMap.has_action(action):
+		for ev in InputMap.action_get_events(action):
+			var c := code_from_event(ev)
+			if c != "" and not out.has(c):
+				out.append(c)
+	return out
+
+
 static func code_of(action: String) -> String:
-	if not InputMap.has_action(action):
-		return ""
-	for ev in InputMap.action_get_events(action):
-		var c := code_from_event(ev)
-		if c != "":
-			return c
-	return ""
+	return "|".join(codes_of(action))
 
 
-## A short key name for the HUD and tooltips ("Q", "Space", "Mouse 4"; "-" when unbound).
+## A short key name for the HUD and tooltips ("Q", "Space", "Mouse 4", "Y/Z"; "-" when unbound).
 static func label(action: String) -> String:
-	var c := code_of(action)
-	return code_label(c) if c != "" else "-"
+	var parts := PackedStringArray()
+	for c in codes_of(action):
+		parts.append(code_label(c))
+	return "/".join(parts) if not parts.is_empty() else "-"
 
 
 static func code_label(code: String) -> String:
@@ -103,13 +121,15 @@ static func code_label(code: String) -> String:
 	return ""
 
 
-## "Q" / "Space" / "Shift" / "Mouse 4" -> code. Used for the default tables.
+## "Q" / "Space" / "Shift" / "Mouse 4" / "Y|Z" -> code. Used for the default tables.
 static func to_code(name: String) -> String:
-	if name == "":
-		return ""
-	if name.begins_with("Mouse "):
-		return "mouse:%d" % {"Mouse 3": MOUSE_BUTTON_MIDDLE, "Mouse 4": MOUSE_BUTTON_XBUTTON1, "Mouse 5": MOUSE_BUTTON_XBUTTON2}.get(name, 0)
-	return "key:%d" % OS.find_keycode_from_string(name)
+	var parts := PackedStringArray()
+	for n in name.split("|", false):
+		if n.begins_with("Mouse "):
+			parts.append("mouse:%d" % {"Mouse 3": MOUSE_BUTTON_MIDDLE, "Mouse 4": MOUSE_BUTTON_XBUTTON1, "Mouse 5": MOUSE_BUTTON_XBUTTON2}.get(n, 0))
+		else:
+			parts.append("key:%d" % OS.find_keycode_from_string(n))
+	return "|".join(parts)
 
 
 static func event_from_code(code: String) -> InputEvent:

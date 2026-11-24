@@ -27,7 +27,7 @@ The bottom of the screen always shows your current keys.
 | A | attack-move: attacks the enemy in range closest to the cursor, otherwise walks there attacking whatever comes in range (Settings: closest to you instead, or the classic "A, then left click") |
 | S | stop |
 | B | recall to base (4s, cancelled by damage or moving) |
-| Y | lock/unlock camera (edge-pan or arrow keys when unlocked; speed in Settings), hold Space = center on your champion |
+| Y or Z | lock/unlock camera (edge-pan or arrow keys when unlocked; speed in Settings), hold Space = center on your champion |
 | Mouse wheel | zoom |
 | Tab | scoreboard |
 | Esc | menu (Resume / **Settings** / leave) |

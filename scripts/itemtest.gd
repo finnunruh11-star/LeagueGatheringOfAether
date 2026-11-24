@@ -30,11 +30,14 @@ extends Node
 ##   steer:DEG      A steers (WASD) toward DEG degrees (0 = right, 90 = down); steer:off stops
 ##   amove:D        A attack-moves to a point D units past the enemy (closest to that point)
 ##   cmd:NAME       A runs a champion command without arguments (e.g. cmd:stop)
+##   time:S         set the match clock to S seconds     ally_minion   spawn an allied minion 500 units behind A
+##   sum_minion:N   A uses summoner N on that allied minion        kill_ally_minion   it dies
 
 var world: World
 var a: Champion
 var b: Champion
 var ally: Champion = null
+var ally_minion: Unit = null
 var spot := Vector2(900, 750)
 
 
@@ -239,6 +242,17 @@ func _ready() -> void:
 				print("[itemtest] amove -> target %s amove %s" % [a.attack_target.display_name if is_instance_valid(a.attack_target) else "none", str(a.amove)])
 			"cmd":
 				a.command(arg, [])
+			"time":
+				world.time = v
+			"ally_minion":
+				ally_minion = world.spawn("minion", {"team": a.team, "lane": 0, "type": "melee", "pos": a.global_position + Vector2(-500, 0), "scale": 1.0})
+				await _wait(0.2)
+			"sum_minion":
+				a.sum_cd[int(v)] = 0.0
+				print("[itemtest] summoner %d on the allied minion -> %s" % [int(v), str(a.use_summoner(int(v), ally_minion.global_position, ally_minion.net_id))])
+			"kill_ally_minion":
+				ally_minion.take_damage(99999.0, b, "true", {"raw": true})
+				print("[itemtest] allied minion killed")
 			"move":
 				a.move_goal = a.global_position + Vector2(v, 0)
 				await _wait(absf(v) / maxf(a.stats.move_speed, 1.0) + 0.2)

@@ -867,7 +867,7 @@ func _unhandled_input(event: InputEvent) -> void:
 			return
 		if pressed:
 			var ab = aim_ability(slot)
-			if not slot in Champion.SLOTS and (ab == null or ab.targeting == "self"):
+			if not slot in Champion.SLOTS and (ab == null or ab.targeting == "self" or channeling(slot)):
 				_cast(slot)
 				return
 			aim_slot = slot
@@ -935,6 +935,19 @@ func _steer() -> void:
 		send_command("steer", [dir])
 
 
+## True while your champion channels the summoner spell in `slot` ("s0"/"s1"): pressing it again
+## cancels the channel. Clients only know that you are casting something; the host checks which.
+func channeling(slot: String) -> bool:
+	var c := local_champion
+	if c == null or not slot.begins_with("s"):
+		return false
+	var i := int(slot.substr(1))
+	if is_server:
+		return c.casting != null and int(c.casting.get("summoner", -1)) == i
+	var ab = c.summoner_ability(i)
+	return c.flags & Unit.F_CAST != 0 and ab != null and Effects.num(ab.cast_time, {"caster": c}, 0.0) > 0.0
+
+
 ## The ability (or item active / summoner spell) bound to an aim slot: q/w/e/r, i0..i5 or s0/s1.
 func aim_ability(slot: String):
 	if local_champion == null:
@@ -986,7 +999,7 @@ func _cast(slot: String) -> void:
 	if slot.begins_with("s"):
 		var si := int(slot.substr(1))
 		var sp = c.summoner_def(si)
-		if sp != null and (c.sum_cd[si] <= 0.0 or ab != sp.active):
+		if sp != null and (c.sum_cd[si] <= 0.0 or ab != sp.active or channeling(slot)):
 			send_command("summoner", [si, m, tid])
 			_sfx("cast", c.global_position, -14.0)
 		elif sp != null:

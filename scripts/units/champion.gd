@@ -140,7 +140,7 @@ func command(cmd: String, args: Array) -> void:
 				cheat(args[0])
 			return
 		"autopilot":
-			is_bot = args.size() > 0 and bool(args[0])
+			is_bot = args.size() > 0 and args[0] is bool and args[0]
 			return
 		"item":
 			if args.size() >= 3 and (args[0] is int or args[0] is float) and args[1] is Vector2 and (args[2] is int or args[2] is float):
@@ -163,14 +163,17 @@ func command(cmd: String, args: Array) -> void:
 			return
 		"build":
 			if args.size() > 0 and args[0] is Array:
+				var old := build
 				build = []
 				for id in args[0]:
-					if id is String and Game.items.has(id) and build.size() < 12:
+					if id is String and Game.items.has(id) and build.size() < 12 and not build.has(id):
 						build.append(id)
+						if not old.has(id):
+							_built.erase(id)  # added (again) to the build: autobuy may buy it again
 				_shop_t = 0.0
 			return
 		"autobuy":
-			autobuy = args.size() > 0 and bool(args[0])
+			autobuy = args.size() > 0 and args[0] is bool and args[0]
 			_shop_t = 0.0
 			return
 	if dead:
@@ -968,7 +971,7 @@ func _run_summoner(ab: Dictionary, ctx: Dictionary) -> void:
 ## A channeled spell (Teleport) is done. It fails if its target died meanwhile.
 func _finish_channel(c: Dictionary) -> void:
 	var t = c.ctx.get("target")
-	if t != null and t != self and (not is_instance_valid(t) or (t is Unit and t.dead)):
+	if t != self and (not is_instance_valid(t) or (t is Unit and t.dead)):
 		_refund_channel(int(c.summoner))
 		world.fx("notice", {"peer": peer, "text": "%s was cancelled" % c.ab.name})
 		return
@@ -1004,21 +1007,44 @@ func _autobuy(delta: float) -> void:
 		bot_plan = recommended_build(def)
 	var todo := []
 	for id in (build if not build.is_empty() else bot_plan):
-		if has_item(id):
+		if has_item(id) or built_into(id):
 			_built[id] = true
 		elif not _built.has(id):
 			todo.append(id)
-	shop_toward(todo)
+	var done := []
+	shop_toward(todo, done)
+	for id in done:
+		_built[id] = true
+
+
+## True if an item you own was built from `id` (its recipe used `id` up, e.g. Sheen -> Lich Bane).
+func built_into(id: String) -> bool:
+	for inst in items:
+		if inst != null and _recipe_has(inst.id, id):
+			return true
+	return false
+
+
+func _recipe_has(parent: String, id: String) -> bool:
+	var it = Game.items.get(parent)
+	if it == null:
+		return false
+	for c in it.from:
+		if c == id or _recipe_has(c, id):
+			return true
+	return false
 
 
 ## Buys toward the first item of `plan` you don't own (the item, or its most expensive affordable
 ## component) while gold allows. Returns the items that can't be bought at all (rules, not gold).
-func shop_toward(plan: Array) -> Array:
+## `done` collects plan items bought completely: they aren't picked again in this pass even if a
+## later item used them up (Sheen, then Lich Bane).
+func shop_toward(plan: Array, done: Array) -> Array:
 	var skip := []
 	for attempt in 8:
 		var goal := ""
 		for id in plan:
-			if not has_item(id) and Game.items.has(id) and not skip.has(id):
+			if not has_item(id) and Game.items.has(id) and not skip.has(id) and not done.has(id):
 				goal = id
 				break
 		if goal == "":
@@ -1029,6 +1055,8 @@ func shop_toward(plan: Array) -> Array:
 			return skip
 		if step == "" or err != "":
 			skip.append(goal)
+		elif step == goal:
+			done.append(goal)
 	return skip
 
 
@@ -1692,7 +1720,8 @@ func _bot_shop() -> void:
 		return
 	if bot_plan.is_empty():
 		bot_plan = recommended_build(def, true)
-	for id in shop_toward(bot_plan):
+	var done := []
+	for id in shop_toward(bot_plan, done) + done:
 		bot_plan.erase(id)
 
 

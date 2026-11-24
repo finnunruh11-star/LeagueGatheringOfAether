@@ -212,11 +212,11 @@ func _assign(code: String) -> void:
 		var wasd: bool = Game.prefs.move_mode == "wasd"
 		for a in Controls.ACTIONS:
 			var other: String = a[0]
-			if other == action or Controls.code_of(other) != code:
+			if other == action or not Controls.codes_of(other).has(code):
 				continue
 			if not wasd and ((other in Controls.MOVE_ACTIONS) != (action in Controls.MOVE_ACTIONS)):
 				continue
-			Controls.bind(other, "")
+			Controls.unbind_code(other, code)
 			cleared.append(a[1])
 	Controls.bind(action, code)
 	Game.save_settings()

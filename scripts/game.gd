@@ -67,6 +67,8 @@ func _ready() -> void:
 		prefs.move_mode = "wasd"
 	if cmdline.has("autobuy"):
 		prefs.autobuy = str(cmdline.autobuy) != "0"
+	if cmdline.has("spells"):
+		prefs.summoners = Array(str(cmdline.spells).split(",", false))
 	Controls.setup(_saved_keys, prefs.move_mode)
 	multiplayer.peer_connected.connect(_on_peer_connected)
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)

@@ -526,7 +526,7 @@ func _slot_click(ev: InputEvent, slot: String) -> void:
 		var ab = world.aim_ability(slot)
 		if ab == null:
 			return
-		if ab.targeting == "self":
+		if ab.targeting == "self" or world.channeling(slot):
 			world._cast(slot)
 		else:
 			world.aim_slot = slot

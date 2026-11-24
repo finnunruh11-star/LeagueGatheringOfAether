@@ -3,6 +3,7 @@ extends Node
 ## rebindable controls reach the game (rebinding in Settings, WASD steering, attack-move, summoner
 ## keys). Run with:
 ##   godot --headless --path . -- --auto=practice --map=arena --inputtest
+## or as a network client (--auto=join ... --inputtest) to send the commands through the host.
 
 var world: World
 var fails := 0
@@ -14,9 +15,42 @@ func _ready() -> void:
 		get_tree().quit(1))
 	await get_tree().create_timer(0.5).timeout
 	world = Game.world
+	while world == null or world.local_champion == null or not world.started:
+		await get_tree().create_timer(0.1).timeout
+		world = Game.world
+	await get_tree().create_timer(0.5).timeout
 	var c := world.local_champion
+	print("[inputtest] running as %s" % ("host" if world.is_server else "client"))
 	_check("default Q label", Controls.label("ability_q") == "Q")
 	_check("default summoner keys", Controls.label("summoner_1") == "D" and Controls.label("summoner_2") == "F")
+	var locked := world.cam_locked
+	_key(KEY_Z, true)
+	_key(KEY_Z, false)
+	await _frames(2)
+	var after_z := world.cam_locked
+	_key(KEY_Y, true)
+	_key(KEY_Y, false)
+	await _frames(2)
+	_check("Y and Z both toggle the camera (%s)" % Controls.label("camera_lock"), after_z != locked and world.cam_locked == locked)
+
+	# Teleport (with --spells=teleport,...): pressing its key again while channeling cancels it.
+	var tp := c.summoners.find("teleport")
+	var tower: Unit = null
+	for s in world.structures:
+		if s.team == c.team and not s.dead and not s.is_nexus:
+			tower = s
+	if tp >= 0 and tower != null:
+		world.send_command("summoner", [tp, tower.global_position, tower.net_id])
+		await get_tree().create_timer(0.5).timeout
+		_check("Teleport channel started", world.channeling("s%d" % tp))
+		var tk := int(Controls.code_of("summoner_%d" % (tp + 1)).substr(4)) as Key
+		_key(tk, true)
+		_key(tk, false)
+		await get_tree().create_timer(0.5).timeout
+		_check("its key cancelled the channel, half the cooldown refunded (%.0f / %.0f)" % [c.sum_cd[tp], c.sum_cd_total[tp]],
+			not world.channeling("s%d" % tp) and c.sum_cd[tp] <= c.sum_cd_total[tp] * 0.5 + 1.0 and c.sum_cd[tp] > 0.0)
+		await get_tree().create_timer(4.0).timeout
+		_check("no teleport happened", c.global_position.distance_to(tower.global_position) > 400.0)
 
 	# Rebind Q to Z in the settings menu, like a player would.
 	world.hud.open_settings()
@@ -65,8 +99,12 @@ func _ready() -> void:
 		var key := int(code.substr(4)) as Key
 		_key(key, true)
 		_key(key, false)
-		await get_tree().create_timer(0.2).timeout
+		await get_tree().create_timer(0.2 if world.is_server else 0.5).timeout
 		_check("summoner key used Flash", c.sum_cd[i] > 0.0)
+	if not world.is_server:
+		print("[inputtest] done, %d failed (client: attack-move part skipped)" % fails)
+		get_tree().quit(1 if fails > 0 else 0)
+		return
 
 	# Back to classic: A attack-moves at the cursor right away.
 	Game.prefs.move_mode = "click"
