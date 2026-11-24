@@ -111,9 +111,12 @@ func _physics_process(delta: float) -> void:
 			_finish()
 			return
 		dir = back.normalized()
-	var step := dir * speed * delta
+	var step_length := speed * delta
+	if not returning:
+		step_length = minf(step_length, maxf(0.0, max_dist - traveled))
+	var step := dir * step_length
 	global_position += step
-	traveled += step.length()
+	traveled += step_length
 	rotation = dir.angle()
 	if not through_walls and world.map.is_wall(global_position):
 		_finish()

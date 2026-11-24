@@ -155,6 +155,7 @@ func command(cmd: String, args: Array) -> void:
 				var d: Vector2 = args[0]
 				move_dir = d.limit_length(1.0) if d.is_finite() else Vector2.ZERO
 				if move_dir != Vector2.ZERO and not dead:
+					cancel_attack_windup()
 					move_goal = null
 					amove = null
 					attack_target = null
@@ -181,6 +182,7 @@ func command(cmd: String, args: Array) -> void:
 	match cmd:
 		"move":
 			if args.size() > 0 and args[0] is Vector2:
+				cancel_attack_windup()
 				move_goal = world.map.clamp_inside(args[0])
 				attack_target = null
 				amove = null
@@ -195,6 +197,7 @@ func command(cmd: String, args: Array) -> void:
 					_cancel_recall()
 		"amove":
 			if args.size() > 0 and args[0] is Vector2:
+				cancel_attack_windup()
 				var p: Vector2 = world.map.clamp_inside(args[0])
 				amove_mode = "champion" if args.size() > 1 and str(args[1]) == "champion" else "cursor"
 				move_goal = null
@@ -207,6 +210,7 @@ func command(cmd: String, args: Array) -> void:
 					attack_target = null
 					amove = p
 		"stop":
+			cancel_attack_windup()
 			move_goal = null
 			attack_target = null
 			amove = null
@@ -243,13 +247,14 @@ func cast(slot: String, aim: Vector2, tid: int) -> bool:
 	if is_recast:
 		_spend_recast(slot)
 	_cancel_recall()
+	cancel_attack_windup()
 	face(ctx.pos)
 	var ct := Effects.num(ab.cast_time, ctx, 0.0)
 	if ab.get("start_effects") is Array:
 		Effects.run(ab.start_effects, ctx)
 	if ct > 0.0:
 		casting = {"ab": ab, "ctx": ctx, "time": ct}
-		set_anim_lock(ANIM_CAST, ct)
+		begin_windup(ANIM_CAST, ct, Vector2.ZERO if ab.targeting == "self" else ctx.dir)
 	else:
 		set_anim_lock(ANIM_CAST, 0.25)
 		_execute(ab, ctx)
@@ -1171,12 +1176,16 @@ func _think(delta: float) -> void:
 			trigger("interval", self, null, {}, r.key)
 	if casting != null:
 		casting.time -= delta
+		if not casting.has("summoner"):
+			windup_left = casting.time
 		if casting.time <= 0.0:
 			var c = casting
 			casting = null
 			if c.has("summoner"):
 				_finish_channel(c)
 			else:
+				clear_windup()
+				set_anim_lock(ANIM_CAST, 0.16)
 				_execute(c.ab, c.ctx)
 	if recall_timer > 0.0:
 		recall_timer -= delta
@@ -1226,8 +1235,8 @@ func _act(delta: float) -> void:
 
 
 ## WASD steering: an attack command interrupts it for one attack, then you keep walking.
-func perform_attack(t: Unit) -> void:
-	super.perform_attack(t)
+func perform_attack(t: Unit, elapsed_windup: float) -> void:
+	super.perform_attack(t, elapsed_windup)
 	if move_dir != Vector2.ZERO:
 		attack_target = null
 		amove = null
@@ -1254,6 +1263,7 @@ func amove_pick(p: Vector2, pad: float) -> Unit:
 func start_recall() -> void:
 	if dead or recall_timer > 0.0 or casting != null:
 		return
+	cancel_attack_windup()
 	recall_timer = 8.0
 	move_goal = null
 	attack_target = null
@@ -1266,10 +1276,13 @@ func _cancel_recall() -> void:
 
 
 func _interrupted() -> void:
+	super._interrupted()
 	recall_timer = 0.0
-	if casting != null and casting.has("summoner"):
-		_refund_channel(int(casting.summoner))
-	casting = null
+	if casting != null:
+		if casting.has("summoner"):
+			_refund_channel(int(casting.summoner))
+		casting = null
+		clear_windup()
 
 
 func gain_xp(amount: float) -> void:
@@ -1474,7 +1487,7 @@ func _physics_process(delta: float) -> void:
 
 func _draw_body() -> void:
 	var c := body_color()
-	var r := radius
+	var r := Content.CHAMPION_ART_HEIGHT * 0.5 * float(stats.size)
 	draw_circle(Vector2.ZERO, r, c.darkened(0.45))
 	draw_circle(Vector2(0, -r * 0.08), r * 0.88, c)
 	draw_circle(Vector2(-r * 0.32, -r * 0.4), r * 0.3, c.lightened(0.4))
@@ -1491,6 +1504,10 @@ func bar_width() -> float:
 
 func bar_height() -> float:
 	return 9.0
+
+
+func bar_top() -> float:
+	return super.bar_top() if sprite != null else -Content.CHAMPION_ART_HEIGHT * 0.5 * stats.size - 16.0
 
 
 func icon_y(top: float) -> float:

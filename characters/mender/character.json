@@ -8,7 +8,7 @@
     "move_speed": 330,
     "attack_damage": 44,
     "attack_speed": 0.7,
-    "attack_range": 525,
+    "attack_range": 500,
     "armor": 25,
     "ability_power": 35,
     "max_mana": 400,
@@ -55,6 +55,7 @@
   "abilities": {
     "q": {
       "name": "Spirit Orb",
+      "cast_time": 0.25,
       "description": "An orb that damages and slows the first enemy hit - or heals the first ally it touches.",
       "cooldown": 5,
       "targeting": "direction",
@@ -91,6 +92,7 @@
     },
     "w": {
       "name": "Lifeline Hook",
+      "cast_time": 0.35,
       "description": "Throw a hook. The first enemy hit is pulled to you and stunned briefly.",
       "cooldown": 14,
       "targeting": "direction",
@@ -98,7 +100,7 @@
       "effects": [
         {
           "type": "projectile",
-          "speed": 1500,
+          "speed": 1300,
           "radius": 14,
           "color": "#e0e0e0",
           "on_hit": [
