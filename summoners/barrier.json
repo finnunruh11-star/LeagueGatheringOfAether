@@ -2,6 +2,7 @@
   "name": "Barrier",
   "short": "BA",
   "color": "#ffd36b",
+  "glyph": "shield",
   "description": "Shields you from 105-411 damage (by level) for 2 seconds.",
   "cooldown": 180,
   "targeting": "self",

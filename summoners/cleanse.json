@@ -2,6 +2,7 @@
   "name": "Cleanse",
   "short": "CL",
   "color": "#8ae6ff",
+  "glyph": "drop",
   "description": "Removes all stuns, roots, slows and silences and the summoner debuffs Ignite and Exhaust from you, and shortens new crowd control by 65% for 3 seconds. Usable while stunned.",
   "cooldown": 210,
   "targeting": "self",

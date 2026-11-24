@@ -2,6 +2,7 @@
   "name": "Clarity",
   "short": "CY",
   "color": "#5aa8ff",
+  "glyph": "crystal",
   "description": "ARAM: restores 50% of your maximum mana, and 25% of theirs to allied champions within 600.",
   "cooldown": 240,
   "targeting": "self",

@@ -2,6 +2,7 @@
   "name": "Mark",
   "short": "MK",
   "color": "#dff3ff",
+  "glyph": "snowflake",
   "description": "ARAM snowball: throw it in a line (1600 range). If it hits an enemy, they take 15-100 true damage (by level), are revealed and marked for 3 seconds - recast to Dash to them.",
   "cooldown": 80,
   "targeting": "direction",

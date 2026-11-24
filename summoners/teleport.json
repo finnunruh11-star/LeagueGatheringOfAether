@@ -2,6 +2,7 @@
   "name": "Teleport",
   "short": "TP",
   "color": "#c27bff",
+  "glyph": "rune",
   "description": "Channel for 4 seconds, then appear next to target allied tower. From 10:00 it is Unleashed: you can also teleport to allied minions and wards, and the cooldown is shorter. A stun interrupts it (half the cooldown comes back); cast it again to cancel.",
   "cooldown": "360 if time < 600 else 330",
   "targeting": "ally",

@@ -351,7 +351,7 @@ ability (targeting, range, `cooldown`, `effects`, `requires`, `cast_time`, `star
 
 ```jsonc
 {
-  "name": "Ignite", "short": "IG", "color": "#ff7a33", "icon": "ignite.png",   // looks (icon optional)
+  "name": "Ignite", "short": "IG", "color": "#ff7a33", "glyph": "flame",   // looks: "icon": "x.png", else a drawn "glyph" (item pictures), else "short" letters
   "description": "...",
   "cooldown": 180,                  // seconds (or an expression, e.g. "360 if time < 600 else 330")
   "targeting": "unit", "range": 600,

@@ -284,6 +284,7 @@ static func build_summoners(pack: Dictionary, errors: PackedStringArray) -> Dict
 		sp.description = str(raw.get("description", ""))
 		sp.color = parse_color(raw.get("color"), hash_color(id))
 		sp.short = str(raw.get("short", _abbrev(sp.name)))
+		sp.glyph = str(raw.get("glyph", ""))   # drawn picture (see ItemGlyphs) when there is no icon
 		sp.icon = texture(holder, raw.icon) if raw.has("icon") else null
 		sp.bot = str(raw.get("bot", ""))
 		sp.active = _ability(a, "summoner", {"id": "summoners/" + id, "pack": pack, "textures": holder.textures}, errors)

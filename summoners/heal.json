@@ -2,6 +2,7 @@
   "name": "Heal",
   "short": "HL",
   "color": "#7dff8a",
+  "glyph": "heart",
   "description": "Restores 80-318 health (by level) to you and the most wounded allied champion within 850, and gives you both 30% move speed for 1 second. Halved for champions healed by Heal in the last 35 seconds.",
   "cooldown": 240,
   "targeting": "self",

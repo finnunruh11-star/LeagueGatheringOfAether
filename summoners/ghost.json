@@ -2,6 +2,7 @@
   "name": "Ghost",
   "short": "GH",
   "color": "#a6e4ff",
+  "glyph": "wing",
   "description": "For 15 seconds you move through units and gain 24-48% move speed (by level).",
   "cooldown": 210,
   "targeting": "self",

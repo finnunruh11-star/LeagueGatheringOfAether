@@ -782,9 +782,12 @@ func _draw_summoner(c: Control, i: int) -> void:
 		var top := col.darkened(0.05) if not recast else RECAST_COLOR
 		for k in 6:
 			c.draw_rect(Rect2(2, 2 + (c.size.y - 4) * k / 6.0, c.size.x - 4, (c.size.y - 4) / 6.0 + 1.0), top.lerp(col.darkened(0.6), k / 5.0))
-		var txt: String = sp.short if not recast else str(ab.name).substr(0, 4)
-		c.draw_string_outline(font, Vector2(0, 33), txt, HORIZONTAL_ALIGNMENT_CENTER, c.size.x, 17, 4, Color(0, 0, 0, 0.7))
-		c.draw_string(font, Vector2(0, 33), txt, HORIZONTAL_ALIGNMENT_CENTER, c.size.x, 17)
+		if sp.glyph != "" and not recast:
+			ItemGlyphs.draw(c, r.grow(-7), {"id": "summoner:" + sp.id, "glyph": sp.glyph, "color": col.lightened(0.25)})
+		else:
+			var txt: String = sp.short if not recast else str(ab.name).substr(0, 4)
+			c.draw_string_outline(font, Vector2(0, 33), txt, HORIZONTAL_ALIGNMENT_CENTER, c.size.x, 17, 4, Color(0, 0, 0, 0.7))
+			c.draw_string(font, Vector2(0, 33), txt, HORIZONTAL_ALIGNMENT_CENTER, c.size.x, 17)
 	var cd: float = 0.0 if recast else ch.sum_cd[i]
 	if cd > 0.0:
 		var frac := clampf(cd / maxf(ch.sum_cd_total[i], 0.01), 0.0, 1.0)
@@ -886,8 +889,11 @@ func _draw_scores(c: Control) -> void:
 				if sp == null:
 					continue
 				var sr := Rect2(692 + i * 26, y - 19, 24, 24)
-				c.draw_rect(sr, Color(sp.color).darkened(0.35))
-				c.draw_string(font, Vector2(sr.position.x, sr.position.y + 16), sp.short, HORIZONTAL_ALIGNMENT_CENTER, sr.size.x, 10)
+				c.draw_rect(sr, Color(sp.color).darkened(0.55))
+				if sp.glyph != "":
+					ItemGlyphs.draw(c, sr.grow(-2), {"id": "summoner:" + sp.id, "glyph": sp.glyph, "color": Color(sp.color).lightened(0.25)})
+				else:
+					c.draw_string(font, Vector2(sr.position.x, sr.position.y + 16), sp.short, HORIZONTAL_ALIGNMENT_CENTER, sr.size.x, 10)
 				if ch.team == world.local_team and ch.sum_cd[i] > 0.0:
 					c.draw_rect(sr, Color(0, 0, 0, 0.6))
 					c.draw_string(font, Vector2(sr.position.x, sr.position.y + 16), str(ceili(ch.sum_cd[i])), HORIZONTAL_ALIGNMENT_CENTER, sr.size.x, 10, Color(1, 0.9, 0.6))

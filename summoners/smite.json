@@ -2,6 +2,7 @@
   "name": "Smite",
   "short": "SM",
   "color": "#ffb347",
+  "glyph": "bolt",
   "description": "Deals 600 true damage to target enemy minion or summon (not champions or wards). There are no jungle camps, so it's for cannon minions and enemy pets/turrets.",
   "cooldown": 60,
   "targeting": "unit",

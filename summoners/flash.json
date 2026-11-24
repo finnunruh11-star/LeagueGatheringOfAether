@@ -2,6 +2,7 @@
   "name": "Flash",
   "short": "FL",
   "color": "#f5e663",
+  "glyph": "star",
   "description": "Teleports you a short distance (400) toward the cursor. Works while rooted or silenced.",
   "cooldown": 300,
   "targeting": "point",
