@@ -591,6 +591,9 @@ func _update_statuses(delta: float) -> void:
 		s.time -= delta
 		if s.type == "shield" and s.has("decay"):
 			s.amount = maxf(s.amount - s.decay * delta, 0.0)
+		elif s.type == "slow" and s.has("decay_from"):
+			s.amount = s.decay_from * clampf(s.time / s.total, 0.0, 1.0)
+			stats_dirty = true
 		if s.type == "dot" or s.type == "hot":
 			s.tick -= delta
 			if s.tick <= 0.0:

@@ -113,6 +113,7 @@ dashes, delays and repeats contain their own effect lists. Any effect may also h
 | `rank` | ability rank (for item/passive triggers: your level) |
 | `dist`, `ally`, `i`, `time` | distance to target; 1 if target is an ally; repeat index / trigger count; match time |
 | `in_combat`, `combat_time`, `since_hit`, `since_combat` | champion-combat state (seconds) |
+| `moving` | 1 while you are walking |
 | `gold`, `kills`, `deaths`, `assists`, `energy`, `legendaries` | your score, Energize stacks (0-100), legendary item count |
 | `dmg`, `dtype`, `crit_hit`, `is_attack`, `is_ability`, `is_dot`, `is_aoe` | inside damage triggers: the hit (`dmg` is after armor/MR) |
 | `slot` | inside `cast`/`rank_up` triggers: which ability ("q"... compare with `slot == 'r'`) |
@@ -142,7 +143,7 @@ Godot math and logic work too: `min`, `max`, `clamp`, `pow`, `sqrt`, `randf()`, 
 | `invulnerable`, `stasis`, `untargetable`, `stealth` | `duration` 1. Stasis = invulnerable + untargetable + can't act (Zhonya's) |
 | `spellshield` | blocks the next enemy ability hit; `duration` (default: until popped) |
 | `grievous` | healing reduction: `amount` 0.4, `duration` 3 |
-| `slow` | `amount` 0.3 (0-1), `duration` 2 |
+| `slow` | `amount` 0.3 (0-1), `duration` 2, `decay` (fades out over the duration) |
 | `dot` / `hot` | `amount` per second 20, `duration` 3, `interval` 0.5, `damage_type`, `raw` |
 | `buff` | `duration` 4, `add` {stat: value}, `multiply` {stat: factor}; stacking: `max_stacks` 5 (+`stacks` per application, `refresh` true) - each stack adds the values again; `hidden` (no buff icon/particles) |
 | `mark` | invisible stackable marker for bookkeeping: `id` (required), `duration` 5, `stacks` 1, `max_stacks` |
@@ -174,14 +175,14 @@ ability effects (not basic attacks or item effects).
 ### Movement (you)
 | type | keys |
 |---|---|
-| `dash` | `to` "aim" (toward the target point) / "direction" (full distance) / "back" / "target"; `distance` 350, `speed` 1400, `on_hit` [effects on each unit passed through], `stop_on_hit`, `on_end` [effects at the landing spot] |
+| `dash` | `to` "aim" (toward the target point) / "direction" (full distance) / "back" / "target"; `distance` 350, `min_distance` (aim dashes go at least this far), `speed` 1400, `on_hit` [effects on each unit passed through], `stop_on_hit`, `on_end` [effects at the landing spot] |
 | `teleport` | `to` "pos" (default) / "target" (behind the target) / "home" |
 
 ### Spawners
 | type | keys |
 |---|---|
 | `projectile` | `speed` 900, `range` (ability range), `radius` 12, `color`, `sprite`, `count` 1, `spread` (degrees, 360 = ring), `pierce` false/true/number, `homing`, `returns` (boomerang), `through_walls`, `affects` "enemies"/"allies"/"all", `hits_structures`, `on_hit` [...], `on_end` [... when it stops] |
-| `area` | instant explosion. `at` "pos" (default) / "self" / "target", `radius` 150, `delay` (shows a warning circle first), `scatter` (random offset), `angle` (cone toward the aim, e.g. 70), `affects`, `hits_structures`, `color`, `show` (false = no blast visual, for auras), `filter` "champions"/"minions", `exclude_target`, `exclude_self`, `sort` "nearest"/"farthest"/"lowest_hp"/"lowest_hp_percent"/"champions_first"/"random", `max_targets`, `effects` [... per unit inside] |
+| `area` | instant explosion. `at` "pos" (default) / "self" / "target", `radius` 150, `delay` (shows a warning circle first), `scatter` (random offset), `angle` (cone toward the aim, e.g. 70), `affects`, `hits_structures`, `color`, `show` (false = no blast visual, for auras), `filter` "champions"/"minions"/"summons"/"non_champions", `offset` (move the center forward along your aim), `exclude_target`, `exclude_self`, `sort` "nearest"/"farthest"/"lowest_hp"/"lowest_hp_percent"/"champions_first"/"champions_lowest_hp"/"random", `max_targets`, `effects` [... per unit inside] |
 | `beam` | instant line from you. `length` (ability range), `width` 70, `delay`, `affects`, `effects` [...] |
 | `zone` | lingering circle. `radius` 160, `duration` 4, `interval` 0.5, `follow` (true = aura around you), `affects`, `effects` [... each tick], `on_expire` [...] |
 | `trap` | `radius` 60, `duration` 30, `arm_time` 0.6, `hidden` true, `effects` [... on the unit that steps on it] |

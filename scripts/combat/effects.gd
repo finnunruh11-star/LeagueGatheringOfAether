@@ -465,9 +465,10 @@ static func _one(e: Dictionary, ctx: Dictionary) -> void:
 					_add(u, {"type": "shield_break", "amount": f, "time": d}, e, ctx)
 		"fire_event":
 			var c := _caster(ctx)
-			if c:
+			var t = ctx.get("target")
+			if c and is_instance_valid(t) and t is Unit and not t.dead:
 				var ex := {"crit_hit": false, "onhit": true, "exclude": str(ctx.get("trigger_key", ""))}
-				c.trigger(str(e.get("event", "attack")), ctx.get("target"), null, ex)
+				c.trigger(str(e.get("event", "attack")), t, null, ex)
 		"stun", "root", "silence":
 			var u := _unit(e, ctx)
 			if u and not _blocked(u, ctx):
@@ -492,8 +493,11 @@ static func _one(e: Dictionary, ctx: Dictionary) -> void:
 		"slow":
 			var u := _unit(e, ctx)
 			if u and not _blocked(u, ctx):
-				_add(u, {"type": "slow", "amount": clampf(num(e.get("amount"), ctx, 0.3), 0.0, 1.0),
-					"time": _cc_time(u, e, ctx, 2.0)}, e, ctx)
+				var sl := {"type": "slow", "amount": clampf(num(e.get("amount"), ctx, 0.3), 0.0, 1.0), "time": _cc_time(u, e, ctx, 2.0)}
+				if bool(e.get("decay", false)):
+					sl.decay_from = sl.amount
+					sl.total = maxf(sl.time, 0.05)
+				_add(u, sl, e, ctx)
 				_cc_event(type, u, ctx)
 		"dot", "hot":
 			var u := _unit(e, ctx)
@@ -598,6 +602,9 @@ static func _one(e: Dictionary, ctx: Dictionary) -> void:
 			_projectile(e, ctx)
 		"area":
 			var center := _pos(e.get("at", "pos"), ctx)
+			var fwd := num(e.get("offset"), ctx, 0.0)
+			if fwd != 0.0:
+				center += Vector2(ctx.get("dir", Vector2.RIGHT)) * fwd
 			var scatter := num(e.get("scatter"), ctx, 0.0)
 			if scatter > 0.0:
 				center += Vector2.from_angle(randf() * TAU) * sqrt(randf()) * scatter
@@ -826,8 +833,14 @@ static func _area_now(e: Dictionary, ctx: Dictionary, center: Vector2, radius: f
 			"champions":
 				if not u.is_champion:
 					continue
-			"minions", "non_champions":
+			"minions":
+				if not u is Minion:
+					continue
+			"non_champions":
 				if u.is_champion:
+					continue
+			"summons":
+				if not u is Summon:
 					continue
 		targets.append(u)
 	var max_t := int(num(e.get("max_targets"), ctx, 0.0))
@@ -842,6 +855,8 @@ static func _area_now(e: Dictionary, ctx: Dictionary, center: Vector2, radius: f
 			targets.sort_custom(func(a, b): return a.hp / a.stats.max_hp < b.hp / b.stats.max_hp)
 		"champions_first":
 			targets.sort_custom(func(a, b): return int(a.is_champion) > int(b.is_champion))
+		"champions_lowest_hp":
+			targets.sort_custom(func(a, b): return int(a.is_champion) > int(b.is_champion) or (a.is_champion == b.is_champion and a.hp < b.hp))
 		"random":
 			targets.shuffle()
 	if max_t > 0 and targets.size() > max_t:
@@ -894,7 +909,7 @@ static func _dash(e: Dictionary, ctx: Dictionary) -> void:
 			var to: Vector2 = ctx.get("pos", c.global_position) - c.global_position
 			if to.length() > 5.0:
 				dir = to.normalized()
-				length = minf(to.length(), dist)
+				length = clampf(to.length(), minf(num(e.get("min_distance"), ctx, 0.0), dist), dist)
 		"back", "backward", "backwards":
 			dir = -dir
 		"target":
