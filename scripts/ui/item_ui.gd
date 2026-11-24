@@ -49,14 +49,34 @@ static func draw_icon(ci: CanvasItem, r: Rect2, it: Dictionary, dim := false) ->
 	ci.draw_rect(r, rarity_color(it), false, 2.0)
 
 
+## The local player's champion: expression stats and cooldowns are shown as their current value for it.
+static func viewer() -> Champion:
+	var w = Game.world
+	if not is_instance_valid(w):
+		return null
+	var ch = w.get("local_champion")
+	return ch if is_instance_valid(ch) and ch is Champion else null
+
+
+static func _eval(v, fallback: float) -> float:
+	var ch := viewer()
+	return Effects.num(v, {"caster": ch, "target": ch, "rank": ch.level}, fallback) if ch != null else fallback
+
+
 static func stat_line(k: String, v) -> String:
 	var info: Array = STAT_NAMES.get(k, [k.capitalize(), false])
+	var note := ""
 	if v is String:
-		return "%s (scales)" % info[0]
+		if viewer() == null:
+			return "%s (scales)" % info[0]
+		v = _eval(v, 0.0)
+		if absf(v) < 0.0001:
+			return ""  # a conditional stat that is currently off - the passive text explains it
+		note = " (scales)"
 	var f := float(v)
 	if info[1]:
-		return "%s%s%% %s" % ["+" if f >= 0.0 else "", _fmt(f * 100.0), info[0]]
-	return "%s%s %s" % ["+" if f >= 0.0 else "", _fmt(f), info[0]]
+		return "%s%s%% %s%s" % ["+" if f >= 0.0 else "", _fmt(f * 100.0), info[0], note]
+	return "%s%s %s%s" % ["+" if f >= 0.0 else "", _fmt(f), info[0], note]
 
 
 static func _fmt(f: float) -> String:
@@ -69,7 +89,9 @@ static func _fmt(f: float) -> String:
 static func parts(it: Dictionary) -> Array:
 	var out := []
 	for k in it.stats:
-		out.append(["stat", stat_line(k, it.stats[k])])
+		var line := stat_line(k, it.stats[k])
+		if line != "":
+			out.append(["stat", line])
 	for k in it.get("stats_mult", {}):
 		var v = it.stats_mult[k]
 		if v is float:
@@ -77,7 +99,9 @@ static func parts(it: Dictionary) -> Array:
 	if not it.get("mythic_stats", {}).is_empty():
 		var bonus := PackedStringArray()
 		for k in it.mythic_stats:
-			bonus.append(stat_line(k, it.mythic_stats[k]))
+			var line := stat_line(k, it.mythic_stats[k])
+			if line != "":
+				bonus.append(line)
 		out.append(["mythic", "Mythic: each other Legendary item grants " + ", ".join(bonus)])
 	var shown := {}
 	for p in it.get("passives", []):
@@ -89,7 +113,9 @@ static func parts(it: Dictionary) -> Array:
 	if it.get("active") != null:
 		var a: Dictionary = it.active
 		var cd = a.get("cooldown", 0)
-		var cd_text := (_fmt(float(cd)) if cd is float or cd is int else str(cd)) + "s cooldown"
+		if cd is String and viewer() != null:
+			cd = _eval(cd, 0.0)
+		var cd_text := (_fmt(float(cd)) + "s cooldown") if cd is float or cd is int else "Cooldown scales"
 		out.append(["active", str(a.name), str(a.description), cd_text if not ((cd is float or cd is int) and cd <= 0) else ""])
 	if str(it.get("description", "")) != "":
 		out.append(["text", str(it.description)])

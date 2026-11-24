@@ -226,7 +226,7 @@ func _swap(a: int, b: int) -> void:
 
 
 static func _sell_value(it: Dictionary) -> int:
-	return int(floorf(float(it.cost) * Champion.SELL_RATIO))
+	return Champion.sell_value(it)
 
 
 # -------------------------------------------------------------- updating ---

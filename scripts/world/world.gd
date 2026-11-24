@@ -938,14 +938,15 @@ func _process(delta: float) -> void:
 		var vp := get_viewport().get_visible_rect().size
 		var mp := get_viewport().get_mouse_position()
 		var edge := edge_pan and get_window().has_focus() and Rect2(Vector2.ZERO, vp).has_point(mp)
+		var keys := not (get_viewport().gui_get_focus_owner() is LineEdit)  # not while typing in the shop search
 		var pan := Vector2.ZERO
-		if (edge and mp.x < 10) or Input.is_key_pressed(KEY_LEFT):
+		if (edge and mp.x < 10) or (keys and Input.is_key_pressed(KEY_LEFT)):
 			pan.x -= 1
-		if (edge and mp.x > vp.x - 10) or Input.is_key_pressed(KEY_RIGHT):
+		if (edge and mp.x > vp.x - 10) or (keys and Input.is_key_pressed(KEY_RIGHT)):
 			pan.x += 1
-		if (edge and mp.y < 10) or Input.is_key_pressed(KEY_UP):
+		if (edge and mp.y < 10) or (keys and Input.is_key_pressed(KEY_UP)):
 			pan.y -= 1
-		if (edge and mp.y > vp.y - 10) or Input.is_key_pressed(KEY_DOWN):
+		if (edge and mp.y > vp.y - 10) or (keys and Input.is_key_pressed(KEY_DOWN)):
 			pan.y += 1
 		camera.global_position += pan * 1400.0 * delta / cam_zoom
 		var half := get_viewport_rect().size * 0.5 / camera.zoom
@@ -964,7 +965,7 @@ func _process(delta: float) -> void:
 		_shake = 0.0
 		camera.offset = Vector2.ZERO
 	hover_unit = null
-	if local_champion != null and not ended and not closing:
+	if local_champion != null and not ended and not closing and get_viewport().gui_get_hovered_control() == null:
 		hover_unit = pick_unit(get_global_mouse_position(), local_team, true, 10.0)
 	var want_attack := hover_unit != null or amove_armed
 	if want_attack != _cursor_attack:

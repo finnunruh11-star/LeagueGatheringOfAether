@@ -206,6 +206,10 @@ func ability_cost(ab: Dictionary, ctx := {}) -> float:
 	return maxf(Effects.num(ab.cost, ctx, 0.0), 0.0)
 
 
+static func sell_value(it: Dictionary) -> int:
+	return int(floorf(float(it.cost) * SELL_RATIO + 0.001))
+
+
 ## Whether you can afford an ability's mana (or health) cost right now.
 func can_pay(ab: Dictionary) -> bool:
 	var cost := ability_cost(ab)
@@ -668,7 +672,7 @@ func sell(slot: int) -> String:
 		return ""
 	if not can_shop():
 		return "You can only sell in your base (or while dead)"
-	gold += floorf(it.cost * SELL_RATIO)
+	gold += sell_value(it)
 	items[slot].n -= 1
 	if items[slot].n <= 0 or it.charges > 0:
 		items[slot] = null

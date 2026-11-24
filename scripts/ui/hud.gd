@@ -4,10 +4,14 @@ extends CanvasLayer
 
 class DrawControl extends Control:
 	var draw_func: Callable
+	var tip_func: Callable  # optional: builds a custom tooltip Control
 
 	func _draw() -> void:
 		if draw_func.is_valid():
 			draw_func.call(self)
+
+	func _make_custom_tooltip(for_text: String) -> Object:
+		return tip_func.call() if tip_func.is_valid() and for_text != "" else null
 
 
 const SLOT_KEYS := ["p", "q", "w", "e", "r"]
@@ -142,6 +146,10 @@ func _ready() -> void:
 		s.position = Vector2(ITEM_X + (i % 3) * 50, 12 + (i / 3) * 50)
 		s.size = Vector2(44, 44)
 		s.gui_input.connect(func(ev): _item_slot_input(ev, idx))
+		s.tip_func = func():
+			var ch := world.local_champion
+			var it = ch.item_def(idx) if is_instance_valid(ch) else null
+			return ItemUI.tooltip(it) if it != null else null
 		bar.add_child(s)
 		item_boxes.append(s)
 	var shop_btn := Button.new()
