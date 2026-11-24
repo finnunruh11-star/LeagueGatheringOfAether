@@ -880,5 +880,17 @@ func _draw_scores(c: Control) -> void:
 					ItemUI.draw_icon(c, r, it)
 				else:
 					c.draw_rect(r, Color(0.2, 0.21, 0.25), false, 1.0)
+			# Summoner spells (cooldowns only for your team, like LoL).
+			for i in ch.summoners.size():
+				var sp = ch.summoner_def(i)
+				if sp == null:
+					continue
+				var sr := Rect2(692 + i * 26, y - 19, 24, 24)
+				c.draw_rect(sr, Color(sp.color).darkened(0.35))
+				c.draw_string(font, Vector2(sr.position.x, sr.position.y + 16), sp.short, HORIZONTAL_ALIGNMENT_CENTER, sr.size.x, 10)
+				if ch.team == world.local_team and ch.sum_cd[i] > 0.0:
+					c.draw_rect(sr, Color(0, 0, 0, 0.6))
+					c.draw_string(font, Vector2(sr.position.x, sr.position.y + 16), str(ceili(ch.sum_cd[i])), HORIZONTAL_ALIGNMENT_CENTER, sr.size.x, 10, Color(1, 0.9, 0.6))
+				c.draw_rect(sr, Color(sp.color), false, 1.0)
 			y += 40.0
 		y += 20.0

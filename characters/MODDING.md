@@ -64,6 +64,8 @@ Percent stats are fractions (`0.3` = 30%). Regen is per second.
 | `tenacity`, `slow_resist` | 0, 0 | shortens stuns/roots/silences/slows / weakens slows |
 | `size`, `damage_mult`, `damage_taken_mult`, `cooldown_mult` | 1 | fun multipliers (0.5 cooldown_mult = half cooldowns) |
 | `vision` | 900 | sight radius for fog of war (minions 650, towers 900, summons 600) |
+| `summoner_haste` | 0 | like ability haste, for summoner spells |
+| `ghost` | 0 | above 0: walk through other units (Ghost; e.g. a buff `"add": {"ghost": 1}`) |
 
 `per_level` stats are added every level (defaults: +75 HP, +3.5 AD, +2 armor, +1 MR, +0.12 regen,
 +8 AP, +2.5% attack speed). Champions level up to **21**; levels 19-21 only give stats.
@@ -78,12 +80,14 @@ All stats can be changed temporarily with the `buff` effect.
   "cost_type": "mana",               // or "health" (pay HP instead)
   "targeting": "direction",          // direction | point | self | unit | ally
   "range": 900,
-  "cast_time": 0,                    // optional wind-up (you stand still)
+  "cast_time": 0,                    // optional wind-up (you stand still); stuns interrupt it
+  "start_effects": [ ... ],          // optional: run when a cast_time starts (e.g. a warning marker)
   "effects": [ ... ]
 }
 ```
 - `direction`: skillshot toward the cursor. `point`: ground target (clamped to range).
 - `self`: centered on you. `unit`: enemy under the cursor (must be in range). `ally`: ally (or you) under the cursor.
+  `"structures": true` lets `unit`/`ally` target towers too (Teleport).
 - At the top level of an ability, the *target* is **you** (except `unit`/`ally` abilities),
   so `{"type": "shield"}` shields yourself. Inside projectiles/areas/zones the target is whoever got hit.
 
@@ -278,6 +282,7 @@ Inside a trigger, `rank` is your level, so `[..18 values..]` lists scale with le
 | `bond_cleared` | your Bond of Life was fully paid off |
 | `interval` | every `interval` seconds |
 | `dash` | you dashed, blinked or teleported (target = you, `pos` = destination) |
+| `summoner` | you used a summoner spell (`slot` = its id, e.g. `slot == 'flash'`) |
 | `spawn`, `level_up`, `rank_up`, `buy`, `item_used` | as named |
 
 **Triggers on statuses**: a `buff` or `mark` can carry `"triggers": [...]` that work while it lasts
@@ -335,6 +340,41 @@ fountain or while dead (anywhere in Practice / the Training Arena). Keys **1-6**
 Examples in `items/`: `sheen.json` (Spellblade with marks), `kraken_slayer.json` (every 3rd attack,
 per-target ramp), `thornmail.json` (`attacked`), `ludens_tempest.json` (`deal_damage` + chained area),
 `rabadons_deathcap.json` (`stats_mult`), `zhonyas_hourglass.json` / `health_potion.json` (actives).
+
+# Summoner spells
+
+Every `.json` file in `summoners/` is a summoner spell (file name = id); players pick two in the
+lobby and cast them with **D / F** (rebindable). The host sends them to everyone. A spell is an
+ability (targeting, range, `cooldown`, `effects`, `requires`, `cast_time`, `start_effects`) plus:
+
+```jsonc
+{
+  "name": "Ignite", "short": "IG", "color": "#ff7a33", "icon": "ignite.png",   // looks (icon optional)
+  "description": "...",
+  "cooldown": 180,                  // seconds (or an expression, e.g. "360 if time < 600 else 330")
+  "targeting": "unit", "range": 600,
+  "requires": "t_champion",         // checked before the cooldown starts
+  "while_cc": false,                // true: usable while stunned (Cleanse)
+  "while_dead": false,
+  "bot": "kill",                    // how bots use it (below)
+  "effects": [ ... ],
+  "recast": { "name": "Dash", "status": "snowball_dash", "targeting": "self", "effects": [ ... ] }
+}
+```
+- Summoner spells work while silenced or rooted, not while stunned (unless `while_cc`), dashing or
+  knocked up. Inside them `rank` and `level` are your level; `src_slot` is `"summoner"`.
+- `recast`: while you have the status `status` (give it with a `buff` in the main spell, e.g. when a
+  projectile hits), the slot casts the recast instead. The recast has no cooldown of its own -
+  remove the status in its effects. See `mark.json` (ARAM snowball).
+- A `cast_time` spell channels: a stun interrupts it and refunds half the cooldown; casting it again
+  cancels it. See `teleport.json` (with `start_effects` marking the destination).
+- `bot` hints: `escape` (Flash away when low), `defend` (self-cast when low and enemies are near),
+  `kill` (on an enemy champion below 30%), `fight` (on a nearby enemy champion in a fight), `chase`,
+  `cleanse` (when stunned/rooted/slowed), `mana` (below 25% mana), `travel` (Teleport from the
+  fountain to the farthest allied tower), `smite` (enemy minion/summon with <= 600 HP), `dash`
+  (recasts). Anything else: bots don't use it.
+
+Test them with the item test harness: `--summoners=flash,ignite --steps=sum:0,sum_self:1,sum_tower:0`.
 
 ## Testing items
 ```

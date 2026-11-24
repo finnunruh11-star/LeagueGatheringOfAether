@@ -158,7 +158,8 @@ func begin() -> void:
 		var off := Vector2(0, 70).rotated(per_team[t] * 2.1) if per_team[t] > 0 else Vector2.ZERO
 		var gone: bool = online and pid != 1 and not bool(p.get("bot", false)) and not Game.players.has(pid)
 		var c = spawn("champion", {"peer": pid, "team": t, "character": p.character, "name": p.name, "gold": start_gold,
-			"bot": bool(p.get("bot", false)) or gone, "pos": map.spawn_point(t) + off, "lane": per_team[t]})
+			"bot": bool(p.get("bot", false)) or gone, "pos": map.spawn_point(t) + off, "lane": per_team[t],
+			"summoners": p.get("summoners", Game.default_summoners(p.character))})
 		for k in int(map.data.get("start_level", 1)) - 1:
 			c.cheat("level")
 		per_team[t] += 1
@@ -920,7 +921,8 @@ func send_build() -> void:
 
 ## True while keyboard keys should control the game (not typing in a text box or in a menu).
 func keys_free() -> bool:
-	return get_window().has_focus() and not (get_viewport().gui_get_focus_owner() is LineEdit) and not hud.modal_open()
+	var focus := get_window().has_focus() or DisplayServer.get_name() == "headless"
+	return focus and not (get_viewport().gui_get_focus_owner() is LineEdit) and not hud.modal_open()
 
 
 ## WASD mode: sends the movement direction to the host whenever it changes.

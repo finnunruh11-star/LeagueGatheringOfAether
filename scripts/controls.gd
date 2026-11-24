@@ -164,7 +164,7 @@ static func help_text(mode: String) -> String:
 	else:
 		parts.append("RMB move/attack")
 	parts.append("%s cast (hold to aim)" % abil)
-	parts.append("Ctrl+%s level up" % label("ability_q"))
+	parts.append("Ctrl+%s level up" % abil.replace(" ", ""))
 	parts.append("%s/%s summoners" % [label("summoner_1"), label("summoner_2")])
 	parts.append("%s-%s items" % [label("item_1"), label("item_6")])
 	if code_of("attack_move") != "":

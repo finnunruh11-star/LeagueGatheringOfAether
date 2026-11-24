@@ -112,8 +112,9 @@ func _section(parent: Node, text: String) -> void:
 
 
 func _check(parent: Node, text: String, pref: String, cb := Callable()) -> void:
-	var c := CheckBox.new()
+	var c := CheckButton.new()
 	c.text = text
+	c.alignment = HORIZONTAL_ALIGNMENT_LEFT
 	c.focus_mode = Control.FOCUS_NONE
 	c.button_pressed = bool(Game.prefs[pref])
 	c.toggled.connect(func(on):

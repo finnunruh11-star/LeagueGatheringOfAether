@@ -46,6 +46,8 @@ func _on_match_started(cfg: Dictionary) -> void:
 		add_child(preload("res://scripts/selftest.gd").new())
 	if Game.cmdline.has("itemtest"):
 		add_child(preload("res://scripts/itemtest.gd").new())
+	if Game.cmdline.has("inputtest"):
+		add_child(preload("res://scripts/inputtest.gd").new())
 
 
 func _set_screen(n: Node) -> void:
@@ -132,6 +134,11 @@ func _process(delta: float) -> void:
 	_at("relobby_at", Game.return_to_lobby)
 	_at("restart_at", Game.start_match)
 	_at("leave_at", func(): Game.leave(); Game.left_game.emit("left (test)"))
+	_at("settings_at", func():
+		if Game.world != null:
+			Game.world.hud.open_settings()
+		elif screen != null:
+			screen.add_child(SettingsMenu.new()))
 	if a.has("fpslog") and Game.world != null and int(_clock) % 10 == 0 and int(_clock) != _last_fps_log:
 		_last_fps_log = int(_clock)
 		print("[fps] t=%d fps=%d entities=%d fx_nodes=%d" % [_last_fps_log, Engine.get_frames_per_second(), Game.world.entities.size(), Game.world.fx_layer.get_child_count()])
@@ -172,6 +179,7 @@ func _report() -> void:
 			if inst != null:
 				inv.append(inst.id)
 		print("[auto]     gold=%d ranks=%s items=%s" % [c.gold, str(c.ranks), str(inv)])
+		print("[auto]     summoners=%s cds=%s build=%s autobuy=%s" % [str(c.summoners), str(c.sum_cd.map(func(x): return snappedf(x, 0.1))), str(c.build), str(c.autobuy)])
 	var counts := {}
 	for e in w.entities.values():
 		counts[e.get_class() + ":" + str(e.get("kind"))] = counts.get(e.get_class() + ":" + str(e.get("kind")), 0) + 1

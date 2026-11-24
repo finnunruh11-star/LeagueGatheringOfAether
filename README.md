@@ -13,22 +13,30 @@ Godot 4.7 (tested with 4.7.1), GDScript, Compatibility renderer.
 The *Training Arena* map has dummies that show your DPS.
 
 ## Controls
+Default keys - **every key can be changed in Settings** (main menu, lobby, or Esc in a match).
+The bottom of the screen always shows your current keys.
+
 | | |
 |---|---|
 | Right mouse | move / attack (hold to keep moving) |
 | Q W E R | hold to aim (shows range), release to cast. Left click also casts, right click cancels |
 | Ctrl + Q W E R | spend a skill point (or click the **+** above an ability) |
+| D / F | summoner spells (Flash, Ignite... picked in the lobby) |
 | 1 - 6 | use item actives (aimed ones work like abilities) |
 | P | shop (in your fountain or while dead; anywhere in Practice). Click an item for details, right-click or double-click to buy, search box + category filters; click one of your items to sell it, drag to reorder |
-| A + left click | attack-move |
+| A | attack-move: attacks the enemy in range closest to the cursor, otherwise walks there attacking whatever comes in range (Settings: closest to you instead, or the classic "A, then left click") |
 | S | stop |
 | B | recall to base (4s, cancelled by damage or moving) |
-| Y | lock/unlock camera (edge-pan or arrow keys when unlocked), Space = jump to your champion |
+| Y | lock/unlock camera (edge-pan or arrow keys when unlocked; speed in Settings), hold Space = center on your champion |
 | Mouse wheel | zoom |
 | Tab | scoreboard |
-| Esc | menu |
+| Esc | menu (Resume / **Settings** / leave) |
 | F1 / F2 / F3 / F4 | Practice only: level up / +1000 gold / reset cooldowns & mana / max ability ranks |
 | Minimap | left click = look there, right click = move there |
+
+**WASD mode** (Settings > Movement): W A S D walk, **left click attacks** the enemy closest to the
+cursor (one attack, then you keep walking while you hold a direction), right click still moves/attacks.
+Abilities move to Q E R F, summoner spells to Space / Shift, attack-move to X - all changeable.
 
 Destroy the enemy **Nexus** to win. Towers protect the ones behind them; the Nexus can only be
 damaged once all towers of one lane are down. Minions spawn in waves; standing in your fountain
@@ -47,6 +55,15 @@ heals you and refills mana, the enemy fountain kills you.
   one pair of boots. Sell for 70%.
 - **Fog of war:** you only see what your team sees (champions, minions, towers, wards; walls block
   sight). The host can turn it off in the lobby; the Training Arena has none.
+- **Autobuy:** turn it on in the shop (or Settings). Whenever you're in your base or dead, it buys your
+  build for that character in order (the item, or its most expensive affordable component). Make a
+  build in the shop (Ctrl+click items or "Add to build") - until then it follows a recommended build
+  for your character's role. Builds are saved per character.
+- **Summoner spells:** pick two in the lobby (next to "Spells"): Flash, Ghost, Heal, Barrier, Exhaust,
+  Ignite, Cleanse, Teleport (channel 4s to an allied tower; minions and wards too after 10:00) and
+  Smite (there are no jungle camps - it hits minions and pets), plus the ARAM spells Clarity and Mark
+  (snowball - recast to dash to whoever it hit). Values are from LoL patch 13.24. They're JSON files
+  in `summoners/`, so you can edit them or make your own (see MODDING.md).
 
 ## Playing with friends
 1. Host: **Host game** (default UDP port 7777). The lobby shows your local IPs.
@@ -109,17 +126,19 @@ particles, telegraphs, the map art) is drawn procedurally.
 - `scripts/combat/effects.gd` - the effect interpreter behind every ability
 - `scripts/content.gd` - loads character/map/item folders
 - `scripts/world/fog.gd` - fog of war (vision, wall occlusion, fog rendering)
-- `scripts/ui/hud.gd`, `shop.gd`, `item_ui.gd` - in-match UI
+- `scripts/ui/hud.gd`, `shop.gd`, `item_ui.gd` - in-match UI; `settings_menu.gd` + `scripts/controls.gd` - settings and key bindings
 
 The host simulates everything; clients send commands and receive ~20 snapshots per second.
 Practice mode is just a host without other players.
 
 Testing helpers (command line, after `--`): `--auto=practice|host|join`, `--char=`, `--map=`,
 `--bots_blue=N`, `--bots_red=N`, `--autopilot`, `--speed=4`, `--shots=5,10 --shot=prefix`, `--quit_at=20`,
-`--fog=0`, `--itemtest=...` (see MODDING.md).
+`--fog=0`, `--wasd`, `--autobuy`, `--settings_at=2`, `--itemtest=...` (see MODDING.md).
+Settings and key bindings are saved in Godot's user folder (`settings.cfg`; on Windows
+`%APPDATA%\Godot\app_userdata\CusOba`).
 
 ## Known limitations
-- No jungle camps, smite, brush or summoner spells - jungle items are adapted (they grow from minion kills).
+- No jungle camps or brush - jungle items are adapted (they grow from minion kills) and Smite hits minions/pets.
 - Item effects are faithful where the effect system allows; a few League mechanics are approximated
   (see the item descriptions in the shop).
 - Fog of war is visual + targeting rules; the host still sends every unit's position to clients
