@@ -387,6 +387,8 @@ func trigger(event: String, target = null, pos = null, extra := {}, only := "") 
 			"rank": level, "proc": true, "src_slot": "item" if is_item else "passive",
 			"item": r.src if is_item else "", "item_slot": r.slot, "trigger_key": r.key}
 		ctx.merge(extra, true)
+		if extra.has("dmg_info"):
+			ctx.dmg = float(extra.dmg_info.amount)
 		if tr.has("if") and Effects.num(tr["if"], ctx, 1.0) == 0.0:
 			continue
 		if tr.has("every"):
@@ -437,6 +439,8 @@ func _status_triggers(event: String, target, pos, extra: Dictionary) -> bool:
 				"rank": giver.get_level(), "proc": true, "src_slot": "item" if s.has("item") else "passive",
 				"item": str(s.get("item", "")), "i": int(s.get("fired", 0))}
 			ctx.merge(extra, true)
+			if extra.has("dmg_info"):
+				ctx.dmg = float(extra.dmg_info.amount)
 			if tr.has("if") and Effects.num(tr["if"], ctx, 1.0) == 0.0:
 				continue
 			s.fired = int(s.get("fired", 0)) + 1

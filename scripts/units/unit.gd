@@ -27,6 +27,7 @@ const F_ENERGIZED := 131072
 const F_UNTARGETABLE := 262144
 const F_REVEAL0 := 524288     # revealed to team 0 ("reveal" effect); F_REVEAL0 << team
 const F_REVEAL1 := 1048576
+const F_DEBUFF := 2097152     # a stat buff applied by an enemy (shred, curses, slows of attack speed...)
 const NET_BASE := 9
 const HARD_CC := ["stun", "root", "slow", "silence", "dot", "grievous"]
 const CC_TYPES := ["stun", "root", "slow", "silence"]
@@ -685,7 +686,7 @@ func _compute_flags() -> int:
 			"invulnerable": f |= F_INVULN
 			"buff":
 				if not s.get("hidden", false):
-					f |= F_BUFF
+					f |= F_DEBUFF if is_instance_valid(s.source) and s.source.team != team else F_BUFF
 			"dot": f |= F_DOT
 			"hot": f |= F_HOT
 			"stasis": f |= F_STASIS | F_INVULN
@@ -904,6 +905,9 @@ func _update_status_fx() -> void:
 		elif flags & F_SLOW:
 			col = Color(0.45, 0.7, 1.0)
 			falling = true
+		elif flags & F_DEBUFF:
+			col = Color(0.85, 0.3, 0.55)
+			falling = true
 	if col.a == 0.0:
 		if status_fx != null:
 			status_fx.emitting = false
@@ -1107,7 +1111,7 @@ func _draw_overlay(n: Node2D) -> void:
 func _draw_status_icons(n: Node2D, y: float) -> void:
 	var icons := []
 	for pair in [[F_STUN, "stun"], [F_ROOT, "root"], [F_SILENCE, "silence"], [F_SLOW, "slow"], [F_DOT, "dot"],
-			[F_HOT, "hot"], [F_BUFF, "buff"], [F_INVULN, "invuln"]]:
+			[F_HOT, "hot"], [F_BUFF, "buff"], [F_DEBUFF, "debuff"], [F_INVULN, "invuln"]]:
 		if flags & pair[0]:
 			icons.append(pair[1])
 	if shield > 0.0:

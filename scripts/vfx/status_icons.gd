@@ -28,6 +28,8 @@ static func draw(n: CanvasItem, c: Vector2, kind: String) -> void:
 			n.draw_rect(Rect2(c + Vector2(-5, -1.5), Vector2(10, 3)), Color(0.45, 1.0, 0.45))
 		"buff":
 			n.draw_colored_polygon(PackedVector2Array([c + Vector2(-5, 3), c + Vector2(5, 3), c + Vector2(0, -5)]), Color(0.75, 1.0, 0.35))
+		"debuff":
+			n.draw_colored_polygon(PackedVector2Array([c + Vector2(-5, -3), c + Vector2(5, -3), c + Vector2(0, 5)]), Color(1.0, 0.35, 0.55))
 		"invuln":
 			n.draw_colored_polygon(PackedVector2Array([c + Vector2(0, -6), c + Vector2(5, 0), c + Vector2(0, 6), c + Vector2(-5, 0)]), Color(1.0, 0.85, 0.25))
 		"shield":
