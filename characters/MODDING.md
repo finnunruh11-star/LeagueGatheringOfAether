@@ -55,6 +55,7 @@ Percent stats are fractions (`0.3` = 30%). Regen is per second.
 | `heal_power`, `heal_received` | 0, 0 | boosts heals & shields you give / receive |
 | `tenacity`, `slow_resist` | 0, 0 | shortens stuns/roots/silences/slows / weakens slows |
 | `size`, `damage_mult`, `damage_taken_mult`, `cooldown_mult` | 1 | fun multipliers (0.5 cooldown_mult = half cooldowns) |
+| `vision` | 900 | sight radius for fog of war (minions 650, towers 900, summons 600) |
 
 `per_level` stats are added every level (defaults: +75 HP, +3.5 AD, +2 armor, +1 MR, +0.12 regen,
 +8 AP, +2.5% attack speed). Champions level up to **21**; levels 19-21 only give stats.
@@ -182,7 +183,7 @@ ability effects (not basic attacks or item effects).
 | `beam` | instant line from you. `length` (ability range), `width` 70, `delay`, `affects`, `effects` [...] |
 | `zone` | lingering circle. `radius` 160, `duration` 4, `interval` 0.5, `follow` (true = aura around you), `affects`, `effects` [... each tick], `on_expire` [...] |
 | `trap` | `radius` 60, `duration` 30, `arm_time` 0.6, `hidden` true, `effects` [... on the unit that steps on it] |
-| `summon` | `name`, `count` 1, `duration` 10, `stats` {max_hp, attack_damage, attack_range, attack_speed, move_speed, armor}, `ranged`, `stationary` (turret), `size` 0.7, `sprite`, `on_hit` [...], `on_death` [...] |
+| `summon` | `name`, `count` 1, `duration` 10, `stats` {max_hp, attack_damage, attack_range, attack_speed, move_speed, armor, vision...}, `ranged`, `stationary` (turret), `size` 0.7, `sprite`, `on_hit` [...], `on_death` [...], `ward` (a ward: 1 damage per basic attack, ignored by minions and towers), `reveal` (sees stealthed enemies in its vision) |
 
 Abilities don't hurt towers unless you set `"hits_structures": true`.
 
