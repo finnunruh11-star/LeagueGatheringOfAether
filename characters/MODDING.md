@@ -116,7 +116,8 @@ dashes, delays and repeats contain their own effect lists. Any effect may also h
 | `gold`, `kills`, `deaths`, `assists`, `energy`, `legendaries` | your score, Energize stacks (0-100), legendary item count |
 | `dmg`, `dtype`, `crit_hit`, `is_attack`, `is_ability`, `is_dot`, `is_aoe` | inside damage triggers: the hit (`dmg` is after armor/MR) |
 | `slot` | inside `cast`/`rank_up` triggers: which ability ("q"... compare with `slot == 'r'`) |
-| `amount` | inside `heal_ally`/`shield_ally` triggers: how much |
+| `amount` | inside `heal_ally`/`shield_ally` triggers: how much; inside `cast` triggers: the mana spent |
+| `dmg_raw` | inside damage triggers: the hit before armor/MR |
 | `cc` | inside `cc_applied` triggers: "stun", "root", "slow", "silence", "knockback" or "pull" |
 | `t_self` | 1 if the target is you |
 | `at_base` | 1 while you stand in your fountain |
@@ -126,7 +127,7 @@ Functions: `has('id')` (you have a status/mark with that id or type), `t_has('id
 you - or any status of that type like `'stun'`), `t_has_any('id')`, `stacks('id')`, `t_stacks('id')`,
 `counter('id')`, `stat('name')`, `t_stat('name')`, `base('name')`, `bonus('name')`, `pre('name')` (a stat
 before multipliers, e.g. crit chance before Guinsoo's sets it to 0), `h_stat('name')` (stat of the unit
-holding the buff whose trigger runs), `near_allies(r)`, `near_enemies(r)` (champions), `near_units(r)`,
+holding the buff whose trigger runs), `near_allies(r)`, `near_enemies(r)` (champions; `near_enemies(r, 'id')` skips ones carrying your mark 'id'), `near_units(r)`,
 `cd('q')` (remaining), `cd_total('r')` (full cooldown of the last cast), `has_item('id')`, `item_count('legendary')`.
 Godot math and logic work too: `min`, `max`, `clamp`, `pow`, `sqrt`, `randf()`, `and`, `or`, `not`,
 `a if cond else b`, `[10, 20, 30][rank - 1]`.
@@ -136,25 +137,26 @@ Godot math and logic work too: `min`, `max`, `clamp`, `pow`, `sqrt`, `randf()`, 
 |---|---|
 | `damage` | `amount` 50, `damage_type` "magic" / "physical" / "true"; `can_crit` (rolls your crit), `attack` (counts as a basic attack: lifesteal, "attacked" triggers), `onhit` (lifesteal applies), `raw` (skips damage modifiers) |
 | `heal` | `amount` 50 (boosted by your `heal_power`) |
-| `shield` | `amount` 100, `duration` 3, `damage_type` "all" / "magic" / "physical" (only blocks that type) |
+| `shield` | `amount` 100, `duration` 3, `damage_type` "all" / "magic" / "physical" (only blocks that type), `decay` (shrinks to 0 over the duration) |
 | `stun`, `root`, `silence` | `duration` 1 (shortened by tenacity) |
 | `invulnerable`, `stasis`, `untargetable`, `stealth` | `duration` 1. Stasis = invulnerable + untargetable + can't act (Zhonya's) |
 | `spellshield` | blocks the next enemy ability hit; `duration` (default: until popped) |
 | `grievous` | healing reduction: `amount` 0.4, `duration` 3 |
 | `slow` | `amount` 0.3 (0-1), `duration` 2 |
 | `dot` / `hot` | `amount` per second 20, `duration` 3, `interval` 0.5, `damage_type`, `raw` |
-| `buff` | `duration` 4, `add` {stat: value}, `multiply` {stat: factor}; stacking: `max_stacks` 5 (+`stacks` per application, `refresh` true) - each stack adds the values again |
+| `buff` | `duration` 4, `add` {stat: value}, `multiply` {stat: factor}; stacking: `max_stacks` 5 (+`stacks` per application, `refresh` true) - each stack adds the values again; `hidden` (no buff icon/particles) |
 | `mark` | invisible stackable marker for bookkeeping: `id` (required), `duration` 5, `stacks` 1, `max_stacks` |
 | `remove` | removes your status with `id` from the target (`any_source`: from anyone), or `status`: "slow" (a whole type) |
 | `shield_break` | reduces the target's current shields by `amount` (0.5 = half); with `duration`, shields they gain meanwhile are reduced too |
-| `cleanse` | removes stun/root/slow/silence/dot/grievous |
+| `cleanse` | removes stun/root/slow/silence/dot/grievous (`cc_only`: only stun/root/slow/silence) |
 | `knockback` | `distance` 220, `duration` 0.25, `from` "origin" (center of the blast / projectile) or "self" |
 | `pull` | toward you; `distance` (default: all the way), `duration` 0.25 |
 | `swap` | you and the target swap places |
 | `mana` | restore `amount` mana (negative drains) |
 
 Repeated statuses from the same ability refresh instead of stacking. Add `"stack": true` to let
-them stack, or `"id": "burn"` to share one status between abilities. Enemy spell shields block
+them stack, or `"id": "burn"` to share one status between abilities; `"keep_longer": true` keeps the
+longer of the old and new duration when refreshing. (Marks add a stack each time they are applied.) Enemy spell shields block
 ability effects (not basic attacks or item effects).
 
 ### You / your champion
@@ -237,7 +239,9 @@ Inside a trigger, `rank` is your level, so `[..18 values..]` lists scale with le
 | `takedown` | you killed or assisted on a champion (`amount` 1 = kill, 0 = assist) |
 | `death` | you died |
 | `heal_ally`, `shield_ally` | you healed/shielded another champion (target = ally, `amount`) |
-| `cc_applied` | you stunned/rooted/slowed/silenced/knocked back an enemy champion |
+| `cc_applied` | you stunned/rooted/slowed/silenced/knocked back an enemy champion (`cc`) |
+| `cc_received` | an enemy champion's effect stunned/rooted/slowed/silenced/knocked you back (target = them, `cc`) |
+| `buff_ally` | you gave a `buff` to another allied champion (target = ally) |
 | `spellshield_pop` | your spell shield blocked something |
 | `interval` | every `interval` seconds |
 | `spawn`, `level_up`, `rank_up`, `buy`, `item_used` | as named |

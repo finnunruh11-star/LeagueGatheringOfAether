@@ -387,17 +387,19 @@ func take_damage(amount: float, source = null, dtype := "physical", hit := {}) -
 	if is_ward:
 		amount = 1.0 if hit.get("attack", false) else 0.0
 		raw = true
+	var before_mit := amount
 	if not raw:
 		if src != null:
 			amount *= src.stats.get("damage_mult", 1.0)
 		amount *= stats.get("damage_taken_mult", 1.0)
+		before_mit = amount
 		if dtype == "physical":
 			amount *= _mitigation(stats.armor, src, true)
 		elif dtype == "magic":
 			amount *= _mitigation(stats.magic_resist, src, false)
 		# Item/passive hooks see the damage after armor/MR and may change it.
 		var info := {"amount": amount}
-		var vars := _hit_vars(hit, amount, dtype)
+		var vars := _hit_vars(hit, amount, dtype, before_mit)
 		vars["dmg_info"] = info
 		if src != null:
 			src.trigger("deal_damage_pre", self, null, vars)
@@ -432,12 +434,13 @@ func take_damage(amount: float, source = null, dtype := "physical", hit := {}) -
 				credit.enter_combat()
 				enter_combat()
 	world.on_damage(self, dealt, src, dtype, hit)
+	var raw_dealt := before_mit
 	if src != null:
-		src.trigger("deal_damage", self, null, _hit_vars(hit, dealt, dtype))
+		src.trigger("deal_damage", self, null, _hit_vars(hit, dealt, dtype, raw_dealt))
 	if not dead:
-		trigger("take_damage", src, null, _hit_vars(hit, dealt, dtype))
+		trigger("take_damage", src, null, _hit_vars(hit, dealt, dtype, raw_dealt))
 		if hit.get("attack", false) and src != null:
-			trigger("attacked", src, null, _hit_vars(hit, dealt, dtype))
+			trigger("attacked", src, null, _hit_vars(hit, dealt, dtype, raw_dealt))
 	if dead:
 		return dealt
 	if hp <= 0.0 and not _cheat_death():
@@ -447,11 +450,13 @@ func take_damage(amount: float, source = null, dtype := "physical", hit := {}) -
 	return dealt
 
 
-func _hit_vars(hit: Dictionary, amount: float, dtype: String) -> Dictionary:
+## Event values for damage triggers. `before_mit` = the hit before armor/magic resist.
+func _hit_vars(hit: Dictionary, amount: float, dtype: String, before_mit := -1.0) -> Dictionary:
 	var ab := str(hit.get("ability", ""))
 	return {"dmg": amount, "dtype": dtype, "crit_hit": bool(hit.get("crit", false)), "is_attack": bool(hit.get("attack", false)),
 		"is_ability": ab in ["q", "w", "e", "r"], "is_dot": bool(hit.get("dot", false)), "is_aoe": bool(hit.get("aoe", false)),
-		"is_proc": bool(hit.get("proc", false)), "hit_item": str(hit.get("item", "")), "onhit": bool(hit.get("onhit", false))}
+		"is_proc": bool(hit.get("proc", false)), "hit_item": str(hit.get("item", "")), "onhit": bool(hit.get("onhit", false)),
+		"dmg_raw": before_mit if before_mit >= 0.0 else amount}
 
 
 ## Damage multiplier from armor / magic resist after the attacker's penetration.
@@ -539,6 +544,8 @@ func add_status(s: Dictionary, source = null, key := "") -> void:
 			if old.key == key and old.type == s.type:
 				if s.has("tick") and old.has("tick"):
 					s.tick = minf(s.tick, old.tick)
+				if s.get("keep_longer", false):
+					s.time = maxf(s.time, old.time)
 				if s.has("max_stacks"):
 					s.stacks = mini(int(old.get("stacks", 0)) + int(s.get("add_stacks", 1)), int(s.max_stacks))
 					_apply_stacks(s)
@@ -570,8 +577,9 @@ func _interrupted() -> void:
 	pass
 
 
-func cleanse() -> void:
-	statuses = statuses.filter(func(s): return not s.type in HARD_CC)
+func cleanse(cc_only := false) -> void:
+	var types: Array = CC_TYPES if cc_only else HARD_CC
+	statuses = statuses.filter(func(s): return not s.type in types)
 	stats_dirty = true
 
 
@@ -581,6 +589,8 @@ func _update_statuses(delta: float) -> void:
 		return
 	for s in statuses.duplicate():
 		s.time -= delta
+		if s.type == "shield" and s.has("decay"):
+			s.amount = maxf(s.amount - s.decay * delta, 0.0)
 		if s.type == "dot" or s.type == "hot":
 			s.tick -= delta
 			if s.tick <= 0.0:
@@ -666,7 +676,9 @@ func _compute_flags() -> int:
 			"slow": f |= F_SLOW
 			"silence": f |= F_SILENCE
 			"invulnerable": f |= F_INVULN
-			"buff": f |= F_BUFF
+			"buff":
+				if not s.get("hidden", false):
+					f |= F_BUFF
 			"dot": f |= F_DOT
 			"hot": f |= F_HOT
 			"stasis": f |= F_STASIS | F_INVULN

@@ -16,7 +16,7 @@ const VARS := [
 	"t_mr", "t_mana", "t_max_mana", "t_champion", "t_minion", "t_structure", "t_ranged", "t_level", "t_bonus_hp", "t_ms",
 	"dmg", "dtype", "crit_hit", "is_attack", "is_ability", "is_dot", "is_aoe", "slot", "amount",
 	"in_combat", "combat_time", "since_hit", "since_combat", "gold", "kills", "deaths", "assists", "energy", "legendaries", "moving",
-	"cc", "t_self", "at_base", "t_summon",
+	"cc", "t_self", "at_base", "t_summon", "dmg_raw",
 ]
 
 
@@ -78,15 +78,15 @@ class Env extends RefCounted:
 	func near_allies(r: float) -> int:
 		return _count(r, true, true)
 
-	## Enemy champions near the caster.
-	func near_enemies(r: float) -> int:
-		return _count(r, false, true)
+	## Enemy champions near the caster (optionally not counting ones carrying your mark `without`).
+	func near_enemies(r: float, without := "") -> int:
+		return _count(r, false, true, without)
 
 	## Enemy units (champions, minions, summons) near the caster.
 	func near_units(r: float) -> int:
 		return _count(r, false, false)
 
-	func _count(r: float, allies: bool, champs: bool) -> int:
+	func _count(r: float, allies: bool, champs: bool, without := "") -> int:
 		var c := _u("caster")
 		if c == null or Game.world == null:
 			return 0
@@ -94,9 +94,15 @@ class Env extends RefCounted:
 		for u in Game.world.units:
 			if u == c or u.dead or u.is_structure or (champs and not u.is_champion) or (u.team == c.team) != allies:
 				continue
+			if without != "" and not u.find_status(without, c).is_empty():
+				continue
 			if u.global_position.distance_to(c.global_position) <= r:
 				n += 1
 		return n
+
+	## Expression stand-in for "a if c else b" (see Effects._ternary).
+	func iff(c, a, b):
+		return a if c else b
 
 	func cd(slot: String) -> float:
 		var c := _u("caster")
@@ -151,7 +157,7 @@ static func num(v, ctx: Dictionary, def := 0.0) -> float:
 		var e: Expression = _cache.get(v)
 		if e == null:
 			e = Expression.new()
-			if e.parse(v, VARS) != OK:
+			if e.parse(_ternary(v), VARS) != OK:
 				_bad[v] = true
 				push_warning("Bad expression \"%s\": %s" % [v, e.get_error_text()])
 				return def
@@ -172,6 +178,117 @@ static func num(v, ctx: Dictionary, def := 0.0) -> float:
 		if r is float or r is int:
 			return float(r)
 	return def
+
+
+## Godot's Expression has no "a if c else b": rewrite it to iff(c, a, b) before parsing.
+## Works inside brackets and function arguments and chains like "1 if x else 2 if y else 3".
+static func _ternary(s: String) -> String:
+	if s.find(" if ") < 0:
+		return s
+	var parts := PackedStringArray()
+	for p in _split_top(s):
+		parts.append(_ternary_one(p))
+	return ",".join(parts)
+
+
+static func _ternary_one(s: String) -> String:
+	var out := ""
+	var i := 0
+	while i < s.length():
+		var ch := s[i]
+		if ch == "(" or ch == "[":
+			var close := _match_close(s, i)
+			if close < 0:
+				return s
+			out += ch + _ternary(s.substr(i + 1, close - i - 1)) + s[close]
+			i = close + 1
+		elif ch == "'" or ch == "\"":
+			var q := s.find(ch, i + 1)
+			if q < 0:
+				q = s.length() - 1
+			out += s.substr(i, q - i + 1)
+			i = q + 1
+		else:
+			out += ch
+			i += 1
+	var ip := _find_word(out, "if", 0)
+	if ip < 0:
+		return out
+	var ep := _find_word(out, "else", ip + 2)
+	if ep < 0:
+		return out
+	return "iff(%s, %s, %s)" % [out.substr(ip + 2, ep - ip - 2).strip_edges(), out.substr(0, ip).strip_edges(),
+		_ternary_one(out.substr(ep + 4)).strip_edges()]
+
+
+## Splits at commas that are not inside brackets or quotes.
+static func _split_top(s: String) -> PackedStringArray:
+	var parts := PackedStringArray()
+	var depth := 0
+	var quote := ""
+	var start := 0
+	for i in s.length():
+		var ch := s[i]
+		if quote != "":
+			if ch == quote:
+				quote = ""
+		elif ch == "'" or ch == "\"":
+			quote = ch
+		elif ch == "(" or ch == "[" or ch == "{":
+			depth += 1
+		elif ch == ")" or ch == "]" or ch == "}":
+			depth -= 1
+		elif ch == "," and depth == 0:
+			parts.append(s.substr(start, i - start))
+			start = i + 1
+	parts.append(s.substr(start))
+	return parts
+
+
+static func _match_close(s: String, open: int) -> int:
+	var depth := 0
+	var quote := ""
+	for i in range(open, s.length()):
+		var ch := s[i]
+		if quote != "":
+			if ch == quote:
+				quote = ""
+		elif ch == "'" or ch == "\"":
+			quote = ch
+		elif ch == "(" or ch == "[" or ch == "{":
+			depth += 1
+		elif ch == ")" or ch == "]" or ch == "}":
+			depth -= 1
+			if depth == 0:
+				return i
+	return -1
+
+
+## Index of the keyword `w` outside brackets/quotes, as a whole word, or -1.
+static func _find_word(s: String, w: String, from: int) -> int:
+	var depth := 0
+	var quote := ""
+	for i in range(from, s.length()):
+		var ch := s[i]
+		if quote != "":
+			if ch == quote:
+				quote = ""
+		elif ch == "'" or ch == "\"":
+			quote = ch
+		elif ch == "(" or ch == "[" or ch == "{":
+			depth += 1
+		elif ch == ")" or ch == "]" or ch == "}":
+			depth -= 1
+		elif depth == 0 and s.substr(i, w.length()) == w:
+			var before := s[i - 1] if i > 0 else " "
+			var after := s[i + w.length()] if i + w.length() < s.length() else " "
+			if not _word_char(before) and not _word_char(after):
+				return i
+	return -1
+
+
+static func _word_char(c: String) -> bool:
+	return c == "_" or (c >= "a" and c <= "z") or (c >= "A" and c <= "Z") or (c >= "0" and c <= "9")
 
 
 static func _values(ctx: Dictionary) -> Array:
@@ -265,6 +382,7 @@ static func _values(ctx: Dictionary) -> Array:
 	if cv and Game.world != null and Game.world.map != null:
 		vals[67] = 1.0 if c.global_position.distance_to(Game.world.map.spawn_point(c.team)) <= Game.world.map.fountain_radius * 1.25 else 0.0
 	vals[68] = 1.0 if tv and t is Summon else 0.0
+	vals[69] = float(ctx.get("dmg_raw", ctx.get("dmg", 0.0)))
 	return vals
 
 
@@ -328,8 +446,11 @@ static func _one(e: Dictionary, ctx: Dictionary) -> void:
 				for s in u.statuses:
 					if s.type == "shield_break":
 						amt *= 1.0 - clampf(s.amount, 0.0, 1.0)
-				_add(u, {"type": "shield", "amount": amt, "time": num(e.get("duration"), ctx, 3.0),
-					"dtype": str(e.get("damage_type", "all"))}, e, ctx)
+				var dur := num(e.get("duration"), ctx, 3.0)
+				var sh := {"type": "shield", "amount": amt, "time": dur, "dtype": str(e.get("damage_type", "all"))}
+				if bool(e.get("decay", false)):
+					sh.decay = amt / maxf(dur, 0.1)
+				_add(u, sh, e, ctx)
 				if c and u != c and u.is_champion:
 					c.trigger("shield_ally", u, null, {"amount": amt, "is_proc": bool(ctx.get("proc", false))})
 		"shield_break":
@@ -406,6 +527,9 @@ static func _one(e: Dictionary, ctx: Dictionary) -> void:
 				if e.get("triggers") is Array:
 					s.triggers = e.triggers
 				_add(u, s, e, ctx)
+				var c := _caster(ctx)
+				if c and u != c and u.is_champion and u.team == c.team:
+					c.trigger("buff_ally", u, null, {"is_proc": bool(ctx.get("proc", false))})
 		"mark":
 			var u := _unit(e, ctx)
 			if u:
@@ -455,7 +579,7 @@ static func _one(e: Dictionary, ctx: Dictionary) -> void:
 		"cleanse":
 			var u := _unit(e, ctx)
 			if u:
-				u.cleanse()
+				u.cleanse(bool(e.get("cc_only", false)))
 		"knockback", "pull":
 			_knockback(type, e, ctx)
 		"dash":
@@ -580,6 +704,8 @@ static func _champ(ctx: Dictionary) -> Champion:
 static func _add(u: Unit, s: Dictionary, e: Dictionary, ctx: Dictionary) -> void:
 	if e.has("id"):
 		s.id = str(e.id)
+	if bool(e.get("keep_longer", false)):
+		s.keep_longer = true
 	u.add_status(s, _caster(ctx), _key(e, ctx))
 	if Game.debug_log and s.type != "dot" and s.type != "hot":
 		print("[status] t=%.2f %s gets %s%s %.2fs %s" % [Game.world.time, u.display_name, s.type, (":" + s.id) if s.has("id") else "",
@@ -606,6 +732,7 @@ static func _cc_event(type: String, u: Unit, ctx: Dictionary) -> void:
 	var c := _caster(ctx)
 	if c and u.is_champion and u.team != c.team:
 		c.trigger("cc_applied", u, null, {"cc": type})
+		u.trigger("cc_received", c, null, {"cc": type})
 
 
 ## Spell shields block the first enemy ability effect (and the rest of that hit).

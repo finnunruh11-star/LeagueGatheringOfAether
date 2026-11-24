@@ -13,6 +13,7 @@ extends Node
 ##   shield_ally:X  A shields the ally                            ally_attack:S   the ally attacks the enemy
 ##   minion         spawn an enemy minion next to the enemy        kill_minion     A last-hits a fresh minion
 ##   cc:stun        A stuns (or slows/roots/silences) the enemy    kill            A kills the enemy
+##   self_cc:stun   the enemy stuns (slows/roots/silences) A
 ##   assist         A damages the enemy, then the enemy dies to something else
 ##   level:N        A gains N levels       hp:F / ehp:F / mana:F   set A's / enemy's HP or A's mana fraction
 ##   far:D          put the enemy D units away    move:D   A walks D units right    wait:S    stats
@@ -143,6 +144,10 @@ func _ready() -> void:
 			"cc":
 				var kind := arg if arg != "" else "stun"
 				Effects.run([{"type": kind, "duration": 1.0, "amount": 0.4}], {"caster": a, "team": a.team, "target": b, "src_slot": "q", "ability": "test"})
+				await _wait(0.2)
+			"self_cc":
+				var kind2 := arg if arg != "" else "stun"
+				Effects.run([{"type": kind2, "duration": 1.5, "amount": 0.4}], {"caster": b, "team": b.team, "target": a, "src_slot": "q", "ability": "test"})
 				await _wait(0.2)
 			"kill":
 				b.take_damage(99999.0, a, "true", {"ability": "q"})

@@ -10,7 +10,7 @@ const ITEM_SLOTS := 6
 const SELL_RATIO := 0.7
 ## Events that item/passive effects can't set off again (no infinite proc chains) unless the
 ## trigger has "procs": true.
-const PROC_GUARDED := ["deal_damage", "deal_damage_pre", "heal_ally", "shield_ally"]
+const PROC_GUARDED := ["deal_damage", "deal_damage_pre", "heal_ally", "shield_ally", "buff_ally"]
 
 var peer := 0
 var def := {}
@@ -171,6 +171,7 @@ func cast(slot: String, aim: Vector2, tid: int) -> bool:
 	if ctx.is_empty():
 		return false
 	var cost := ability_cost(ab, ctx)
+	ctx.cost_paid = cost
 	if cost > 0.0:
 		if ab.cost_type == "health":
 			if hp <= cost:
@@ -220,7 +221,7 @@ func _execute(ab: Dictionary, ctx: Dictionary) -> void:
 	ctx.origin = global_position
 	world.fx("cast", {"p": global_position, "c": color, "v": net_id, "d": Vector2(ctx.dir).angle(), "s": ab.slot})
 	Effects.run(ab.effects, ctx)
-	trigger("cast", self, ctx.pos, {"cast_slot": ab.slot})
+	trigger("cast", self, ctx.pos, {"cast_slot": ab.slot, "amount": float(ctx.get("cost_paid", 0.0))})
 
 
 func _make_ctx(ab: Dictionary, aim: Vector2, tid: int) -> Dictionary:
