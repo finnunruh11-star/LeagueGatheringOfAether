@@ -65,6 +65,8 @@ func _ready() -> void:
 	load_settings()
 	if cmdline.has("wasd"):
 		prefs.move_mode = "wasd"
+	if cmdline.has("autobuy"):
+		prefs.autobuy = str(cmdline.autobuy) != "0"
 	Controls.setup(_saved_keys, prefs.move_mode)
 	multiplayer.peer_connected.connect(_on_peer_connected)
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
