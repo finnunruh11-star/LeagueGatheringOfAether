@@ -18,6 +18,9 @@ func _ready() -> void:
 	if Game.cmdline.get("selftest") == "balance":
 		_test_balance()
 		return
+	if Game.cmdline.get("selftest") == "windup":
+		_test_windup()
+		return
 	for e in world.entities.values():
 		if e is Dummy:
 			world.despawn(e)
@@ -161,3 +164,51 @@ func _check(condition: bool, label: String) -> bool:
 	if not condition:
 		push_error("[balance] " + label)
 	return condition
+
+
+func _test_windup() -> void:
+	var at := world.map.size * 0.5
+	var target: Dummy = world.spawn("dummy", {"pos": at + Vector2(70.0, 0.0)})
+	var minion: Minion = world.spawn("minion", {"team": 0, "pos": at})
+	var ok := true
+	var tick := 1.0 / 60.0
+	minion.attack_target = target
+	minion._act(tick)
+	ok = _check(minion.windup_left >= 0.3 and target.total_taken == 0.0, "melee minion winds up instead of dealing instant damage") and ok
+	target.global_position = at + Vector2(minion.attack_reach(target) + 10.0, 0.0)
+	minion._act(tick)
+	ok = _check(minion.windup_left == 0.0 and target.total_taken == 0.0, "leaving attack reach cancels windup without damage") and ok
+	target.global_position = at + Vector2(70.0, 0.0)
+	for i in 12:
+		minion._act(tick)
+	ok = _check(target.total_taken == 0.0, "minion cannot hit during its startup") and ok
+	for i in 12:
+		minion._act(tick)
+	ok = _check(is_equal_approx(target.total_taken, minion.stats.attack_damage), "staying in reach lets exactly one attack release") and ok
+	var ember := world.local_champion
+	if not _check(ember != null and ember.char_id == "ember", "windup test requires --char=ember"):
+		get_tree().quit(1)
+		return
+	ember.max_ranks()
+	var before := world.entities.size()
+	ok = _check(ember.cast("q", ember.global_position + Vector2.RIGHT * 400.0, 0)
+		and ember.windup_left > 0.2 and world.entities.size() == before, "fireball cues before spawning its projectile") and ok
+	for i in 8:
+		ember._think(tick)
+	ok = _check(world.entities.size() == before, "fireball is not released early") and ok
+	for i in 8:
+		ember._think(tick)
+	var fireball: Projectile
+	for e in world.entities.values():
+		if e is Projectile:
+			fireball = e
+	ok = _check(ember.windup_left == 0.0 and fireball != null and world.entities.size() == before + 1,
+		"fireball launches at the end of startup") and ok
+	if fireball != null:
+		var origin := fireball.global_position
+		fireball._physics_process((fireball.max_dist + 10.0) / fireball.speed)
+		ok = _check(fireball.done and is_equal_approx(origin.distance_to(fireball.global_position), 900.0),
+			"fireball ends at its authored range instead of overshooting") and ok
+	print("[windup] ", "passed" if ok else "failed")
+	await get_tree().create_timer(1.0, true, false, true).timeout
+	get_tree().quit(0 if ok else 1)

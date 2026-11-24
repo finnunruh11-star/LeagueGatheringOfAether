@@ -8,7 +8,7 @@
     "move_speed": 335,
     "attack_damage": 58,
     "attack_speed": 0.9,
-    "attack_range": 550,
+    "attack_range": 525,
     "armor": 24,
     "max_mana": 340,
     "mana_regen": 1.4
@@ -46,6 +46,7 @@
   "abilities": {
     "q": {
       "name": "Piercing Bolt",
+      "cast_time": 0.25,
       "description": "Fire a bolt that pierces through every enemy in a line.",
       "cooldown": 6,
       "targeting": "direction",
@@ -53,7 +54,7 @@
       "effects": [
         {
           "type": "projectile",
-          "speed": 1500,
+          "speed": 1350,
           "radius": 14,
           "color": "#7ff0e0",
           "pierce": true,

@@ -28,7 +28,7 @@ const F_UNTARGETABLE := 262144
 const F_REVEAL0 := 524288     # revealed to team 0 ("reveal" effect); F_REVEAL0 << team
 const F_REVEAL1 := 1048576
 const F_DEBUFF := 2097152     # a stat buff applied by an enemy (shred, curses, slows of attack speed...)
-const NET_BASE := 10
+const NET_BASE := 14
 const HARD_CC := ["stun", "root", "slow", "silence", "dot", "grievous"]
 const CC_TYPES := ["stun", "root", "slow", "silence"]
 const COMBAT_TIME := 3.0
@@ -82,6 +82,10 @@ var facing := 1.0
 var anim := ANIM_IDLE
 var anim_lock := 0.0
 var anim_lock_kind := ANIM_IDLE
+var windup_left := 0.0
+var windup_duration := 0.0
+var windup_dir := Vector2.ZERO
+var winding_attack: Unit
 var last_champion_hit = null
 var last_champion_hit_time := -100.0
 
@@ -160,7 +164,7 @@ func _physics_process(delta: float) -> void:
 		_forced_process(delta)
 	elif not is_structure:
 		_act(delta)
-		if separate:
+		if separate and windup_left <= 0.0:
 			_separate()
 		move_and_slide()
 	else:
@@ -181,12 +185,29 @@ func _act(delta: float) -> void:
 	velocity = Vector2.ZERO
 	if attack_target != null and not valid_target(attack_target):
 		attack_target = null
+	if is_instance_valid(winding_attack):
+		var t := winding_attack
+		if t == attack_target and can_attack() and global_position.distance_to(t.global_position) <= attack_reach(t):
+			face(t.global_position)
+			windup_dir = global_position.direction_to(t.global_position)
+			windup_left -= delta
+			if windup_left <= 0.00001:
+				var elapsed := windup_duration
+				cancel_attack_windup()
+				perform_attack(t, elapsed)
+			return
+		cancel_attack_windup()
+	elif anim_lock_kind == ANIM_ATTACK and windup_left > 0.0:
+		cancel_attack_windup()
 	if attack_target != null:
 		var d := global_position.distance_to(attack_target.global_position)
 		if d <= attack_reach(attack_target):
 			face(attack_target.global_position)
 			if attack_cd <= 0.0 and can_attack():
-				perform_attack(attack_target)
+				winding_attack = attack_target
+				var period := 1.0 / maxf(stats.attack_speed, 0.05)
+				var duration := minf(0.45, period * (0.32 if is_champion else 0.40))
+				begin_windup(ANIM_ATTACK, duration, global_position.direction_to(attack_target.global_position))
 			return
 		if can_move():
 			_move_toward(attack_target.global_position, delta, true)
@@ -310,8 +331,26 @@ func enter_combat() -> void:
 
 # ---------------------------------------------------------------- attacks ---
 
-func perform_attack(t: Unit) -> void:
-	attack_cd = 1.0 / maxf(stats.attack_speed, 0.05)
+func begin_windup(animation: int, duration: float, direction: Vector2) -> void:
+	windup_left = duration
+	windup_duration = duration
+	windup_dir = direction
+	set_anim_lock(animation, duration)
+
+
+func clear_windup() -> void:
+	windup_left = 0.0
+	anim_lock = 0.0
+
+
+func cancel_attack_windup() -> void:
+	winding_attack = null
+	if anim_lock_kind == ANIM_ATTACK and windup_left > 0.0:
+		clear_windup()
+
+
+func perform_attack(t: Unit, elapsed_windup: float) -> void:
+	attack_cd = maxf(0.0, 1.0 / maxf(stats.attack_speed, 0.05) - elapsed_windup)
 	set_anim_lock(ANIM_ATTACK, minf(0.3, attack_cd * 0.8))
 	var a: Dictionary = attack_def
 	var dmg := attack_damage_against(t)
@@ -587,6 +626,8 @@ func die(killer = null) -> void:
 	if dead:
 		return
 	dead = true
+	winding_attack = null
+	clear_windup()
 	hp = 0.0
 	forced = null
 	attack_target = null
@@ -659,7 +700,7 @@ func _apply_stacks(s: Dictionary) -> void:
 
 
 func _interrupted() -> void:
-	pass
+	cancel_attack_windup()
 
 
 func cleanse(cc_only := false) -> void:
@@ -877,7 +918,8 @@ func _update_anim() -> void:
 # ---------------------------------------------------------------- network ---
 
 func net_state() -> PackedFloat32Array:
-	return PackedFloat32Array([global_position.x, global_position.y, hp, stats.max_hp, shield, flags, facing, anim, stats.size, bond])
+	return PackedFloat32Array([global_position.x, global_position.y, hp, stats.max_hp, shield, flags, facing, anim, stats.size, bond,
+		windup_left, windup_duration, windup_dir.x, windup_dir.y])
 
 
 func apply_net_state(s: PackedFloat32Array) -> void:
@@ -899,6 +941,9 @@ func apply_net_state(s: PackedFloat32Array) -> void:
 		stats.size = s[8]
 		set_radius(base_radius * s[8])
 	bond = s[9]
+	windup_left = s[10]
+	windup_duration = s[11]
+	windup_dir = Vector2(s[12], s[13])
 	dead = flags & F_DEAD != 0
 
 
@@ -907,6 +952,7 @@ func apply_net_state(s: PackedFloat32Array) -> void:
 func _process(delta: float) -> void:
 	if puppet:
 		life += delta
+		windup_left = maxf(windup_left - delta, 0.0)
 		net_t = minf(net_t + delta / World.SNAP_DT, 1.0)
 		global_position = net_from.lerp(net_to, net_t)
 	flash = maxf(flash - delta, 0.0)
@@ -938,7 +984,8 @@ func _bob() -> Vector2:
 
 
 func _body_offset() -> Vector2:
-	return kick + _bob()
+	var lean := (1.0 - windup_left / windup_duration) * 9.0 if windup_left > 0.0 and not is_structure else 0.0
+	return kick + _bob() - windup_dir * lean
 
 
 func _squash_scale() -> Vector2:
@@ -1097,7 +1144,23 @@ func _draw() -> void:
 	draw_set_transform(_body_offset())
 	_draw_statuses()
 	draw_set_transform(Vector2.ZERO)
+	_draw_windup()
 	_draw_extra()
+
+
+func _draw_windup() -> void:
+	if dead or windup_left <= 0.0:
+		return
+	var progress := clampf(1.0 - windup_left / windup_duration, 0.0, 1.0)
+	var col := Color(1.0, 0.42, 0.20, 0.9) if anim == ANIM_CAST else Color(1.0, 0.81, 0.35, 0.9)
+	var r := (maxf(radius, Content.CHAMPION_ART_HEIGHT * 0.5 * stats.size) if is_champion else radius) + 9.0
+	draw_arc(Vector2.ZERO, r, 0.0, TAU, 40, Color(col, 0.25), 3.0, true)
+	draw_arc(Vector2.ZERO, r, -PI * 0.5, -PI * 0.5 + TAU * progress, 40, col, 4.0, true)
+	if anim == ANIM_CAST and windup_dir != Vector2.ZERO:
+		var tip := windup_dir * (r + 50.0)
+		var wing := windup_dir.orthogonal() * 9.0
+		draw_line(windup_dir * r, tip, col, 4.0, true)
+		draw_colored_polygon(PackedVector2Array([tip, tip - windup_dir * 14.0 + wing, tip - windup_dir * 14.0 - wing]), col)
 
 
 ## Shadow, team ring and hover highlight (stays on the ground).

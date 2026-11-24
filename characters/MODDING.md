@@ -79,7 +79,7 @@ All stats can be changed temporarily with the `buff` effect.
   "cost_type": "mana",               // or "health" (pay HP instead)
   "targeting": "direction",          // direction | point | self | unit | ally
   "range": 900,
-  "cast_time": 0,                    // optional wind-up (you stand still)
+  "cast_time": 0,                    // windup in seconds before effects; 0 is instant
   "effects": [ ... ]
 }
 ```

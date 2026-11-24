@@ -11,7 +11,7 @@ signal match_started(config: Dictionary)
 signal back_to_lobby
 signal left_game(reason: String)
 
-const PROTOCOL := 2
+const PROTOCOL := 3
 const DEFAULT_PORT := 7777
 const TEAM_NAMES := ["Blue", "Red", "Neutral"]
 const TEAM_COLORS := [Color("4d8dff"), Color("ff5a4d"), Color("bbbbbb")]

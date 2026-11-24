@@ -8,6 +8,7 @@ const ALLOWED_EXT := ["json", "png", "jpg", "jpeg", "webp", "svg", "bmp", "wav",
 const MAX_FILE_BYTES := 8 * 1024 * 1024
 const SLOTS := ["q", "w", "e", "r"]
 const BASE_RADIUS := 24.0
+const CHAMPION_ART_HEIGHT := 100.0
 
 ## Every stat a unit can have. Percent-style stats are fractions (0.3 = 30%).
 ## Regen values are per second.
@@ -574,7 +575,7 @@ static func _sprite(spec, def: Dictionary, errors: PackedStringArray):
 			return null
 		frames.add_animation("idle")
 		frames.add_frame("idle", tex)
-		scale = (BASE_RADIUS * 2.6) / max(tex.get_width(), tex.get_height())
+		scale = CHAMPION_ART_HEIGHT / tex.get_height()
 	elif spec is Dictionary:
 		var sheet := texture(def, spec.get("sheet", "spritesheet.png"))
 		if sheet == null:
@@ -601,7 +602,7 @@ static func _sprite(spec, def: Dictionary, errors: PackedStringArray):
 		if not frames.has_animation("idle"):
 			errors.append(def.id + ": sprite needs at least an 'idle' animation")
 			return null
-		scale = float(spec.get("scale", (BASE_RADIUS * 2.6) / max(fw, fh)))
+		scale = float(spec.get("scale", CHAMPION_ART_HEIGHT / fh))
 		var off = spec.get("offset", [0, 0])
 		if off is Array and off.size() == 2:
 			offset = Vector2(off[0], off[1])

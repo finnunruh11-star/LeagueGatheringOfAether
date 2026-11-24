@@ -9,6 +9,7 @@
     4
   ],
   "targeting": "direction",
+  "cast_time": 0.25,
   "range": 900,
   "effects": [
     {

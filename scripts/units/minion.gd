@@ -3,13 +3,13 @@ extends Unit
 ## Lane minion: walks its lane and fights whatever enemy is closest.
 
 const TYPES := {
-	"melee": {"max_hp": 465.0, "attack_damage": 11.0, "attack_speed": 1.25, "attack_range": 110.0, "move_speed": 325.0,
+	"melee": {"max_hp": 465.0, "attack_damage": 11.0, "attack_speed": 1.25, "attack_range": 110.0, "move_speed": 310.0,
 		"armor": 0.0, "magic_resist": 0.0, "radius": 15.0, "xp": 62.0, "gold": 20.0, "ranged": false},
-	"ranged": {"max_hp": 284.0, "attack_damage": 21.0, "attack_speed": 0.667, "attack_range": 550.0, "move_speed": 325.0,
+	"ranged": {"max_hp": 284.0, "attack_damage": 21.0, "attack_speed": 0.667, "attack_range": 500.0, "move_speed": 310.0,
 		"armor": 0.0, "magic_resist": 0.0, "radius": 13.0, "xp": 31.0, "gold": 14.0, "ranged": true},
-	"siege": {"max_hp": 835.0, "attack_damage": 37.5, "attack_speed": 1.0, "attack_range": 300.0, "move_speed": 325.0,
+	"siege": {"max_hp": 835.0, "attack_damage": 37.5, "attack_speed": 1.0, "attack_range": 300.0, "move_speed": 310.0,
 		"armor": 0.0, "magic_resist": 0.0, "radius": 22.0, "xp": 75.0, "gold": 50.0, "ranged": true},
-	"super": {"max_hp": 1600.0, "attack_damage": 185.0, "attack_speed": 0.85, "attack_range": 170.0, "move_speed": 325.0,
+	"super": {"max_hp": 1600.0, "attack_damage": 185.0, "attack_speed": 0.85, "attack_range": 170.0, "move_speed": 310.0,
 		"armor": 100.0, "magic_resist": -30.0, "radius": 24.0, "xp": 75.0, "gold": 50.0, "ranged": false},
 }
 
@@ -116,7 +116,11 @@ func _draw_body() -> void:
 		draw_circle(Vector2(0, -r * 0.1), r * 0.85, c)
 		if minion_type == "super":
 			draw_arc(Vector2.ZERO, r * 0.68, 0.0, TAU, 24, c.lightened(0.7), 3.0, true)
-		var swing := 0.5 + 0.5 * sin(life * 25.0) if anim == ANIM_ATTACK else 0.0
+		var swing := 0.0
+		if windup_left > 0.0:
+			swing = -0.75 * (1.0 - windup_left / windup_duration)
+		elif anim == ANIM_ATTACK:
+			swing = 1.0
 		var hand := Vector2(f * r * 0.75, r * 0.1)
 		var tip := hand + Vector2(f * cos(-1.1 + swing * 1.6), sin(-1.1 + swing * 1.6)) * r * 1.25
 		draw_line(hand, tip, Color(0.88, 0.9, 0.95), 2.5)

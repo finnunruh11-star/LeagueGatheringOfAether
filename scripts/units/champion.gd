@@ -137,6 +137,7 @@ func command(cmd: String, args: Array) -> void:
 	match cmd:
 		"move":
 			if args.size() > 0 and args[0] is Vector2:
+				cancel_attack_windup()
 				move_goal = world.map.clamp_inside(args[0])
 				attack_target = null
 				amove = null
@@ -151,11 +152,13 @@ func command(cmd: String, args: Array) -> void:
 					_cancel_recall()
 		"amove":
 			if args.size() > 0 and args[0] is Vector2:
+				cancel_attack_windup()
 				amove = world.map.clamp_inside(args[0])
 				move_goal = null
 				attack_target = null
 				_cancel_recall()
 		"stop":
+			cancel_attack_windup()
 			move_goal = null
 			attack_target = null
 			amove = null
@@ -192,11 +195,12 @@ func cast(slot: String, aim: Vector2, tid: int) -> bool:
 	if is_recast:
 		_spend_recast(slot)
 	_cancel_recall()
+	cancel_attack_windup()
 	face(ctx.pos)
 	var ct := Effects.num(ab.cast_time, ctx, 0.0)
 	if ct > 0.0:
 		casting = {"ab": ab, "ctx": ctx, "time": ct}
-		set_anim_lock(ANIM_CAST, ct)
+		begin_windup(ANIM_CAST, ct, Vector2.ZERO if ab.targeting == "self" else ctx.dir)
 	else:
 		set_anim_lock(ANIM_CAST, 0.25)
 		_execute(ab, ctx)
@@ -880,9 +884,12 @@ func _think(delta: float) -> void:
 			trigger("interval", self, null, {}, r.key)
 	if casting != null:
 		casting.time -= delta
+		windup_left = casting.time
 		if casting.time <= 0.0:
 			var c = casting
 			casting = null
+			clear_windup()
+			set_anim_lock(ANIM_CAST, 0.16)
 			_execute(c.ab, c.ctx)
 	if recall_timer > 0.0:
 		recall_timer -= delta
@@ -928,6 +935,7 @@ func _act(delta: float) -> void:
 func start_recall() -> void:
 	if dead or recall_timer > 0.0 or casting != null:
 		return
+	cancel_attack_windup()
 	recall_timer = 8.0
 	move_goal = null
 	attack_target = null
@@ -940,8 +948,11 @@ func _cancel_recall() -> void:
 
 
 func _interrupted() -> void:
+	super._interrupted()
 	recall_timer = 0.0
-	casting = null
+	if casting != null:
+		casting = null
+		clear_windup()
 
 
 func gain_xp(amount: float) -> void:
@@ -1137,7 +1148,7 @@ func _physics_process(delta: float) -> void:
 
 func _draw_body() -> void:
 	var c := body_color()
-	var r := radius
+	var r := Content.CHAMPION_ART_HEIGHT * 0.5 * float(stats.size)
 	draw_circle(Vector2.ZERO, r, c.darkened(0.45))
 	draw_circle(Vector2(0, -r * 0.08), r * 0.88, c)
 	draw_circle(Vector2(-r * 0.32, -r * 0.4), r * 0.3, c.lightened(0.4))
@@ -1154,6 +1165,10 @@ func bar_width() -> float:
 
 func bar_height() -> float:
 	return 9.0
+
+
+func bar_top() -> float:
+	return super.bar_top() if sprite != null else -Content.CHAMPION_ART_HEIGHT * 0.5 * stats.size - 16.0
 
 
 func icon_y(top: float) -> float:

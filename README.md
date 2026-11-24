@@ -103,7 +103,13 @@ character stats). Also `"fog": false` (no fog of war), `"start_gold"`, `"start_l
 
 Health and damage use direct values (no hidden multiplier). One world coordinate unit is the
 distance unit for attack range, spell geometry and pathing; movement speed is in units per second.
-Basic attacks still measure edge-to-edge using this game's collision radii. The custom maps use
+Champion art is nominally 100 units tall, separate from the gameplay hitbox. A 500-unit range is
+five champion art heights before adding the hitbox radii for basic attacks. Unbuffed champions
+move at 330-345 units per second, compared with lane minions at 310.
+
+Basic attacks show a windup before damage or projectile launch. Moving out of reach before release
+cancels the attack. Spells with a cast time show a startup cue with an arrow for aimed casts.
+The custom maps use
 their own layouts: Two Lanes is 12,000 by 6,500 units, Bridge is 6,300 by 1,950, and Training Arena
 keeps its compact layout.
 
@@ -117,6 +123,7 @@ Run the lane and base siege integration test:
 
 ```
 godot --headless --path . -- --auto=practice --map=two_lanes --selftest=balance
+godot --headless --path . -- --auto=practice --map=arena --char=ember --selftest=windup
 ```
 
 ## Visual effects

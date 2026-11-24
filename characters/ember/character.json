@@ -8,7 +8,7 @@
     "move_speed": 330,
     "attack_damage": 48,
     "attack_speed": 0.7,
-    "attack_range": 550,
+    "attack_range": 500,
     "armor": 21,
     "ability_power": 40,
     "max_mana": 420,
