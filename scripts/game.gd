@@ -53,6 +53,7 @@ var prefs := {
 	"autobuy": false,
 	"summoners": ["flash", "ignite"],
 	"builds": {},               # character id -> [item ids]: what autobuy buys, in order
+	"bot_difficulty": "normal", # difficulty of new bots in the lobby: brick / normal / scripting
 }
 var _ready_peers := {}
 var _next_bot := -1
@@ -354,6 +355,9 @@ func _apply_change(pid: int, key: String, value) -> void:
 		"summoners":
 			if value is Array and value.size() == 2 and str(value[0]) != str(value[1]):
 				players[pid].summoners = valid_summoners(value)
+		"difficulty":
+			if bool(players[pid].get("bot", false)):
+				players[pid].difficulty = BotBrain.level_name(value)
 	_broadcast_lobby()
 
 
@@ -370,13 +374,13 @@ func set_setting(key: String, value) -> void:
 		_broadcast_lobby()
 
 
-func add_bot(team: int) -> void:
+func add_bot(team: int, difficulty := "") -> void:
 	if not is_host() or characters.is_empty():
 		return
 	var ids := characters.keys()
 	var cid: String = ids[randi() % ids.size()]
 	players[_next_bot] = {"name": "Bot %d" % -_next_bot, "team": team, "character": cid, "bot": true,
-		"summoners": default_summoners(cid)}
+		"summoners": default_summoners(cid), "difficulty": BotBrain.level_name(difficulty if difficulty != "" else prefs.bot_difficulty)}
 	_next_bot -= 1
 	_broadcast_lobby()
 

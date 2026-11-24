@@ -12,6 +12,21 @@ Godot 4.7 (tested with 4.7.1), GDScript, Compatibility renderer.
 **Practice** starts an offline lobby: add bots to either team, pick a map, start.
 The *Training Arena* map has dummies that show your DPS.
 
+### Bot difficulty
+Each bot in the lobby has a difficulty (the host picks it next to the bot; new bots use the last choice):
+- **Brick** - barely plays: slow reactions, no aim prediction, random skills, items and fights.
+- **Normal** - a competent player: last hits, trades when it's favorable, leads its skillshots,
+  respects turrets, sometimes dodges (human-like reaction time), recalls and builds sensibly.
+- **Scripting** - frame-perfect. Reads every visible cast, skillshot, dash, zone and telegraph and
+  dodges it (with dashes, blinks, parries, stasis or Flash when walking isn't enough), orb-walks and
+  kites at exact range, predicts last hits from every attack in flight, tracks your cooldowns,
+  computes kill windows from all abilities/items/summoners after resistances, only dives when it's
+  safe, hides behind minions from hooks, adapts its build to your team (boots, resistances,
+  anti-heal) and plays the map (defends, pushes while you're dead, groups up to siege).
+
+Bots understand abilities by reading their effects (`scripts/ai/bot_kit.gd`), so custom characters
+work too; the bundled ones also have curated builds and skill orders.
+
 ## Controls
 Default keys - **every key can be changed in Settings** (main menu, lobby, or Esc in a match).
 The bottom of the screen always shows your current keys.
@@ -156,6 +171,7 @@ particles, telegraphs, the map art) is drawn procedurally.
 - `scripts/game.gd` - lobby, networking (Godot ENet), sends characters to clients
 - `scripts/world/world.gd` - a match: spawning, snapshots to clients, waves, rules, input
 - `scripts/units/` - Unit base + champion, minion, tower/nexus, summon, dummy
+- `scripts/ai/` - bot AI: `bot_kit.gd` (reads abilities/items, builds) and `bot_brain.gd` (decisions, the three difficulties)
 - `scripts/combat/effects.gd` - the effect interpreter behind every ability
 - `scripts/content.gd` - loads character/map/item folders
 - `scripts/world/fog.gd` - fog of war (vision, wall occlusion, fog rendering)
@@ -165,8 +181,12 @@ The host simulates everything; clients send commands and receive ~20 snapshots p
 Practice mode is just a host without other players.
 
 Testing helpers (command line, after `--`): `--auto=practice|host|join`, `--char=`, `--map=`,
-`--bots_blue=N`, `--bots_red=N`, `--autopilot`, `--speed=4`, `--shots=5,10 --shot=prefix`, `--quit_at=20`,
+`--bots_blue=N`, `--bots_red=N`, `--bot_difficulty=brick|normal|scripting` (or `--blue_difficulty=` /
+`--red_difficulty=`), `--blue_char=a,b` / `--red_char=a,b,c` (bot characters in order), `--autopilot[=difficulty]`,
+`--speed=4`, `--shots=5,10 --shot=prefix`, `--quit_at=20`,
 `--fog=0`, `--wasd`, `--autobuy`, `--settings_at=2`, `--itemtest=...` (see MODDING.md).
+AI tests: `--aitest=dodge --difficulty=scripting --char=sir_bonk --shooter=gizmo --slot=q` (how many perfectly
+led skillshots hit the bot) and `--aitest=watch` (bot stats and AI time per frame during a match).
 Settings and key bindings are saved in Godot's user folder (`settings.cfg`; on Windows
 `%APPDATA%\Godot\app_userdata\CusOba`).
 
@@ -177,5 +197,5 @@ Settings and key bindings are saved in Godot's user folder (`settings.cfg`; on W
 - Fog of war is visual + targeting rules; the host still sends every unit's position to clients
   (fine among friends, not cheat-proof).
 - No client-side prediction: on a laggy connection your own movement reacts with your ping.
-- Bots are simple and somewhat suicidal.
+- Bots see only what their team sees (fog of war); they don't use wards.
 - Exported builds load `characters/` and `maps/` from the folder next to the executable.

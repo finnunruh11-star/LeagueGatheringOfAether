@@ -164,6 +164,8 @@ func _refresh() -> void:
 		name_btn.disabled = not can_edit
 		name_btn.pressed.connect(_set_editing.bind(pid if pid != me else 0))
 		row.add_child(name_btn)
+		if bool(p.get("bot", false)):
+			_difficulty_picker(row, pid, p)
 		if can_edit:
 			UiKit.button(row, "Team", func(): Game.request_change("team", 1 - int(p.team), pid if pid != me else 0))
 		if Game.is_host() and p.bot:
@@ -194,6 +196,25 @@ func _refresh() -> void:
 	if mine != null:
 		_show_details(mine.character)
 	_refresh_summoners(mine, mine != null and (editing == 0 or (Game.is_host() and bool(mine.bot))))
+
+
+## Bot difficulty (host can change it; the choice also becomes the default for new bots).
+func _difficulty_picker(row: Control, pid: int, p: Dictionary) -> void:
+	var cur := BotBrain.level_name(p.get("difficulty", "normal"))
+	if not Game.is_host():
+		UiKit.label(row, BotBrain.LABELS[cur])
+		return
+	var o := OptionButton.new()
+	o.tooltip_text = "Bot difficulty\nBrick: barely plays\nNormal: a competent player\nScripting: frame-perfect - reads and dodges everything, kites, perfect last hits and builds"
+	for i in BotBrain.LEVELS.size():
+		o.add_item(BotBrain.LABELS[BotBrain.LEVELS[i]])
+		if BotBrain.LEVELS[i] == cur:
+			o.select(i)
+	o.item_selected.connect(func(i: int):
+		Game.prefs.bot_difficulty = BotBrain.LEVELS[i]
+		Game.save_settings()
+		Game.request_change("difficulty", BotBrain.LEVELS[i], pid))
+	row.add_child(o)
 
 
 ## Fills the two summoner spell pickers for you (or the bot the host is editing).

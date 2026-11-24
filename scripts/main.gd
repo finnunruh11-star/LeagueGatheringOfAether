@@ -48,6 +48,8 @@ func _on_match_started(cfg: Dictionary) -> void:
 		add_child(preload("res://scripts/itemtest.gd").new())
 	if Game.cmdline.has("inputtest"):
 		add_child(preload("res://scripts/inputtest.gd").new())
+	if Game.cmdline.has("aitest"):
+		add_child(preload("res://scripts/aitest.gd").new())
 
 
 func _set_screen(n: Node) -> void:
@@ -106,13 +108,27 @@ func _setup_lobby(a: Dictionary) -> void:
 	if a.has("team"):
 		Game.players[1].team = int(a.team)
 	for i in int(a.get("bots_blue", "0")):
-		Game.add_bot(0)
+		Game.add_bot(0, str(a.get("blue_difficulty", a.get("bot_difficulty", ""))))
 	for i in int(a.get("bots_red", "0")):
-		Game.add_bot(1)
+		Game.add_bot(1, str(a.get("red_difficulty", a.get("bot_difficulty", ""))))
 	if a.has("bot_char"):
 		for pid in Game.players:
 			if Game.players[pid].bot:
 				Game.players[pid].character = a.bot_char
+	for key in ["blue_char", "red_char"]:
+		if a.has(key):
+			# One id for every bot of the team, or a comma list assigned in order.
+			var ids := str(a[key]).split(",", false)
+			var k := 0
+			var pids := Game.players.keys()
+			pids.sort()
+			pids.reverse()
+			for pid in pids:
+				if Game.players[pid].bot and int(Game.players[pid].team) == (0 if key == "blue_char" else 1) and not ids.is_empty():
+					var cid: String = ids[mini(k, ids.size() - 1)]
+					Game.players[pid].character = cid
+					Game.players[pid].summoners = Game.default_summoners(cid)
+					k += 1
 
 
 func _process(delta: float) -> void:
@@ -126,7 +142,7 @@ func _process(delta: float) -> void:
 		Game.request_change("character", a.char)
 	if a.has("autopilot") and Game.world != null and Game.world.local_champion != null and not Game.world.local_champion.get_meta("auto", false):
 		Game.world.local_champion.set_meta("auto", true)
-		Game.world.send_command("autopilot", [true])
+		Game.world.send_command("autopilot", [true] if str(a.autopilot) == "true" else [true, str(a.autopilot)])
 	if not _shots.is_empty() and _clock >= _shots[0]:
 		var t: float = _shots.pop_front()
 		_screenshot("%s_%s.png" % [str(a.get("shot", "user://shot")), String.num(t, 1)])
@@ -172,8 +188,15 @@ func _report() -> void:
 		print("[auto] no match running. players=", Game.players.size(), " chars=", Game.characters.size())
 		return
 	print("[auto] time=%.1f fps=%d entities=%d units=%d kills=%s ended=%s server=%s" % [w.time, Engine.get_frames_per_second(), w.entities.size(), w.units.size(), str(w.kills), str(w.ended), str(w.is_server)])
+	var standing := [0, 0]
+	for s in w.structures:
+		if not s.dead and s.team <= 1:
+			standing[s.team] += 1
+	print("[auto]   winner=%d structures standing blue/red=%d/%d" % [w.winner, standing[0], standing[1]])
 	for c in w.champions.values():
-		print("[auto]   %s %s team=%d lvl=%d hp=%d/%d pos=%s k/d=%d/%d dead=%s" % [c.player_name, c.char_id, c.team, c.level, c.hp, c.stats.max_hp, str(c.global_position.round()), c.kills, c.deaths, str(c.dead)])
+		var who: String = ("bot:" + c.bot_difficulty) if c.is_bot else "player"
+		print("[auto]   %s %s %s team=%d lvl=%d hp=%d/%d pos=%s k/d/a=%d/%d/%d cs=%d dead=%s" % [c.player_name, c.char_id, who, c.team, c.level,
+			c.hp, c.stats.max_hp, str(c.global_position.round()), c.kills, c.deaths, c.assists, c.cs, str(c.dead)])
 		var inv := []
 		for inst in c.items:
 			if inst != null:

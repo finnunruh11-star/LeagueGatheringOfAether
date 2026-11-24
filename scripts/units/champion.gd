@@ -58,10 +58,11 @@ var _trigger_depth := 0
 var _dynamic_stats := false
 var _dyn_t := 0.0
 var _energy_pos := Vector2.INF
-var bot_t := 0.0
 var bot_lane := 0
-var bot_wp := 1
 var bot_plan: Array = []
+var bot_difficulty := "normal"  # brick / normal / scripting (see BotBrain)
+var brain: BotBrain = null     # host: the bot AI while is_bot
+var cs := 0                    # minions and summons killed (host)
 var target_id := 0
 
 
@@ -73,6 +74,7 @@ func setup(d: Dictionary) -> void:
 	char_id = str(d.character)
 	player_name = str(d.get("name", "Player"))
 	is_bot = bool(d.get("bot", false))
+	bot_difficulty = BotBrain.level_name(d.get("difficulty", "normal"))
 	bot_lane = int(d.get("lane", 0))
 	def = Game.characters.get(char_id, {})
 	if def.is_empty():
@@ -141,6 +143,10 @@ func command(cmd: String, args: Array) -> void:
 			return
 		"autopilot":
 			is_bot = args.size() > 0 and args[0] is bool and args[0]
+			if args.size() > 1 and args[1] is String:
+				bot_difficulty = BotBrain.level_name(args[1])
+			if not is_bot:
+				move_dir = Vector2.ZERO
 			return
 		"item":
 			if args.size() >= 3 and (args[0] is int or args[0] is float) and args[1] is Vector2 and (args[2] is int or args[2] is float):
@@ -250,6 +256,7 @@ func cast(slot: String, aim: Vector2, tid: int) -> bool:
 	cancel_attack_windup()
 	face(ctx.pos)
 	var ct := Effects.num(ab.cast_time, ctx, 0.0)
+	world.note_cast(self, slot, is_recast, "", ctx, ct)
 	if ab.get("start_effects") is Array:
 		Effects.run(ab.start_effects, ctx)
 	if ct > 0.0:
@@ -614,6 +621,8 @@ func on_damaged(_amount: float, src) -> void:
 
 func on_kill(victim) -> void:
 	var p: Vector2 = victim.global_position if is_instance_valid(victim) else global_position
+	if victim is Minion or (victim is Summon and not victim.is_ward):
+		cs += 1
 	trigger("kill", victim, p)
 	if victim is Champion:
 		trigger("champion_kill", victim, p)
@@ -854,6 +863,7 @@ func use_item(slot: int, aim: Vector2, tid: int) -> bool:
 	if ab.targeting != "self":
 		face(ctx.pos)
 	world.fx("cast", {"p": global_position, "c": it.color, "v": net_id, "d": Vector2(ctx.dir).angle(), "s": "item"})
+	world.note_cast(self, "item", false, str(inst.id), ctx, 0.0)
 	Effects.run(ab.effects, ctx)
 	if ab.get("consume", false) and items[slot] == inst:
 		inst.n -= 1
@@ -1194,7 +1204,7 @@ func _think(delta: float) -> void:
 			teleport(world.map.spawn_point(team))
 			world.fx("blink", {"from": from, "to": global_position, "color": Color(0.5, 0.7, 1.0), "noline": true})
 	if is_bot:
-		_bot_think(delta)
+		_bot().tick(delta)
 	if amove != null:
 		if attack_target == null:
 			attack_target = amove_pick(amove, 120.0)
@@ -1331,7 +1341,7 @@ func _dead_process(delta: float) -> void:
 	_tick_items(delta)
 	respawn_timer -= delta
 	if is_bot:
-		_bot_shop()
+		_bot().dead_tick(delta)
 	if respawn_timer <= 0.0:
 		respawn()
 
@@ -1535,214 +1545,14 @@ func _draw_overlay(n: Node2D) -> void:
 
 # -------------------------------------------------------------------- bot ---
 
-func _bot_think(delta: float) -> void:
-	bot_t -= delta
-	if bot_t > 0.0 or casting != null or forced != null:
-		return
-	bot_t = 0.25 + randf() * 0.15
-	move_dir = Vector2.ZERO
-	_bot_level_up()
-	_bot_summoners()
-	var home := world.map.spawn_point(team)
-	var at_home := global_position.distance_to(home) < world.map.fountain_radius
-	if at_home:
-		_bot_shop()
-	if at_home and (hp < stats.max_hp * 0.9 or (uses_mana() and mana < stats.max_mana * 0.6)):
-		move_goal = null
-		attack_target = null
-		amove = null
-		return
-	if hp < stats.max_hp * 0.28 or (not at_home and gold >= 1400.0 and world.map.lane_count() > 0
-			and world.nearest_enemy(global_position, team, 1100.0, true) == null):
-		amove = null
-		attack_target = null
-		if recall_timer <= 0.0:
-			if world.nearest_enemy(global_position, team, 900.0, true) == null:
-				start_recall()
-			else:
-				move_goal = home
-		return
-	if recall_timer > 0.0:
-		return
-	_bot_items()
-	var foe := world.nearest_enemy(global_position, team, 850.0, true)
-	if foe != null:
-		_bot_cast(foe)
-		if not _under_enemy_tower(foe.global_position) or hp > stats.max_hp * 0.75:
-			attack_target = foe
-			amove = null
-			move_goal = null
-			return
-	var near := world.nearest_enemy(global_position, team, 650.0, false, true)
-	if near != null and (not near.is_structure or _allied_minions_near(near.global_position)):
-		attack_target = near
-		amove = null
-		return
-	if world.map.lane_count() == 0:
-		var any := world.nearest_enemy(global_position, team, 5000.0, false, false)
-		amove = any.global_position if any != null else world.map.spawn_point(1 - team)
-		return
-	var lane := world.map.lane(team, bot_lane % world.map.lane_count())
-	var nearest := 0
-	for i in lane.size():
-		if global_position.distance_to(lane[i]) < global_position.distance_to(lane[nearest]):
-			nearest = i
-	var goal: Vector2 = global_position.move_toward(lane[mini(nearest + 1, lane.size() - 1)], 500.0)
-	if _under_enemy_tower(goal) and not _allied_minions_near(goal):
-		amove = null
-		move_goal = null
-		return
-	amove = goal
+## The bot AI (created on first use, or again when the difficulty changed).
+func _bot() -> BotBrain:
+	if brain == null or brain.difficulty != bot_difficulty:
+		brain = BotBrain.new(self, bot_difficulty)
+	return brain
 
 
-func _bot_level_up() -> void:
-	var guard := 0
-	while skill_points > 0 and guard < 8:
-		guard += 1
-		var done := false
-		var order := ["r", "q", "w", "e"]
-		for s in ["q", "w", "e"]:
-			if int(ranks[s]) == 0 and can_rank_up(s):
-				order = [s]
-				break
-		for s in order:
-			if can_rank_up(s):
-				rank_up(s)
-				done = true
-				break
-		if not done:
-			return
-
-
-func _bot_cast(foe: Unit) -> void:
-	var order := SLOTS.duplicate()
-	order.shuffle()
-	var d := global_position.distance_to(foe.global_position)
-	for slot in order:
-		var ab = active_ability(slot)
-		if ab == null or cooldowns[slot] > 0.0 or int(ranks[slot]) <= 0 or not can_pay(ab):
-			continue
-		var rng := Effects.num(ab.range, {"caster": self, "target": foe, "rank": ranks[slot]}, 700.0)
-		match ab.targeting:
-			"self":
-				if d > maxf(ab.indicator_radius, 320.0) + 40.0:
-					continue
-			"ally":
-				if hp > stats.max_hp * 0.7:
-					continue
-				if cast(slot, global_position, net_id):
-					return
-				continue
-			_:
-				if d > rng + 60.0:
-					continue
-		if cast(slot, foe.global_position + foe.velocity * 0.25, foe.net_id):
-			return
-
-
-## Bots use summoner spells following each spell's "bot" hint (see MODDING.md).
-func _bot_summoners() -> void:
-	for i in summoners.size():
-		var sp = summoner_def(i)
-		var ab = summoner_ability(i)
-		if sp == null or ab == null:
-			continue
-		var recast: bool = ab != sp.active
-		if (sum_cd[i] > 0.0 and not recast) or not can_use_summoner(ab):
-			continue
-		var hint := str(ab.get("bot", sp.bot))
-		var rng := Effects.num(ab.range, {"caster": self, "target": self, "rank": level}, 700.0)
-		var foe := world.nearest_enemy(global_position, team, clampf(rng, 600.0, 1200.0) + 100.0, true)
-		var fd := global_position.distance_to(foe.global_position) if foe != null else INF
-		var low: bool = hp < stats.max_hp * 0.3
-		var target: Unit = null
-		var aim := global_position
-		match hint:
-			"escape":
-				if low and fd < 450.0:
-					target = self
-					aim = global_position + (global_position - foe.global_position).normalized() * 400.0
-			"defend":
-				if low and fd < 900.0:
-					target = self
-			"kill":
-				if foe != null and fd <= rng + 40.0 and foe.hp < foe.stats.max_hp * 0.3:
-					target = foe
-			"fight":
-				if foe != null and fd <= rng and (in_combat() or foe.hp < foe.stats.max_hp * 0.5):
-					target = foe
-					aim = foe.global_position + foe.velocity * 0.3
-			"dash":
-				if not low:
-					target = self
-			"cleanse":
-				if fd < 900.0 and (has_status("stun") or has_status("root") or has_status("slow")):
-					target = self
-			"mana":
-				if uses_mana() and mana < stats.max_mana * 0.25:
-					target = self
-			"chase":
-				if foe != null and fd < 900.0 and (low or foe.hp < foe.stats.max_hp * 0.4):
-					target = self
-			"travel":
-				if hp >= stats.max_hp * 0.95 and global_position.distance_to(world.map.spawn_point(team)) < world.map.fountain_radius:
-					var far: Unit = null
-					for s in world.structures:
-						if s.team == team and not s.dead and not s.is_nexus and (far == null or
-								s.global_position.distance_to(global_position) > far.global_position.distance_to(global_position)):
-							far = s
-					if far != null and far.global_position.distance_to(global_position) > 2500.0:
-						target = far
-			"smite":
-				for u in world.units:
-					if u.team != team and not u.dead and not u.is_champion and not u.is_structure and not u.is_ward \
-							and u.hp <= 600.0 and global_position.distance_to(u.global_position) <= rng + u.radius:
-						target = u
-						break
-		if target != null:
-			if aim == global_position and target != self:
-				aim = target.global_position
-			if use_summoner(i, aim, target.net_id):
-				return
-
-
-## Bots use potions when hurt and fire offensive actives at nearby enemy champions.
-func _bot_items() -> void:
-	var foe := world.nearest_enemy(global_position, team, 600.0, true)
-	for i in ITEM_SLOTS:
-		var it = item_def(i)
-		if it == null or it.active == null or items[i].cd > 0.0:
-			continue
-		if it.consumable:
-			if hp < stats.max_hp * 0.55 and not has_status("hot"):
-				use_item(i, global_position, net_id)
-			continue
-		if foe == null:
-			continue
-		var ab: Dictionary = it.active
-		match ab.targeting:
-			"ally":
-				if hp < stats.max_hp * 0.5:
-					use_item(i, global_position, net_id)
-			"self":
-				if hp < stats.max_hp * 0.4 or randf() < 0.3:
-					use_item(i, foe.global_position, foe.net_id)
-			_:
-				use_item(i, foe.global_position, foe.net_id)
-
-
-## Bots pick a simple build for their role the first time they shop, then buy
-## the next item (or its most expensive affordable component) whenever possible.
-func _bot_shop() -> void:
-	if Game.items.is_empty() or not can_shop():
-		return
-	if bot_plan.is_empty():
-		bot_plan = recommended_build(def, true)
-	var done := []
-	for id in shop_toward(bot_plan, done) + done:
-		bot_plan.erase(id)
-
-
+## Next thing to buy toward item `id`: the item itself, or its most expensive affordable component.
 func _bot_step(id: String) -> String:
 	if price_for(id).cost <= gold and check_buy(id) == "":
 		return id
@@ -1756,17 +1566,3 @@ func _bot_step(id: String) -> String:
 			best = s
 			best_cost = int(Game.items[s].cost)
 	return best
-
-
-func _under_enemy_tower(p: Vector2) -> bool:
-	for t in world.structures:
-		if t.team != team and not t.dead and not t.is_nexus and t.global_position.distance_to(p) < t.stats.attack_range + t.radius + 90.0:
-			return true
-	return false
-
-
-func _allied_minions_near(p: Vector2) -> bool:
-	for u in world.units:
-		if u is Minion and u.team == team and not u.dead and u.global_position.distance_to(p) < 600.0:
-			return true
-	return false

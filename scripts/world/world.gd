@@ -35,6 +35,11 @@ var _pending_fx: Array = []
 var _frame := 0
 var _wait_t := 0.0
 var _sounds := {}
+## Host: what bots can "see" being cast - recent ability/item casts and telegraphed areas/beams
+## (read by BotBrain to dodge). Short-lived; old entries are dropped as new ones arrive.
+var bot_casts: Array = []   # {id, c, slot, recast, item, pos, dir, from, target, t, ct}
+var bot_warns: Array = []   # {id, kind ("circle"/"line"), pos, r | from, to, t (impact time), team}
+var _bot_seq := 0
 
 var local_peer := 1
 var local_team := 0
@@ -159,7 +164,8 @@ func begin() -> void:
 		var off := Vector2(0, 70).rotated(per_team[t] * 2.1) if per_team[t] > 0 else Vector2.ZERO
 		var gone: bool = online and pid != 1 and not bool(p.get("bot", false)) and not Game.players.has(pid)
 		var c = spawn("champion", {"peer": pid, "team": t, "character": p.character, "name": p.name, "gold": start_gold,
-			"bot": bool(p.get("bot", false)) or gone, "pos": map.spawn_point(t) + off, "lane": per_team[t],
+			"bot": bool(p.get("bot", false)) or gone, "difficulty": str(p.get("difficulty", "normal")),
+			"pos": map.spawn_point(t) + off, "lane": per_team[t],
 			"summoners": p.get("summoners", Game.default_summoners(p.character))})
 		for k in int(map.data.get("start_level", 1)) - 1:
 			c.cheat("level")
@@ -326,9 +332,32 @@ func _rpc_snapshot(buf: PackedFloat32Array) -> void:
 
 
 func fx(kind: String, data: Dictionary) -> void:
+	if is_server and (kind == "telegraph" or kind == "beam_warn"):
+		_note_warn(kind, data)
 	_play_fx(kind, data)
 	if online and is_server:
 		_pending_fx.append([kind, data])
+
+
+## Host: remembers an ability cast for the bots (see bot_casts).
+func note_cast(c: Champion, slot: String, recast: bool, item: String, ctx: Dictionary, cast_time: float) -> void:
+	_bot_seq += 1
+	while not bot_casts.is_empty() and (float(bot_casts[0].t) < time - 5.0 or bot_casts.size() > 64):
+		bot_casts.pop_front()
+	bot_casts.append({"id": _bot_seq, "c": c, "slot": slot, "recast": recast, "item": item, "pos": ctx.get("pos", c.global_position),
+		"dir": ctx.get("dir", Vector2.RIGHT), "from": c.global_position, "target": ctx.get("target"), "t": time, "ct": cast_time})
+
+
+func _note_warn(kind: String, data: Dictionary) -> void:
+	_bot_seq += 1
+	while not bot_warns.is_empty() and (float(bot_warns[0].t) < time or bot_warns.size() > 64):
+		bot_warns.pop_front()
+	var w := {"id": _bot_seq, "t": time + float(data.get("dur", 0.5)), "team": int(data.get("team", 0))}
+	if kind == "telegraph":
+		w.merge({"kind": "circle", "pos": data.get("pos", Vector2.ZERO), "r": float(data.get("radius", 100.0))})
+	else:
+		w.merge({"kind": "line", "from": data.get("from", Vector2.ZERO), "to": data.get("to", Vector2.ZERO), "r": float(data.get("width", 70.0)) * 0.5})
+	bot_warns.append(w)
 
 
 @rpc("authority", "call_remote", "reliable")
