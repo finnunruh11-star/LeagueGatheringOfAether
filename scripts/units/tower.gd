@@ -22,6 +22,7 @@ func setup(d: Dictionary) -> void:
 	order = int(d.get("order", 0))
 	base_stats.hp_regen = 0.0
 	base_stats.move_speed = 0.0
+	base_stats.vision = 900.0
 	if is_nexus:
 		base_stats.max_hp = 3600.0
 		base_stats.armor = 30.0

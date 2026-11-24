@@ -44,6 +44,7 @@ var under_layer: Node2D
 var unit_layer: Node2D
 var proj_layer: Node2D
 var fx_layer: Node2D
+var fog: FogOfWar
 var indicator: DrawNode
 var camera: Camera2D
 var hud: Hud
@@ -77,6 +78,9 @@ func start(cfg: Dictionary) -> void:
 	under_layer = _layer(-4, false)
 	unit_layer = _layer(0, true)
 	proj_layer = _layer(5, false)
+	fog = FogOfWar.new()
+	add_child(fog)
+	fog.setup(self)
 	fx_layer = _layer(20, false)
 	indicator = DrawNode.new()
 	indicator.z_index = 30
@@ -316,6 +320,8 @@ func _rpc_fx(list: Array) -> void:
 
 
 func _play_fx(kind: String, data: Dictionary) -> void:
+	if not _fx_visible(kind, data):
+		return
 	if kind == "sound":
 		_play_sound(data)
 		return
@@ -544,13 +550,29 @@ func cheats_allowed() -> bool:
 	return not online or bool(map.data.get("cheats", false))
 
 
-## Whether `u` can be seen by `viewer_team` (stealth; fog of war hooks in here too).
+## Whether `u` can be seen by `viewer_team` (fog of war and stealth).
 func can_see(u: Unit, viewer_team: int) -> bool:
 	if u.team == viewer_team:
 		return true
+	if fog != null and fog.enabled:
+		return fog.sees(u, viewer_team)
 	if u.flags & Unit.F_STEALTH and not _revealed(u, viewer_team):
 		return false
 	return true
+
+
+## Whether an effect at this spot should be shown to the local player (fog of war).
+func _fx_visible(kind: String, data: Dictionary) -> bool:
+	if fog == null or not fog.enabled or ended or kind in ["kill", "announce", "notice", "gold", "buy", "rankup"]:
+		return true
+	var any := false
+	for k in ["p", "pos", "from", "to"]:
+		var v = data.get(k)
+		if v is Vector2:
+			any = true
+			if fog.point_visible(v, local_team):
+				return true
+	return not any
 
 
 ## Stealthed units are revealed when an enemy champion is very close.
@@ -721,6 +743,8 @@ func nearest_enemy(pos: Vector2, team: int, max_d: float, champs_only := false, 
 	for u in units:
 		if u.team == team or u.dead or not u.targetable() or (u.is_structure and not structs) or (champs_only and not u.is_champion):
 			continue
+		if not can_see(u, team):
+			continue
 		var d: float = u.global_position.distance_to(pos) - u.radius
 		if d <= bd:
 			bd = d
@@ -734,6 +758,8 @@ func pick_unit(pos: Vector2, team: int, enemy: bool, tolerance: float, structs :
 	var bd := INF
 	for u in units:
 		if u.dead or not u.targetable() or (u.is_structure and not structs) or (u.team != team) != enemy:
+			continue
+		if enemy and not can_see(u, team):
 			continue
 		var d: float = u.global_position.distance_to(pos) - u.radius
 		if d <= tolerance and d < bd:
@@ -854,10 +880,10 @@ func _right_click(with_fx: bool) -> void:
 
 func _cast(slot: String) -> void:
 	var c := local_champion
-	if c == null or c.dead or ended:
+	if c == null or ended:
 		return
 	var ab = aim_ability(slot)
-	if ab == null:
+	if ab == null or (c.dead and not (slot.begins_with("i") and ab.get("while_dead", false))):
 		return
 	var m := get_global_mouse_position()
 	var tid := 0

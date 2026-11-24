@@ -16,7 +16,7 @@ const VARS := [
 	"t_mr", "t_mana", "t_max_mana", "t_champion", "t_minion", "t_structure", "t_ranged", "t_level", "t_bonus_hp", "t_ms",
 	"dmg", "dtype", "crit_hit", "is_attack", "is_ability", "is_dot", "is_aoe", "slot", "amount",
 	"in_combat", "combat_time", "since_hit", "since_combat", "gold", "kills", "deaths", "assists", "energy", "legendaries", "moving",
-	"cc", "t_self", "at_base", "t_summon",
+	"cc", "t_self", "at_base", "t_summon", "dmg_raw", "shield", "t_shield",
 ]
 
 
@@ -78,15 +78,15 @@ class Env extends RefCounted:
 	func near_allies(r: float) -> int:
 		return _count(r, true, true)
 
-	## Enemy champions near the caster.
-	func near_enemies(r: float) -> int:
-		return _count(r, false, true)
+	## Enemy champions near the caster (optionally not counting ones carrying your mark `without`).
+	func near_enemies(r: float, without := "") -> int:
+		return _count(r, false, true, without)
 
 	## Enemy units (champions, minions, summons) near the caster.
 	func near_units(r: float) -> int:
 		return _count(r, false, false)
 
-	func _count(r: float, allies: bool, champs: bool) -> int:
+	func _count(r: float, allies: bool, champs: bool, without := "") -> int:
 		var c := _u("caster")
 		if c == null or Game.world == null:
 			return 0
@@ -94,9 +94,15 @@ class Env extends RefCounted:
 		for u in Game.world.units:
 			if u == c or u.dead or u.is_structure or (champs and not u.is_champion) or (u.team == c.team) != allies:
 				continue
+			if without != "" and not u.find_status(without, c).is_empty():
+				continue
 			if u.global_position.distance_to(c.global_position) <= r:
 				n += 1
 		return n
+
+	## Expression stand-in for "a if c else b" (see Effects._ternary).
+	func iff(c, a, b):
+		return a if c else b
 
 	func cd(slot: String) -> float:
 		var c := _u("caster")
@@ -116,6 +122,16 @@ class Env extends RefCounted:
 	func h_stat(n: String) -> float:
 		var h := _u("holder")
 		return float(h.stats.get(n, 0.0)) if h != null else 0.0
+
+	func h_hp() -> float:
+		var h := _u("holder")
+		return h.hp if h != null else 0.0
+
+	## Distance between the buff's holder and the one who gave it.
+	func h_dist() -> float:
+		var h := _u("holder")
+		var c := _u("caster")
+		return h.global_position.distance_to(c.global_position) if h != null and c != null else 0.0
 
 	func has_item(id: String) -> bool:
 		var c := _u("caster")
@@ -151,7 +167,7 @@ static func num(v, ctx: Dictionary, def := 0.0) -> float:
 		var e: Expression = _cache.get(v)
 		if e == null:
 			e = Expression.new()
-			if e.parse(v, VARS) != OK:
+			if e.parse(_ternary(v), VARS) != OK:
 				_bad[v] = true
 				push_warning("Bad expression \"%s\": %s" % [v, e.get_error_text()])
 				return def
@@ -172,6 +188,117 @@ static func num(v, ctx: Dictionary, def := 0.0) -> float:
 		if r is float or r is int:
 			return float(r)
 	return def
+
+
+## Godot's Expression has no "a if c else b": rewrite it to iff(c, a, b) before parsing.
+## Works inside brackets and function arguments and chains like "1 if x else 2 if y else 3".
+static func _ternary(s: String) -> String:
+	if s.find(" if ") < 0:
+		return s
+	var parts := PackedStringArray()
+	for p in _split_top(s):
+		parts.append(_ternary_one(p))
+	return ",".join(parts)
+
+
+static func _ternary_one(s: String) -> String:
+	var out := ""
+	var i := 0
+	while i < s.length():
+		var ch := s[i]
+		if ch == "(" or ch == "[":
+			var close := _match_close(s, i)
+			if close < 0:
+				return s
+			out += ch + _ternary(s.substr(i + 1, close - i - 1)) + s[close]
+			i = close + 1
+		elif ch == "'" or ch == "\"":
+			var q := s.find(ch, i + 1)
+			if q < 0:
+				q = s.length() - 1
+			out += s.substr(i, q - i + 1)
+			i = q + 1
+		else:
+			out += ch
+			i += 1
+	var ip := _find_word(out, "if", 0)
+	if ip < 0:
+		return out
+	var ep := _find_word(out, "else", ip + 2)
+	if ep < 0:
+		return out
+	return "iff(%s, %s, %s)" % [out.substr(ip + 2, ep - ip - 2).strip_edges(), out.substr(0, ip).strip_edges(),
+		_ternary_one(out.substr(ep + 4)).strip_edges()]
+
+
+## Splits at commas that are not inside brackets or quotes.
+static func _split_top(s: String) -> PackedStringArray:
+	var parts := PackedStringArray()
+	var depth := 0
+	var quote := ""
+	var start := 0
+	for i in s.length():
+		var ch := s[i]
+		if quote != "":
+			if ch == quote:
+				quote = ""
+		elif ch == "'" or ch == "\"":
+			quote = ch
+		elif ch == "(" or ch == "[" or ch == "{":
+			depth += 1
+		elif ch == ")" or ch == "]" or ch == "}":
+			depth -= 1
+		elif ch == "," and depth == 0:
+			parts.append(s.substr(start, i - start))
+			start = i + 1
+	parts.append(s.substr(start))
+	return parts
+
+
+static func _match_close(s: String, open: int) -> int:
+	var depth := 0
+	var quote := ""
+	for i in range(open, s.length()):
+		var ch := s[i]
+		if quote != "":
+			if ch == quote:
+				quote = ""
+		elif ch == "'" or ch == "\"":
+			quote = ch
+		elif ch == "(" or ch == "[" or ch == "{":
+			depth += 1
+		elif ch == ")" or ch == "]" or ch == "}":
+			depth -= 1
+			if depth == 0:
+				return i
+	return -1
+
+
+## Index of the keyword `w` outside brackets/quotes, as a whole word, or -1.
+static func _find_word(s: String, w: String, from: int) -> int:
+	var depth := 0
+	var quote := ""
+	for i in range(from, s.length()):
+		var ch := s[i]
+		if quote != "":
+			if ch == quote:
+				quote = ""
+		elif ch == "'" or ch == "\"":
+			quote = ch
+		elif ch == "(" or ch == "[" or ch == "{":
+			depth += 1
+		elif ch == ")" or ch == "]" or ch == "}":
+			depth -= 1
+		elif depth == 0 and s.substr(i, w.length()) == w:
+			var before := s[i - 1] if i > 0 else " "
+			var after := s[i + w.length()] if i + w.length() < s.length() else " "
+			if not _word_char(before) and not _word_char(after):
+				return i
+	return -1
+
+
+static func _word_char(c: String) -> bool:
+	return c == "_" or (c >= "a" and c <= "z") or (c >= "A" and c <= "Z") or (c >= "0" and c <= "9")
 
 
 static func _values(ctx: Dictionary) -> Array:
@@ -265,6 +392,9 @@ static func _values(ctx: Dictionary) -> Array:
 	if cv and Game.world != null and Game.world.map != null:
 		vals[67] = 1.0 if c.global_position.distance_to(Game.world.map.spawn_point(c.team)) <= Game.world.map.fountain_radius * 1.25 else 0.0
 	vals[68] = 1.0 if tv and t is Summon else 0.0
+	vals[69] = float(ctx.get("dmg_raw", ctx.get("dmg", 0.0)))
+	vals[70] = c.shield if cv else 0.0
+	vals[71] = t.shield if tv else 0.0
 	return vals
 
 
@@ -328,8 +458,11 @@ static func _one(e: Dictionary, ctx: Dictionary) -> void:
 				for s in u.statuses:
 					if s.type == "shield_break":
 						amt *= 1.0 - clampf(s.amount, 0.0, 1.0)
-				_add(u, {"type": "shield", "amount": amt, "time": num(e.get("duration"), ctx, 3.0),
-					"dtype": str(e.get("damage_type", "all"))}, e, ctx)
+				var dur := num(e.get("duration"), ctx, 3.0)
+				var sh := {"type": "shield", "amount": amt, "time": dur, "dtype": str(e.get("damage_type", "all"))}
+				if bool(e.get("decay", false)):
+					sh.decay = amt / maxf(dur, 0.1)
+				_add(u, sh, e, ctx)
 				if c and u != c and u.is_champion:
 					c.trigger("shield_ally", u, null, {"amount": amt, "is_proc": bool(ctx.get("proc", false))})
 		"shield_break":
@@ -344,9 +477,10 @@ static func _one(e: Dictionary, ctx: Dictionary) -> void:
 					_add(u, {"type": "shield_break", "amount": f, "time": d}, e, ctx)
 		"fire_event":
 			var c := _caster(ctx)
-			if c:
-				var ex := {"crit_hit": false, "onhit": true, "exclude": str(ctx.get("trigger_key", ""))}
-				c.trigger(str(e.get("event", "attack")), ctx.get("target"), null, ex)
+			var t = ctx.get("target")
+			if c and is_instance_valid(t) and t is Unit and not t.dead:
+				var ex := {"crit_hit": bool(ctx.get("crit_hit", false)), "onhit": true, "exclude": str(ctx.get("trigger_key", ""))}
+				c.trigger(str(e.get("event", "attack")), t, null, ex)
 		"stun", "root", "silence":
 			var u := _unit(e, ctx)
 			if u and not _blocked(u, ctx):
@@ -371,8 +505,11 @@ static func _one(e: Dictionary, ctx: Dictionary) -> void:
 		"slow":
 			var u := _unit(e, ctx)
 			if u and not _blocked(u, ctx):
-				_add(u, {"type": "slow", "amount": clampf(num(e.get("amount"), ctx, 0.3), 0.0, 1.0),
-					"time": _cc_time(u, e, ctx, 2.0)}, e, ctx)
+				var sl := {"type": "slow", "amount": clampf(num(e.get("amount"), ctx, 0.3), 0.0, 1.0), "time": _cc_time(u, e, ctx, 2.0)}
+				if bool(e.get("decay", false)):
+					sl.decay_from = sl.amount
+					sl.total = maxf(sl.time, 0.05)
+				_add(u, sl, e, ctx)
 				_cc_event(type, u, ctx)
 		"dot", "hot":
 			var u := _unit(e, ctx)
@@ -380,7 +517,8 @@ static func _one(e: Dictionary, ctx: Dictionary) -> void:
 				var iv := maxf(num(e.get("interval"), ctx, 0.5), 0.1)
 				_add(u, {"type": type, "amount": num(e.get("amount"), ctx, 20.0) * rmult, "interval": iv, "tick": iv,
 					"time": num(e.get("duration"), ctx, 3.0), "dtype": str(e.get("damage_type", "magic")), "col": _color(e, ctx),
-					"src_slot": str(ctx.get("src_slot", "")), "item": str(ctx.get("item", "")), "raw": bool(e.get("raw", false))}, e, ctx)
+					"src_slot": str(ctx.get("src_slot", "")), "item": str(ctx.get("item", "")), "raw": bool(e.get("raw", false)),
+					"proc": bool(ctx.get("proc", false))}, e, ctx)
 		"buff":
 			var u := _unit(e, ctx)
 			if u and (u.team == int(ctx.get("team", -1)) or not _blocked(u, ctx)):
@@ -406,6 +544,9 @@ static func _one(e: Dictionary, ctx: Dictionary) -> void:
 				if e.get("triggers") is Array:
 					s.triggers = e.triggers
 				_add(u, s, e, ctx)
+				var c := _caster(ctx)
+				if c and u != c and u.is_champion and u.team == c.team:
+					c.trigger("buff_ally", u, null, {"is_proc": bool(ctx.get("proc", false))})
 		"mark":
 			var u := _unit(e, ctx)
 			if u:
@@ -455,7 +596,7 @@ static func _one(e: Dictionary, ctx: Dictionary) -> void:
 		"cleanse":
 			var u := _unit(e, ctx)
 			if u:
-				u.cleanse()
+				u.cleanse(bool(e.get("cc_only", false)))
 		"knockback", "pull":
 			_knockback(type, e, ctx)
 		"dash":
@@ -474,6 +615,9 @@ static func _one(e: Dictionary, ctx: Dictionary) -> void:
 			_projectile(e, ctx)
 		"area":
 			var center := _pos(e.get("at", "pos"), ctx)
+			var fwd := num(e.get("offset"), ctx, 0.0)
+			if fwd != 0.0:
+				center += Vector2(ctx.get("dir", Vector2.RIGHT)) * fwd
 			var scatter := num(e.get("scatter"), ctx, 0.0)
 			if scatter > 0.0:
 				center += Vector2.from_angle(randf() * TAU) * sqrt(randf()) * scatter
@@ -535,7 +679,29 @@ static func _one(e: Dictionary, ctx: Dictionary) -> void:
 		"item_cooldown":
 			var c := _caster(ctx)
 			if c is Champion:
-				c.change_item_cooldown(str(e.get("item", "all")), num(e.get("amount"), ctx, 1.0), bool(e.get("reset", false)))
+				if e.has("set"):
+					c.set_item_cooldown(str(e.get("item", ctx.get("item", ""))), num(e.get("set"), ctx, 0.0))
+				else:
+					c.change_item_cooldown(str(e.get("item", "all")), num(e.get("amount"), ctx, 1.0), bool(e.get("reset", false)))
+		"passive_cooldown":
+			var c := _caster(ctx)
+			if c is Champion:
+				var key := str(ctx.get("trigger_key", ""))
+				if e.has("passive") and str(ctx.get("item", "")) != "":
+					key = "%s#%d" % [ctx.item, int(e.passive)]
+				c.set_trigger_cooldown(key, num(e.get("amount"), ctx, 0.0))
+		"reveal":
+			var u := _unit(e, ctx)
+			if u:
+				_add(u, {"type": "reveal", "time": num(e.get("duration"), ctx, 2.0), "team": int(ctx.get("team", 0))}, e, ctx)
+		"level_up":
+			var u := _unit(e, ctx)
+			if u is Champion:
+				u.gain_xp(maxf(u.xp_to_next() - u.xp, 0.0) + 0.01)
+		"xp":
+			var u := _unit(e, ctx)
+			if u is Champion:
+				u.gain_xp(num(e.get("amount"), ctx, 50.0))
 		"text":
 			w.fx("text", {"pos": _pos(e.get("at", "target"), ctx) + Vector2(0, -50), "text": str(e.get("text", "!")),
 				"color": _color(e, ctx, Color.WHITE), "size": int(num(e.get("size"), ctx, 28.0))})
@@ -580,6 +746,14 @@ static func _champ(ctx: Dictionary) -> Champion:
 static func _add(u: Unit, s: Dictionary, e: Dictionary, ctx: Dictionary) -> void:
 	if e.has("id"):
 		s.id = str(e.id)
+	if bool(e.get("keep_longer", false)):
+		s.keep_longer = true
+	if str(ctx.get("item", "")) != "":
+		s.item = str(ctx.item)
+	if bool(e.get("persist", false)):
+		s.persist = true
+	if s.has("triggers"):
+		s.trig_sig = str(s.triggers).hash()
 	u.add_status(s, _caster(ctx), _key(e, ctx))
 	if Game.debug_log and s.type != "dot" and s.type != "hot":
 		print("[status] t=%.2f %s gets %s%s %.2fs %s" % [Game.world.time, u.display_name, s.type, (":" + s.id) if s.has("id") else "",
@@ -606,6 +780,7 @@ static func _cc_event(type: String, u: Unit, ctx: Dictionary) -> void:
 	var c := _caster(ctx)
 	if c and u.is_champion and u.team != c.team:
 		c.trigger("cc_applied", u, null, {"cc": type})
+		u.trigger("cc_received", c, null, {"cc": type})
 
 
 ## Spell shields block the first enemy ability effect (and the rest of that hit).
@@ -699,8 +874,14 @@ static func _area_now(e: Dictionary, ctx: Dictionary, center: Vector2, radius: f
 			"champions":
 				if not u.is_champion:
 					continue
-			"minions", "non_champions":
+			"minions":
+				if not u is Minion:
+					continue
+			"non_champions":
 				if u.is_champion:
+					continue
+			"summons":
+				if not u is Summon:
 					continue
 		targets.append(u)
 	var max_t := int(num(e.get("max_targets"), ctx, 0.0))
@@ -715,6 +896,8 @@ static func _area_now(e: Dictionary, ctx: Dictionary, center: Vector2, radius: f
 			targets.sort_custom(func(a, b): return a.hp / a.stats.max_hp < b.hp / b.stats.max_hp)
 		"champions_first":
 			targets.sort_custom(func(a, b): return int(a.is_champion) > int(b.is_champion))
+		"champions_lowest_hp":
+			targets.sort_custom(func(a, b): return int(a.is_champion) > int(b.is_champion) or (a.is_champion == b.is_champion and a.hp < b.hp))
 		"random":
 			targets.shuffle()
 	if max_t > 0 and targets.size() > max_t:
@@ -767,7 +950,7 @@ static func _dash(e: Dictionary, ctx: Dictionary) -> void:
 			var to: Vector2 = ctx.get("pos", c.global_position) - c.global_position
 			if to.length() > 5.0:
 				dir = to.normalized()
-				length = minf(to.length(), dist)
+				length = clampf(to.length(), minf(num(e.get("min_distance"), ctx, 0.0), dist), dist)
 		"back", "backward", "backwards":
 			dir = -dir
 		"target":
@@ -777,6 +960,7 @@ static func _dash(e: Dictionary, ctx: Dictionary) -> void:
 				dir = to2.normalized()
 				length = maxf(to2.length() - t.radius - c.radius, 0.0)
 	c.start_dash(dir, length, speed, e, sub(ctx))
+	c.trigger("dash", c, c.global_position + dir * length)
 
 
 static func _teleport(e: Dictionary, ctx: Dictionary) -> void:
@@ -796,6 +980,7 @@ static func _teleport(e: Dictionary, ctx: Dictionary) -> void:
 	to = w.map.nearest_open(to)
 	w.fx("blink", {"from": c.global_position, "to": to, "color": _color(e, ctx)})
 	c.teleport(to)
+	c.trigger("dash", c, to)
 
 
 static func _projectile(e: Dictionary, ctx: Dictionary) -> void:
@@ -822,15 +1007,24 @@ static func _projectile(e: Dictionary, ctx: Dictionary) -> void:
 				ang = -spread * 0.5 + spread * k / (count - 1)
 		var d := base_dir.rotated(ang)
 		var p = w.spawn("projectile", {
-			"pos": start, "dir": d, "radius": num(e.get("radius"), ctx, 12.0), "color": _color(e, ctx),
+			"pos": start, "dir": d, "radius": num(e.get("radius"), ctx, 12.0), "color": _color(e, ctx), "team": int(ctx.get("team", 0)),
 			"sprite": str(e.get("sprite", "")), "char": str(ctx.get("char", "")),
 		})
-		p.init_ability(e, sub(ctx), d, homing_target)
+		p.init_ability(e, sub(ctx, {"aoe": false}), d, homing_target)
 
 
 static func _summon(e: Dictionary, ctx: Dictionary) -> void:
 	var w = Game.world
 	var count := clampi(int(num(e.get("count"), ctx, 1.0)), 1, 20)
+	var limit := int(num(e.get("limit"), ctx, 0.0))
+	if limit > 0:
+		# Keep at most `limit` of this summon per owner: the oldest ones disappear.
+		var mine := []
+		for u in w.units:
+			if u is Summon and not u.dead and u.owner_unit == _caster(ctx) and u.display_name == str(e.get("name", "Summon")):
+				mine.append(u)
+		while mine.size() + count > limit and not mine.is_empty():
+			mine.pop_front().die(null)
 	var st := {}
 	var raw_stats = e.get("stats", {})
 	if raw_stats is Dictionary:

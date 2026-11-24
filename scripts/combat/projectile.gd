@@ -40,6 +40,7 @@ func setup(d: Dictionary) -> void:
 	global_position = d.pos
 	dir = d.get("dir", Vector2.RIGHT)
 	radius = float(d.get("radius", 8.0))
+	team = int(d.get("team", 0))
 	color = d.get("color", Color.WHITE)
 	var spr := str(d.get("sprite", ""))
 	if spr != "":

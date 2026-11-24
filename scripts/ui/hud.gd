@@ -30,6 +30,7 @@ var shop: Shop
 var notice_label: Label
 var _notice_t := 9.0
 var minimap: DrawControl
+var minimap_units: DrawControl
 var scores: DrawControl
 var end_panel: PanelContainer
 var end_label: Label
@@ -166,7 +167,26 @@ func _ready() -> void:
 	var mh := mw * world.map.size.y / world.map.size.x
 	_place(minimap, 1.0, 1.0, -mw - 12, -mh - 36, mw, mh)
 	minimap.gui_input.connect(_minimap_input)
+	minimap.clip_contents = true
 	root.add_child(minimap)
+	if world.fog != null and world.fog.enabled:
+		var mf := TextureRect.new()
+		mf.texture = world.fog.mask_texture()
+		mf.material = world.fog.minimap_mat
+		mf.expand_mode = TextureRect.EXPAND_IGNORE_SIZE
+		mf.stretch_mode = TextureRect.STRETCH_SCALE
+		mf.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
+		mf.mouse_filter = Control.MOUSE_FILTER_IGNORE
+		# The fog texture covers whole texels, slightly more than the map.
+		var cover: Vector2 = Vector2(world.fog.vp.size) * FogOfWar.SCALE / world.map.size
+		mf.anchor_right = cover.x
+		mf.anchor_bottom = cover.y
+		minimap.add_child(mf)
+	minimap_units = DrawControl.new()
+	minimap_units.draw_func = _draw_minimap_units
+	minimap_units.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	minimap_units.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	minimap.add_child(minimap_units)
 
 	scores = DrawControl.new()
 	scores.draw_func = _draw_scores
@@ -357,6 +377,7 @@ func _process(_delta: float) -> void:
 	for s in item_boxes:
 		s.queue_redraw()
 	minimap.queue_redraw()
+	minimap_units.queue_redraw()
 	if scores.visible:
 		scores.queue_redraw()
 
@@ -457,9 +478,9 @@ func _draw_bar(c: Control) -> void:
 	for i in rows.size():
 		var y := 26.0 + i * 22.0
 		for j in 2:
-			var x := 10.0 + j * 72.0
+			var x := 8.0 + j * 74.0
 			c.draw_string(font, Vector2(x, y), rows[i][j * 2], HORIZONTAL_ALIGNMENT_LEFT, -1, 12, Color(0.6, 0.63, 0.7))
-			c.draw_string(font, Vector2(x + 30, y), rows[i][j * 2 + 1], HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.92, 0.93, 0.96))
+			c.draw_string(font, Vector2(x + 37, y), rows[i][j * 2 + 1], HORIZONTAL_ALIGNMENT_LEFT, -1, 14, Color(0.92, 0.93, 0.96))
 	var pen := PackedStringArray()
 	if st.get("lethality", 0.0) > 0.0:
 		pen.append("Leth %d" % int(st.lethality))
@@ -636,8 +657,16 @@ func _draw_minimap(c: Control) -> void:
 		c.draw_rect(Rect2(r.position * sc, r.size * sc), m.wall_color)
 	for t in 2:
 		c.draw_circle(m.spawns[t] * sc, 7.0, Color(Game.TEAM_COLORS[t], 0.6))
+
+
+## Unit dots, camera frame and border - drawn above the minimap's fog layer.
+func _draw_minimap_units(c: Control) -> void:
+	var sc := c.size.x / world.map.size.x
+	var lt := world.local_team
 	for u in world.units:
 		if u.dead and not u.is_structure:
+			continue
+		if u.team != lt and not u.is_structure and not world.ended and not world.can_see(u, lt):
 			continue
 		var p: Vector2 = u.global_position * sc
 		var col: Color = u.team_color()
@@ -646,6 +675,8 @@ func _draw_minimap(c: Control) -> void:
 		elif u.is_champion:
 			c.draw_circle(p, 5.5, col)
 			c.draw_arc(p, 5.5, 0, TAU, 12, Color.WHITE if u == world.local_champion else Color.BLACK, 1.5)
+		elif u.is_ward:
+			c.draw_rect(Rect2(p - Vector2(2.5, 2.5), Vector2(5, 5)), col.lightened(0.3))
 		else:
 			c.draw_circle(p, 2.0, col)
 	var vs := get_viewport().get_visible_rect().size / world.camera.zoom

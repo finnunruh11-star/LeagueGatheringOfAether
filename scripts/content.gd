@@ -41,7 +41,7 @@ const DEFAULT_STATS := {
 	"heal_received": 0.0,        # bonus healing & shielding you receive
 	"tenacity": 0.0,             # shortens stuns/roots/silences/slows
 	"slow_resist": 0.0,
-	"vision": 1000.0,
+	"vision": 900.0,             # sight radius (fog of war)
 	"size": 1.0,
 	"damage_mult": 1.0,
 	"damage_taken_mult": 1.0,
@@ -58,7 +58,7 @@ const EFFECT_TYPES := [
 	"cooldown", "text", "sound",
 	"mana", "gold", "mark", "remove", "counter", "stasis", "stealth", "spellshield", "grievous",
 	"untargetable", "modify_damage", "transform", "vfx", "attack_reset", "item_cooldown",
-	"shield_break", "fire_event",
+	"shield_break", "fire_event", "passive_cooldown", "reveal", "level_up", "xp",
 ]
 const NESTED_KEYS := ["effects", "on_hit", "on_end", "on_expire", "on_death", "options"]
 const ITEM_RARITIES := ["basic", "epic", "legendary", "mythic", "boots", "starter", "consumable", "jungle", "transform"]

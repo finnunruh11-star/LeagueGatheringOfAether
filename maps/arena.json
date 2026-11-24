@@ -5,6 +5,7 @@
   "mirror": true,
   "spawn": [230, 750],
   "fountain_radius": 220,
+  "fog": false,
   "walls": [
     [640, 260, 120, 120],
     [640, 1120, 120, 120],

@@ -10,7 +10,7 @@ const ITEM_SLOTS := 6
 const SELL_RATIO := 0.7
 ## Events that item/passive effects can't set off again (no infinite proc chains) unless the
 ## trigger has "procs": true.
-const PROC_GUARDED := ["deal_damage", "deal_damage_pre", "heal_ally", "shield_ally"]
+const PROC_GUARDED := ["deal_damage", "deal_damage_pre", "heal_ally", "shield_ally", "buff_ally"]
 
 var peer := 0
 var def := {}
@@ -125,6 +125,10 @@ func command(cmd: String, args: Array) -> void:
 		"autopilot":
 			is_bot = args.size() > 0 and bool(args[0])
 			return
+		"item":
+			if args.size() >= 3 and (args[0] is int or args[0] is float) and args[1] is Vector2 and (args[2] is int or args[2] is float):
+				use_item(int(args[0]), args[1], int(args[2]))
+			return
 	if dead:
 		return
 	match cmd:
@@ -156,9 +160,6 @@ func command(cmd: String, args: Array) -> void:
 		"cast":
 			if args.size() >= 3 and args[0] is String and args[1] is Vector2 and (args[2] is int or args[2] is float):
 				cast(args[0], args[1], int(args[2]))
-		"item":
-			if args.size() >= 3 and (args[0] is int or args[0] is float) and args[1] is Vector2 and (args[2] is int or args[2] is float):
-				use_item(int(args[0]), args[1], int(args[2]))
 		"recall":
 			start_recall()
 
@@ -171,6 +172,7 @@ func cast(slot: String, aim: Vector2, tid: int) -> bool:
 	if ctx.is_empty():
 		return false
 	var cost := ability_cost(ab, ctx)
+	ctx.cost_paid = cost
 	if cost > 0.0:
 		if ab.cost_type == "health":
 			if hp <= cost:
@@ -220,7 +222,7 @@ func _execute(ab: Dictionary, ctx: Dictionary) -> void:
 	ctx.origin = global_position
 	world.fx("cast", {"p": global_position, "c": color, "v": net_id, "d": Vector2(ctx.dir).angle(), "s": ab.slot})
 	Effects.run(ab.effects, ctx)
-	trigger("cast", self, ctx.pos, {"cast_slot": ab.slot})
+	trigger("cast", self, ctx.pos, {"cast_slot": ab.slot, "amount": float(ctx.get("cost_paid", 0.0))})
 
 
 func _make_ctx(ab: Dictionary, aim: Vector2, tid: int) -> Dictionary:
@@ -273,6 +275,22 @@ func change_item_cooldown(item_id: String, amount: float, reset: bool) -> void:
 	for inst in items:
 		if inst != null and (item_id == "all" or inst.id == item_id):
 			inst.cd = 0.0 if reset else maxf(inst.cd - amount, 0.0)
+
+
+## Puts an item's active on cooldown (shown on its slot).
+func set_item_cooldown(item_id: String, amount: float) -> void:
+	for inst in items:
+		if inst != null and inst.id == item_id:
+			inst.cd = maxf(amount, 0.0)
+			inst.cd_total = maxf(amount, 0.01)
+
+
+## Puts a passive trigger on cooldown (item slots show their passives' cooldowns).
+func set_trigger_cooldown(key: String, amount: float) -> void:
+	if key == "":
+		return
+	trigger_cds[key] = maxf(amount, 0.0)
+	trigger_cd_total[key] = maxf(amount, 0.01)
 
 
 # ------------------------------------------------------------------ ranks ---
@@ -369,6 +387,8 @@ func trigger(event: String, target = null, pos = null, extra := {}, only := "") 
 			"rank": level, "proc": true, "src_slot": "item" if is_item else "passive",
 			"item": r.src if is_item else "", "item_slot": r.slot, "trigger_key": r.key}
 		ctx.merge(extra, true)
+		if extra.has("dmg_info"):
+			ctx.dmg = float(extra.dmg_info.amount)
 		if tr.has("if") and Effects.num(tr["if"], ctx, 1.0) == 0.0:
 			continue
 		if tr.has("every"):
@@ -403,19 +423,24 @@ func _status_triggers(event: String, target, pos, extra: Dictionary) -> bool:
 			var tr = trs[j]
 			if not (tr is Dictionary) or str(tr.get("on", "")) != event:
 				continue
-			var key := "s:%s:%d" % [s.key, j]
+			var key := "s:%s:%d:%d" % [s.key, int(s.get("trig_sig", 0)), j]
 			if trigger_cds.get(key, 0.0) > 0.0:
 				continue
 			if extra.get("is_proc", false) and event in PROC_GUARDED and not tr.get("procs", false):
 				continue
-			var giver = s.source if is_instance_valid(s.source) and not s.source.dead else self
+			var giver = s.source if is_instance_valid(s.source) else null
+			if giver == null or (giver.dead and giver != self):
+				continue
 			var tgt = target if is_instance_valid(target) else self
 			var tpos: Vector2 = pos if pos is Vector2 else tgt.global_position
 			var ctx := {"caster": giver, "team": giver.team, "ability": str(s.get("id", "buff")), "char": giver.char_id,
 				"color": giver.color, "origin": global_position, "target": tgt, "pos": tpos, "range": 600.0, "holder": self,
 				"dir": (tpos - global_position).normalized() if tpos.distance_to(global_position) > 1.0 else Vector2(facing, 0),
-				"rank": giver.get_level(), "proc": true, "src_slot": "passive", "i": int(s.get("fired", 0))}
+				"rank": giver.get_level(), "proc": true, "src_slot": "item" if s.has("item") else "passive",
+				"item": str(s.get("item", "")), "i": int(s.get("fired", 0))}
 			ctx.merge(extra, true)
+			if extra.has("dmg_info"):
+				ctx.dmg = float(extra.dmg_info.amount)
 			if tr.has("if") and Effects.num(tr["if"], ctx, 1.0) == 0.0:
 				continue
 			s.fired = int(s.get("fired", 0)) + 1
@@ -664,7 +689,7 @@ func _items_changed() -> void:
 
 func use_item(slot: int, aim: Vector2, tid: int) -> bool:
 	var it = item_def(slot)
-	if it == null or it.active == null or dead or has_status("stasis"):
+	if it == null or it.active == null or has_status("stasis") or (dead and not it.active.get("while_dead", false)):
 		return false
 	var inst: Dictionary = items[slot]
 	if inst.cd > 0.0 or (it.charges > 0 and int(inst.n) <= 0):
@@ -680,6 +705,9 @@ func use_item(slot: int, aim: Vector2, tid: int) -> bool:
 	ctx.rank = level
 	ctx.color = it.color
 	ctx.erase("rank_mult")
+	if ab.has("requires") and Effects.num(ab.requires, ctx, 1.0) == 0.0:
+		world.fx("notice", {"peer": peer, "text": "%s can't be used on that" % it.name})
+		return false
 	var cd := maxf(Effects.num(ab.cooldown, ctx, 60.0), 0.0)
 	inst.cd = cd
 	inst.cd_total = maxf(cd, 0.01)
@@ -881,7 +909,7 @@ func _dead_process(delta: float) -> void:
 
 func respawn() -> void:
 	dead = false
-	statuses.clear()
+	statuses = statuses.filter(func(s): return s.get("persist", false))
 	teleport(world.map.spawn_point(team) + Vector2(randf_range(-40, 40), randf_range(-40, 40)))
 	recompute_stats()
 	hp = stats.max_hp
@@ -1124,7 +1152,12 @@ func _bot_level_up() -> void:
 	while skill_points > 0 and guard < 8:
 		guard += 1
 		var done := false
-		for s in ["r", "q", "w", "e"]:
+		var order := ["r", "q", "w", "e"]
+		for s in ["q", "w", "e"]:
+			if int(ranks[s]) == 0 and can_rank_up(s):
+				order = [s]
+				break
+		for s in order:
 			if can_rank_up(s):
 				rank_up(s)
 				done = true

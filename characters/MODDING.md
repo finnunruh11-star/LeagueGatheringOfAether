@@ -55,6 +55,7 @@ Percent stats are fractions (`0.3` = 30%). Regen is per second.
 | `heal_power`, `heal_received` | 0, 0 | boosts heals & shields you give / receive |
 | `tenacity`, `slow_resist` | 0, 0 | shortens stuns/roots/silences/slows / weakens slows |
 | `size`, `damage_mult`, `damage_taken_mult`, `cooldown_mult` | 1 | fun multipliers (0.5 cooldown_mult = half cooldowns) |
+| `vision` | 900 | sight radius for fog of war (minions 650, towers 900, summons 600) |
 
 `per_level` stats are added every level (defaults: +75 HP, +3.5 AD, +2 armor, +1 MR, +0.12 regen,
 +8 AP, +2.5% attack speed). Champions level up to **21**; levels 19-21 only give stats.
@@ -111,11 +112,14 @@ dashes, delays and repeats contain their own effect lists. Any effect may also h
 | `t_champion`, `t_minion`, `t_structure`, `t_ranged` | 1/0 target type |
 | `rank` | ability rank (for item/passive triggers: your level) |
 | `dist`, `ally`, `i`, `time` | distance to target; 1 if target is an ally; repeat index / trigger count; match time |
+| `shield`, `t_shield` | your / the target's current shield amount |
 | `in_combat`, `combat_time`, `since_hit`, `since_combat` | champion-combat state (seconds) |
+| `moving` | 1 while you are walking |
 | `gold`, `kills`, `deaths`, `assists`, `energy`, `legendaries` | your score, Energize stacks (0-100), legendary item count |
 | `dmg`, `dtype`, `crit_hit`, `is_attack`, `is_ability`, `is_dot`, `is_aoe` | inside damage triggers: the hit (`dmg` is after armor/MR) |
 | `slot` | inside `cast`/`rank_up` triggers: which ability ("q"... compare with `slot == 'r'`) |
-| `amount` | inside `heal_ally`/`shield_ally` triggers: how much |
+| `amount` | inside `heal_ally`/`shield_ally` triggers: how much; inside `cast` triggers: the mana spent |
+| `dmg_raw` | inside damage triggers: the hit before armor/MR |
 | `cc` | inside `cc_applied` triggers: "stun", "root", "slow", "silence", "knockback" or "pull" |
 | `t_self` | 1 if the target is you |
 | `at_base` | 1 while you stand in your fountain |
@@ -125,9 +129,9 @@ Functions: `has('id')` (you have a status/mark with that id or type), `t_has('id
 you - or any status of that type like `'stun'`), `t_has_any('id')`, `stacks('id')`, `t_stacks('id')`,
 `counter('id')`, `stat('name')`, `t_stat('name')`, `base('name')`, `bonus('name')`, `pre('name')` (a stat
 before multipliers, e.g. crit chance before Guinsoo's sets it to 0), `h_stat('name')` (stat of the unit
-holding the buff whose trigger runs), `near_allies(r)`, `near_enemies(r)` (champions), `near_units(r)`,
+holding the buff whose trigger runs), `h_hp()`, `h_dist()` (holder's HP / distance to you), `near_allies(r)`, `near_enemies(r)` (champions; `near_enemies(r, 'id')` skips ones carrying your mark 'id'), `near_units(r)`,
 `cd('q')` (remaining), `cd_total('r')` (full cooldown of the last cast), `has_item('id')`, `item_count('legendary')`.
-Godot math and logic work too: `min`, `max`, `clamp`, `pow`, `sqrt`, `randf()`, `and`, `or`, `not`,
+Godot math and logic work too (write decimals like `10.0` in `clamp`/`min`/`max` - with whole numbers they return whole numbers): `min`, `max`, `clamp`, `pow`, `sqrt`, `randf()`, `and`, `or`, `not`,
 `a if cond else b`, `[10, 20, 30][rank - 1]`.
 
 ### On a unit (the current target, or yourself with `"target": "self"`)
@@ -135,25 +139,29 @@ Godot math and logic work too: `min`, `max`, `clamp`, `pow`, `sqrt`, `randf()`, 
 |---|---|
 | `damage` | `amount` 50, `damage_type` "magic" / "physical" / "true"; `can_crit` (rolls your crit), `attack` (counts as a basic attack: lifesteal, "attacked" triggers), `onhit` (lifesteal applies), `raw` (skips damage modifiers) |
 | `heal` | `amount` 50 (boosted by your `heal_power`) |
-| `shield` | `amount` 100, `duration` 3, `damage_type` "all" / "magic" / "physical" (only blocks that type) |
+| `shield` | `amount` 100, `duration` 3, `damage_type` "all" / "magic" / "physical" (only blocks that type), `decay` (shrinks to 0 over the duration) |
 | `stun`, `root`, `silence` | `duration` 1 (shortened by tenacity) |
 | `invulnerable`, `stasis`, `untargetable`, `stealth` | `duration` 1. Stasis = invulnerable + untargetable + can't act (Zhonya's) |
 | `spellshield` | blocks the next enemy ability hit; `duration` (default: until popped) |
 | `grievous` | healing reduction: `amount` 0.4, `duration` 3 |
-| `slow` | `amount` 0.3 (0-1), `duration` 2 |
+| `slow` | `amount` 0.3 (0-1), `duration` 2, `decay` (fades out over the duration) |
 | `dot` / `hot` | `amount` per second 20, `duration` 3, `interval` 0.5, `damage_type`, `raw` |
-| `buff` | `duration` 4, `add` {stat: value}, `multiply` {stat: factor}; stacking: `max_stacks` 5 (+`stacks` per application, `refresh` true) - each stack adds the values again |
+| `buff` | `duration` 4, `add` {stat: value}, `multiply` {stat: factor}; stacking: `max_stacks` 5 (+`stacks` per application, `refresh` true) - each stack adds the values again; `hidden` (no buff icon/particles) |
 | `mark` | invisible stackable marker for bookkeeping: `id` (required), `duration` 5, `stacks` 1, `max_stacks` |
 | `remove` | removes your status with `id` from the target (`any_source`: from anyone), or `status`: "slow" (a whole type) |
 | `shield_break` | reduces the target's current shields by `amount` (0.5 = half); with `duration`, shields they gain meanwhile are reduced too |
-| `cleanse` | removes stun/root/slow/silence/dot/grievous |
+| `cleanse` | removes stun/root/slow/silence/dot/grievous (`cc_only`: only stun/root/slow/silence) |
 | `knockback` | `distance` 220, `duration` 0.25, `from` "origin" (center of the blast / projectile) or "self" |
 | `pull` | toward you; `distance` (default: all the way), `duration` 0.25 |
 | `swap` | you and the target swap places |
 | `mana` | restore `amount` mana (negative drains) |
+| `reveal` | the target is visible to your team through fog of war (and stealth) for `duration` 2 |
+| `level_up` | the target champion gains a level |
+| `xp` | the target champion gains `amount` experience |
 
 Repeated statuses from the same ability refresh instead of stacking. Add `"stack": true` to let
-them stack, or `"id": "burn"` to share one status between abilities. Enemy spell shields block
+them stack, or `"id": "burn"` to share one status between abilities; `"keep_longer": true` keeps the
+longer of the old and new duration when refreshing, and `"persist": true` keeps a status through death. (Marks add a stack each time they are applied.) Enemy spell shields block
 ability effects (not basic attacks or item effects).
 
 ### You / your champion
@@ -162,7 +170,8 @@ ability effects (not basic attacks or item effects).
 | `gold` | `amount` - gives you gold (floating text for you) |
 | `counter` | permanent number on your champion (stacks like Mejai's): `id`, `add`, `set`, `mult`, `max`, `min`. Read with `counter('id')` |
 | `cooldown` | `slot` "q"/"w"/"e"/"r"/"basic" (q+w+e)/"all", `amount` seconds (or fraction of the remaining time with `"percent": true`), or `"reset": true` |
-| `item_cooldown` | `item` id or "all", `amount` / `reset` |
+| `item_cooldown` | `item` id or "all", `amount` / `reset`; or `set`: put this item's active on that cooldown |
+| `passive_cooldown` | puts the running trigger (or this item's passive number `passive`) on cooldown `amount` - the item slot shows it |
 | `attack_reset` | your next basic attack is ready immediately |
 | `modify_damage` | only inside `deal_damage_pre` / `take_damage_pre` triggers: `mult`, `add` change the hit (after armor/MR) |
 | `fire_event` | runs your triggers for `event` (default "attack") again on the current target, except the trigger doing it - e.g. "apply on-hit effects twice" |
@@ -171,18 +180,18 @@ ability effects (not basic attacks or item effects).
 ### Movement (you)
 | type | keys |
 |---|---|
-| `dash` | `to` "aim" (toward the target point) / "direction" (full distance) / "back" / "target"; `distance` 350, `speed` 1400, `on_hit` [effects on each unit passed through], `stop_on_hit`, `on_end` [effects at the landing spot] |
+| `dash` | `to` "aim" (toward the target point) / "direction" (full distance) / "back" / "target"; `distance` 350, `min_distance` (aim dashes go at least this far), `speed` 1400, `on_hit` [effects on each unit passed through], `stop_on_hit`, `on_end` [effects at the landing spot] |
 | `teleport` | `to` "pos" (default) / "target" (behind the target) / "home" |
 
 ### Spawners
 | type | keys |
 |---|---|
 | `projectile` | `speed` 900, `range` (ability range), `radius` 12, `color`, `sprite`, `count` 1, `spread` (degrees, 360 = ring), `pierce` false/true/number, `homing`, `returns` (boomerang), `through_walls`, `affects` "enemies"/"allies"/"all", `hits_structures`, `on_hit` [...], `on_end` [... when it stops] |
-| `area` | instant explosion. `at` "pos" (default) / "self" / "target", `radius` 150, `delay` (shows a warning circle first), `scatter` (random offset), `angle` (cone toward the aim, e.g. 70), `affects`, `hits_structures`, `color`, `show` (false = no blast visual, for auras), `filter` "champions"/"minions", `exclude_target`, `exclude_self`, `sort` "nearest"/"farthest"/"lowest_hp"/"lowest_hp_percent"/"champions_first"/"random", `max_targets`, `effects` [... per unit inside] |
+| `area` | instant explosion. `at` "pos" (default) / "self" / "target", `radius` 150, `delay` (shows a warning circle first), `scatter` (random offset), `angle` (cone toward the aim, e.g. 70), `affects`, `hits_structures`, `color`, `show` (false = no blast visual, for auras), `filter` "champions"/"minions"/"summons"/"non_champions", `offset` (move the center forward along your aim), `exclude_target`, `exclude_self`, `sort` "nearest"/"farthest"/"lowest_hp"/"lowest_hp_percent"/"champions_first"/"champions_lowest_hp"/"random", `max_targets`, `effects` [... per unit inside] |
 | `beam` | instant line from you. `length` (ability range), `width` 70, `delay`, `affects`, `effects` [...] |
 | `zone` | lingering circle. `radius` 160, `duration` 4, `interval` 0.5, `follow` (true = aura around you), `affects`, `effects` [... each tick], `on_expire` [...] |
 | `trap` | `radius` 60, `duration` 30, `arm_time` 0.6, `hidden` true, `effects` [... on the unit that steps on it] |
-| `summon` | `name`, `count` 1, `duration` 10, `stats` {max_hp, attack_damage, attack_range, attack_speed, move_speed, armor}, `ranged`, `stationary` (turret), `size` 0.7, `sprite`, `on_hit` [...], `on_death` [...] |
+| `summon` | `name`, `count` 1, `duration` 10, `stats` {max_hp, attack_damage, attack_range, attack_speed, move_speed, armor, vision...}, `ranged`, `stationary` (turret), `size` 0.7, `sprite`, `on_hit` [...], `on_death` [...], `ward` (a ward: 1 damage per basic attack, ignored by minions and towers), `reveal` (sees stealthed enemies in its vision), `limit` (max of these per owner; the oldest disappears) |
 
 Abilities don't hurt towers unless you set `"hits_structures": true`.
 
@@ -236,9 +245,12 @@ Inside a trigger, `rank` is your level, so `[..18 values..]` lists scale with le
 | `takedown` | you killed or assisted on a champion (`amount` 1 = kill, 0 = assist) |
 | `death` | you died |
 | `heal_ally`, `shield_ally` | you healed/shielded another champion (target = ally, `amount`) |
-| `cc_applied` | you stunned/rooted/slowed/silenced/knocked back an enemy champion |
+| `cc_applied` | you stunned/rooted/slowed/silenced/knocked back an enemy champion (`cc`) |
+| `cc_received` | an enemy champion's effect stunned/rooted/slowed/silenced/knocked you back (target = them, `cc`) |
+| `buff_ally` | you gave a `buff` to another allied champion (target = ally) |
 | `spellshield_pop` | your spell shield blocked something |
 | `interval` | every `interval` seconds |
+| `dash` | you dashed, blinked or teleported (target = you, `pos` = destination) |
 | `spawn`, `level_up`, `rank_up`, `buy`, `item_used` | as named |
 
 **Triggers on statuses**: a `buff` or `mark` can carry `"triggers": [...]` that work while it lasts
@@ -289,7 +301,7 @@ fountain or while dead (anywhere in Practice / the Training Arena). Keys **1-6**
 - `passives` are triggers (see Passive triggers) plus `name`/`description`. A passive without `on` is
   just text. Passives with the same `"unique": "name"` don't stack (default: per item, so two copies
   of one item don't double up). Inside them `rank` = your level, so 18-entry lists scale by level.
-- `active` works like an ability (targeting, range, indicator) and is used with keys 1-6.
+- `active` works like an ability (targeting, range, indicator) and is used with keys 1-6 (`"while_dead": true` allows using it while dead; `"requires": "t_minion"` - an expression checked before the cooldown starts, e.g. only usable on minions).
   Consumables (`"consume": true`, default for rarity consumable) lose one charge per use.
 - `{"type": "transform", "into": "muramana"}` inside a passive upgrades the item in place.
 
