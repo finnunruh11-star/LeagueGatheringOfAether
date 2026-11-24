@@ -40,10 +40,13 @@ static func draw_icon(ci: CanvasItem, r: Rect2, it: Dictionary, dim := false) ->
 			var y0 := r.position.y + r.size.y * i / steps
 			ci.draw_rect(Rect2(r.position.x, y0, r.size.x, r.size.y / steps + 1.0), top.lerp(bottom, float(i) / (steps - 1)))
 		ci.draw_circle(r.position + r.size * Vector2(0.3, 0.28), r.size.x * 0.22, Color(1, 1, 1, 0.12))
-		var fs := int(r.size.y * (0.42 if str(it.get("short", "")).length() <= 2 else 0.34))
-		var y := r.position.y + r.size.y * 0.5 + fs * 0.36
-		ci.draw_string_outline(font, Vector2(r.position.x, y), str(it.get("short", "?")), HORIZONTAL_ALIGNMENT_CENTER, r.size.x, fs, 4, Color(0, 0, 0, 0.7))
-		ci.draw_string(font, Vector2(r.position.x, y), str(it.get("short", "?")), HORIZONTAL_ALIGNMENT_CENTER, r.size.x, fs, Color(1, 1, 1, 0.95))
+		if it.get("badge", false):
+			var fs := int(r.size.y * (0.42 if str(it.get("short", "")).length() <= 2 else 0.34))
+			var y := r.position.y + r.size.y * 0.5 + fs * 0.36
+			ci.draw_string_outline(font, Vector2(r.position.x, y), str(it.get("short", "?")), HORIZONTAL_ALIGNMENT_CENTER, r.size.x, fs, 4, Color(0, 0, 0, 0.7))
+			ci.draw_string(font, Vector2(r.position.x, y), str(it.get("short", "?")), HORIZONTAL_ALIGNMENT_CENTER, r.size.x, fs, Color(1, 1, 1, 0.95))
+		else:
+			ItemGlyphs.draw(ci, r, it)
 		if dim:
 			ci.draw_rect(r, Color(0, 0, 0, 0.5))
 	ci.draw_rect(r, rarity_color(it), false, 2.0)

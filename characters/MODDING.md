@@ -324,7 +324,9 @@ fountain or while dead (anywhere in Practice / the Training Arena). Keys **1-6**
   "passives": [ { "name": "Bring It Down", "description": "...", "on": "attack", "every": 3, "effects": [ ... ] } ],
   "active": { "name": "Stasis", "description": "...", "cooldown": 120, "targeting": "self", "range": 600,
               "consume": false, "effects": [ ... ] },
-  "short": "KS", "color": "#4fd6ff", "icon": "icons/kraken.png"   // optional looks (default: letters on a colored badge)
+  "short": "KS", "color": "#4fd6ff", "icon": "icons/kraken.png"   // optional looks: "icon" = picture; else a small drawn picture picked by
+  // "glyph" (sword, greatsword, dagger, spear, bow, axe, hammer, book, rune, staff, wand, shield, armor, cloak, boots, potion,
+  // crystal, gem, ring, orb, heart, ...; default: guessed from the tags) in "color"; setting "short" alone shows letters instead
 }
 ```
 - You can own only **one mythic**. Mythic items' `mythic_stats` are granted per other legendary.

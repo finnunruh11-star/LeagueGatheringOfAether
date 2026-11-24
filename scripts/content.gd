@@ -217,6 +217,8 @@ static func _item(id: String, raw: Dictionary, holder: Dictionary, errors: Packe
 	it.transform_into = str(raw.get("transform_into", ""))
 	it.color = parse_color(raw.get("color"), _item_color(it))
 	it.short = str(raw.get("short", _abbrev(it.name)))
+	it.glyph = str(raw.get("glyph", ""))
+	it.badge = raw.has("short") and not raw.has("glyph")
 	it.stats = {}
 	it.stats_mult = {}
 	it.mythic_stats = {}
