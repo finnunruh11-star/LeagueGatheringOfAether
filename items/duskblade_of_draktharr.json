@@ -20,7 +20,94 @@
     "lethality": 18.0,
     "ability_haste": 15.0
   },
-  "mythic_stats": {},
+  "mythic_stats": {
+    "ability_haste": 5,
+    "move_speed": 5
+  },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Nightstalker",
+      "description": "Your abilities deal up to 16% more damage based on the target's missing health (full bonus at 30% health or less). When an enemy champion you damaged in the last 3s dies, you turn invisible for 1.5s; attacking or casting an ability ends it early (30s cooldown).",
+      "on": "deal_damage_pre",
+      "if": "is_ability",
+      "effects": [
+        {
+          "type": "modify_damage",
+          "mult": "1 + 0.16 * min(1, t_missing_hp / t_max_hp / 0.7)"
+        }
+      ]
+    },
+    {
+      "name": "Nightstalker",
+      "on": "deal_damage",
+      "if": "t_champion and not t_self",
+      "effects": [
+        {
+          "type": "mark",
+          "target": "self",
+          "id": "duskblade_of_draktharr_window",
+          "duration": 3,
+          "max_stacks": 1
+        }
+      ]
+    },
+    {
+      "name": "Nightstalker",
+      "on": "takedown",
+      "if": "has('duskblade_of_draktharr_window')",
+      "cooldown": 30,
+      "effects": [
+        {
+          "type": "stealth",
+          "target": "self",
+          "id": "duskblade_of_draktharr_stealth",
+          "duration": 1.5
+        },
+        {
+          "type": "delay",
+          "time": 0.25,
+          "effects": [
+            {
+              "type": "mark",
+              "target": "self",
+              "id": "duskblade_of_draktharr_shroud",
+              "duration": 1.25,
+              "triggers": [
+                {
+                  "on": "attack_launch",
+                  "consume": true,
+                  "effects": [
+                    {
+                      "type": "remove",
+                      "target": "holder",
+                      "id": "duskblade_of_draktharr_stealth"
+                    }
+                  ]
+                },
+                {
+                  "on": "cast",
+                  "consume": true,
+                  "effects": [
+                    {
+                      "type": "remove",
+                      "target": "holder",
+                      "id": "duskblade_of_draktharr_stealth"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "text",
+          "text": "Vanish!",
+          "at": "self",
+          "color": "#b48cff",
+          "size": 22
+        }
+      ]
+    }
+  ]
 }

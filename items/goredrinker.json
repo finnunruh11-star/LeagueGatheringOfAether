@@ -22,7 +22,40 @@
     "ability_haste": 20.0,
     "omnivamp": 0.08
   },
-  "mythic_stats": {},
+  "mythic_stats": {
+    "max_hp": 75,
+    "ability_haste": 3
+  },
   "description": "",
-  "passives": []
+  "passives": [],
+  "active": {
+    "name": "Thirsting Slash",
+    "description": "Slash enemies within 450 units for 175% base AD physical damage and heal 20% AD + 8% of your missing health for each enemy champion hit. 15s cooldown, reduced by ability haste.",
+    "cooldown": "15 * 100 / (100 + ah)",
+    "targeting": "self",
+    "effects": [
+      {
+        "type": "area",
+        "at": "self",
+        "radius": 450,
+        "color": "#d23a3a",
+        "vfx": "slash",
+        "effects": [
+          {
+            "type": "damage",
+            "damage_type": "physical",
+            "amount": "1.75 * base_ad",
+            "vfx": "claw_red",
+            "color": "#d23a3a"
+          },
+          {
+            "type": "heal",
+            "if": "t_champion",
+            "target": "self",
+            "amount": "0.2 * ad + 0.08 * missing_hp"
+          }
+        ]
+      }
+    ]
+  }
 }

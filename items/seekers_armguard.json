@@ -10,10 +10,26 @@
     "Armor",
     "SpellDamage"
   ],
+  "display": "counter('seekers_armguard_stacks')",
   "stats": {
     "ability_power": 30.0,
-    "armor": 20.0
+    "armor": "20 + 0.5 * counter('seekers_armguard_stacks')"
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Witch's Path",
+      "description": "20 armor, +0.5 more armor per unit you kill, up to +15 (30 kills).",
+      "on": "kill",
+      "if": "not t_structure and not t_summon",
+      "effects": [
+        {
+          "type": "counter",
+          "id": "seekers_armguard_stacks",
+          "add": 1,
+          "max": 30
+        }
+      ]
+    }
+  ]
 }

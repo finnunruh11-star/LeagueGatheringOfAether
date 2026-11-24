@@ -12,13 +12,115 @@
     "ManaRegen",
     "CooldownReduction"
   ],
+  "display": "counter('echoes_of_helia_shards')",
   "stats": {
-    "ability_power": 30.0,
+    "ability_power": "30 + 12 * stat('mana_regen_percent')",
     "max_hp": 200.0,
     "ability_haste": 15.0,
     "mana_regen_percent": 1.25
   },
-  "mythic_stats": {},
+  "mythic_stats": {
+    "ability_haste": 5
+  },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Soul Siphon",
+      "description": "Damaging an enemy champion stores a Soul Shard (max 2). Healing or shielding an allied champion spends all shards: per shard the ally heals 20 and the nearest enemy champion within 1100 of them takes 30 magic damage (+5 heal / +12.5 damage per level from level 7, up to 80 / 180).",
+      "on": "deal_damage",
+      "if": "t_champion and not t_self and counter('echoes_of_helia_shards') < 2",
+      "effects": [
+        {
+          "type": "counter",
+          "id": "echoes_of_helia_shards",
+          "add": 1,
+          "max": 2
+        }
+      ]
+    },
+    {
+      "name": "Soul Siphon",
+      "on": "heal_ally",
+      "if": "counter('echoes_of_helia_shards') > 0",
+      "effects": [
+        {
+          "type": "heal",
+          "amount": "(20 + 5 * clamp(level - 6, 0, 12)) * counter('echoes_of_helia_shards')"
+        },
+        {
+          "type": "area",
+          "at": "target",
+          "radius": 1100,
+          "filter": "champions",
+          "sort": "nearest",
+          "max_targets": 1,
+          "show": false,
+          "effects": [
+            {
+              "type": "vfx",
+              "kind": "line",
+              "from": "origin",
+              "to": "target",
+              "color": "#c9a2ff"
+            },
+            {
+              "type": "damage",
+              "amount": "(30 + 12.5 * clamp(level - 6, 0, 12)) * counter('echoes_of_helia_shards')",
+              "vfx": "magic",
+              "color": "#c9a2ff"
+            }
+          ]
+        },
+        {
+          "type": "counter",
+          "id": "echoes_of_helia_shards",
+          "set": 0
+        }
+      ]
+    },
+    {
+      "name": "Soul Siphon",
+      "on": "shield_ally",
+      "if": "counter('echoes_of_helia_shards') > 0",
+      "effects": [
+        {
+          "type": "heal",
+          "amount": "(20 + 5 * clamp(level - 6, 0, 12)) * counter('echoes_of_helia_shards')"
+        },
+        {
+          "type": "area",
+          "at": "target",
+          "radius": 1100,
+          "filter": "champions",
+          "sort": "nearest",
+          "max_targets": 1,
+          "show": false,
+          "effects": [
+            {
+              "type": "vfx",
+              "kind": "line",
+              "from": "origin",
+              "to": "target",
+              "color": "#c9a2ff"
+            },
+            {
+              "type": "damage",
+              "amount": "(30 + 12.5 * clamp(level - 6, 0, 12)) * counter('echoes_of_helia_shards')",
+              "vfx": "magic",
+              "color": "#c9a2ff"
+            }
+          ]
+        },
+        {
+          "type": "counter",
+          "id": "echoes_of_helia_shards",
+          "set": 0
+        }
+      ]
+    },
+    {
+      "name": "Dissonance",
+      "description": "This item's ability power is 30 + 12 per 100% bonus base mana regen you have (45 AP with only its own 125%)."
+    }
+  ]
 }

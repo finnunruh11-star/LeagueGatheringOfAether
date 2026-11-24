@@ -18,5 +18,62 @@
     "move_speed_bonus": 0.07
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Peck",
+      "description": "Attacks deal 30 bonus magic damage on-hit.",
+      "on": "attack",
+      "effects": [
+        {
+          "type": "damage",
+          "damage_type": "magic",
+          "amount": 30,
+          "vfx": "spark",
+          "color": "#9ff0b8"
+        }
+      ]
+    },
+    {
+      "name": "Wind's Fury",
+      "description": "Ranged only: attacks also fire bolts at up to 2 other enemies within your attack range (+65), each dealing 40% AD physical damage. Bolts can crit and apply on-hit effects.",
+      "on": "attack",
+      "if": "ranged",
+      "effects": [
+        {
+          "type": "area",
+          "at": "self",
+          "radius": "stat('attack_range') + 65",
+          "exclude_target": true,
+          "max_targets": 2,
+          "sort": "champions_first",
+          "show": false,
+          "effects": [
+            {
+              "type": "projectile",
+              "if": "not (t_summon and t_max_hp <= 10)",
+              "homing": true,
+              "speed": 1600,
+              "radius": 6,
+              "color": "#c8f5d2",
+              "on_hit": [
+                {
+                  "type": "damage",
+                  "damage_type": "physical",
+                  "amount": "0.4 * ad",
+                  "can_crit": true,
+                  "onhit": true,
+                  "vfx": "twinkle",
+                  "color": "#c8f5d2"
+                },
+                {
+                  "type": "fire_event",
+                  "event": "attack"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
 }

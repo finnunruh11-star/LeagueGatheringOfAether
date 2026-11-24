@@ -8,8 +8,41 @@
   ],
   "group": "dorans",
   "stats": {
-    "max_hp": 110.0
+    "max_hp": 110.0,
+    "hp_regen": 0.8
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Focus",
+      "description": "Basic attacks deal 5 bonus physical damage to minions.",
+      "on": "attack",
+      "if": "t_minion",
+      "effects": [
+        {
+          "type": "damage",
+          "damage_type": "physical",
+          "amount": 5,
+          "vfx": "spark",
+          "color": "#c8d6e0"
+        }
+      ]
+    },
+    {
+      "name": "Endure",
+      "description": "When an enemy champion damages you, restore up to 45 health over 8s - more the lower your health is (66% for ranged champions and against area or periodic damage).",
+      "on": "take_damage",
+      "if": "t_champion and not t_self",
+      "effects": [
+        {
+          "type": "hot",
+          "target": "self",
+          "id": "dorans_shield_endure",
+          "amount": "45 * missing_hp / max_hp * (1 - 0.34 * int(ranged or is_aoe or is_dot)) / 8",
+          "duration": 8,
+          "interval": 0.5
+        }
+      ]
+    }
+  ]
 }

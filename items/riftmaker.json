@@ -20,7 +20,23 @@
     "ability_haste": 15.0,
     "omnivamp": 0.07
   },
-  "mythic_stats": {},
+  "mythic_stats": {
+    "omnivamp": 0.02,
+    "ability_power": 8
+  },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Void Corruption",
+      "description": "Each second in combat with enemy champions makes your damage to champions 3% stronger, up to 9% after 3s. At full strength the bonus ignores armor and magic resist (it is 9% of the damage before resistances, like true damage).",
+      "on": "deal_damage_pre",
+      "if": "t_champion and in_combat and not t_self and combat_time >= 1",
+      "effects": [
+        {
+          "type": "modify_damage",
+          "mult": "1 + 0.03 * floor(combat_time) * int(combat_time < 3) + 0.09 * int(combat_time >= 3) * (1 + int(dtype == 'magic') * max(t_mr * (1 - stat('magic_pen_percent')) - stat('magic_pen'), 0) / 100 + int(dtype == 'physical') * max(t_armor * (1 - stat('armor_pen')) - lethality * (0.6 + 0.4 * min(level, 18) / 18), 0) / 100)"
+        }
+      ]
+    }
+  ]
 }

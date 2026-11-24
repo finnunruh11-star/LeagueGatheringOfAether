@@ -13,5 +13,29 @@
     "attack_damage": 30.0
   },
   "description": "",
-  "passives": []
+  "passives": [],
+  "active": {
+    "name": "Crescent",
+    "description": "Lash out around you: enemies within 450 units take physical damage equal to 100% of your base AD. Cooldown 20s, lowered by ability haste.",
+    "cooldown": "20 * 100 / (100 + ah)",
+    "targeting": "self",
+    "effects": [
+      {
+        "type": "area",
+        "at": "self",
+        "radius": 450,
+        "color": "#e0574f",
+        "vfx": "slash",
+        "effects": [
+          {
+            "type": "damage",
+            "damage_type": "physical",
+            "amount": "base_ad",
+            "vfx": "claw_red",
+            "color": "#e0574f"
+          }
+        ]
+      }
+    ]
+  }
 }

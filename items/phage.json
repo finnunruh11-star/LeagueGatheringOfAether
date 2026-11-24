@@ -16,5 +16,22 @@
     "max_hp": 200.0
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Sturdy",
+      "description": "Hitting a champion with physical damage heals you for 1.6% of max health over 6s (0.8% if ranged). Repeated hits refresh the heal instead of stacking.",
+      "on": "deal_damage",
+      "if": "dtype == 'physical' and t_champion and not t_self",
+      "effects": [
+        {
+          "type": "hot",
+          "target": "self",
+          "id": "phage_sturdy",
+          "amount": "0.016 * max_hp * (1 - 0.5 * ranged) / 6",
+          "duration": 6,
+          "interval": 0.5
+        }
+      ]
+    }
+  ]
 }

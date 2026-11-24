@@ -16,5 +16,61 @@
     "armor": 40.0
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Saving Grace",
+      "description": "When you would die, you are put in stasis for 4s instead, then revive with 50% of your base health and 30% of your max mana (300s cooldown).",
+      "on": "lethal",
+      "cooldown": 300,
+      "effects": [
+        {
+          "type": "cleanse",
+          "target": "self"
+        },
+        {
+          "type": "stasis",
+          "target": "self",
+          "duration": 4
+        },
+        {
+          "type": "text",
+          "text": "Guardian Angel!",
+          "at": "self",
+          "color": "#ffe7a3",
+          "size": 26
+        },
+        {
+          "type": "vfx",
+          "kind": "ring",
+          "at": "self",
+          "radius": 110,
+          "color": "#ffe7a3"
+        },
+        {
+          "type": "delay",
+          "time": 4,
+          "effects": [
+            {
+              "type": "heal",
+              "target": "self",
+              "amount": "0.5 * base_hp"
+            },
+            {
+              "type": "mana",
+              "target": "self",
+              "amount": "0.3 * max_mana"
+            },
+            {
+              "type": "vfx",
+              "kind": "blast",
+              "at": "self",
+              "radius": 120,
+              "color": "#ffe7a3",
+              "vfx": "twinkle"
+            }
+          ]
+        }
+      ]
+    }
+  ]
 }

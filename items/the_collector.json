@@ -18,5 +18,42 @@
     "lethality": 18.0
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Death and Taxes",
+      "description": "Damage that leaves an enemy champion below 5% health executes them. Champion kills give 25 extra gold.",
+      "on": "deal_damage",
+      "if": "t_champion and not t_self and t_hp > 0 and t_hp < 0.05 * t_max_hp",
+      "effects": [
+        {
+          "type": "shield_break",
+          "amount": 1
+        },
+        {
+          "type": "damage",
+          "damage_type": "true",
+          "amount": "t_hp + 1",
+          "raw": true,
+          "vfx": "burst",
+          "color": "#ffd34d"
+        },
+        {
+          "type": "text",
+          "text": "Executed!",
+          "color": "#ffd34d",
+          "size": 22
+        }
+      ]
+    },
+    {
+      "name": "Death and Taxes",
+      "on": "champion_kill",
+      "effects": [
+        {
+          "type": "gold",
+          "amount": 25
+        }
+      ]
+    }
+  ]
 }

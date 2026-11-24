@@ -20,5 +20,109 @@
     "move_speed_bonus": 0.05
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Sanctify",
+      "description": "Healing or shielding another allied champion empowers you both for 6s: +20% attack speed, and basic attacks deal 15 bonus magic damage on-hit.",
+      "on": "heal_ally",
+      "effects": [
+        {
+          "type": "buff",
+          "id": "ardent_censer_sanctify",
+          "duration": 6,
+          "add": {
+            "bonus_attack_speed": 0.2
+          },
+          "triggers": [
+            {
+              "on": "attack",
+              "effects": [
+                {
+                  "type": "damage",
+                  "damage_type": "magic",
+                  "amount": 15,
+                  "vfx": "spark",
+                  "color": "#ffcf6b"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "buff",
+          "id": "ardent_censer_sanctify",
+          "target": "self",
+          "duration": 6,
+          "add": {
+            "bonus_attack_speed": 0.2
+          },
+          "triggers": [
+            {
+              "on": "attack",
+              "effects": [
+                {
+                  "type": "damage",
+                  "damage_type": "magic",
+                  "amount": 15,
+                  "vfx": "spark",
+                  "color": "#ffcf6b"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Sanctify",
+      "on": "shield_ally",
+      "effects": [
+        {
+          "type": "buff",
+          "id": "ardent_censer_sanctify",
+          "duration": 6,
+          "add": {
+            "bonus_attack_speed": 0.2
+          },
+          "triggers": [
+            {
+              "on": "attack",
+              "effects": [
+                {
+                  "type": "damage",
+                  "damage_type": "magic",
+                  "amount": 15,
+                  "vfx": "spark",
+                  "color": "#ffcf6b"
+                }
+              ]
+            }
+          ]
+        },
+        {
+          "type": "buff",
+          "id": "ardent_censer_sanctify",
+          "target": "self",
+          "duration": 6,
+          "add": {
+            "bonus_attack_speed": 0.2
+          },
+          "triggers": [
+            {
+              "on": "attack",
+              "effects": [
+                {
+                  "type": "damage",
+                  "damage_type": "magic",
+                  "amount": 15,
+                  "vfx": "spark",
+                  "color": "#ffcf6b"
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
 }

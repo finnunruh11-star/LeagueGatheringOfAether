@@ -15,5 +15,22 @@
     "max_hp": 150.0
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Revved",
+      "description": "Your next hit on a champion bursts for 50-125 bonus magic damage (scales with level). Recharges after 40s.",
+      "on": "deal_damage",
+      "if": "t_champion and not t_self",
+      "cooldown": 40,
+      "effects": [
+        {
+          "type": "damage",
+          "damage_type": "magic",
+          "amount": "50 + 75 * (min(level, 18) - 1) / 17",
+          "vfx": "burst",
+          "color": "#6fd1ff"
+        }
+      ]
+    }
+  ]
 }

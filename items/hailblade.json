@@ -8,7 +8,123 @@
     "Jungle"
   ],
   "group": "jungle",
+  "display": "counter('hailblade_smites')",
   "stats": {},
-  "description": "",
-  "passives": []
+  "description": "No jungle in this game: monster effects work on minions and Smite is this item's active. Huntsman (bonus XP) and consuming the item after 5 Smites are left out.",
+  "passives": [
+    {
+      "name": "Sear",
+      "description": "Damaging a minion with an attack or ability burns it for 60 (+30% AP, +5% bonus AD, +2% bonus health) magic damage over 5s.",
+      "on": "deal_damage",
+      "if": "t_minion and (is_attack or is_ability)",
+      "effects": [
+        {
+          "type": "dot",
+          "id": "hailblade_sear",
+          "amount": "(60 + 0.3 * ap + 0.05 * bonus_ad + 0.02 * bonus_hp) / 5",
+          "duration": 5,
+          "interval": 1,
+          "damage_type": "magic",
+          "color": "#ff8a3d"
+        }
+      ]
+    },
+    {
+      "name": "Scavenger",
+      "description": "Heal for 7% of the damage you deal to minions.",
+      "on": "deal_damage",
+      "if": "t_minion",
+      "effects": [
+        {
+          "type": "heal",
+          "target": "self",
+          "amount": "0.07 * dmg"
+        }
+      ]
+    },
+    {
+      "name": "Recoup",
+      "description": "Away from enemies (no enemy unit within 1000 range, standing in for the jungle), restore 8-18 (by level) mana per second.",
+      "on": "interval",
+      "interval": 1,
+      "if": "near_units(1000) == 0",
+      "effects": [
+        {
+          "type": "mana",
+          "target": "self",
+          "amount": "8 + 0.6 * (min(level, 18) - 1)"
+        }
+      ]
+    }
+  ],
+  "active": {
+    "name": "Smite",
+    "description": "Deal 450 true damage to an enemy minion or summon. After 5 Smites (counted on the slot) it becomes Chilling Smite: 900 damage, and on an enemy champion it deals 20-156 (by level) true damage and steals 20% move speed for 2s.",
+    "cooldown": 45,
+    "targeting": "unit",
+    "range": 500,
+    "effects": [
+      {
+        "type": "damage",
+        "damage_type": "true",
+        "amount": "450 + 450 * int(counter('hailblade_smites') >= 5)",
+        "vfx": "burst",
+        "color": "#9fe8ff",
+        "if": "not t_champion"
+      },
+      {
+        "type": "text",
+        "text": "Chilling Smite!",
+        "at": "self",
+        "color": "#9fe8ff",
+        "size": 22,
+        "if": "not t_champion and counter('hailblade_smites') == 4"
+      },
+      {
+        "type": "counter",
+        "id": "hailblade_smites",
+        "add": 1,
+        "max": 5,
+        "if": "not t_champion"
+      },
+      {
+        "type": "item_cooldown",
+        "item": "hailblade",
+        "reset": true,
+        "if": "t_champion and counter('hailblade_smites') < 5"
+      },
+      {
+        "type": "text",
+        "text": "Smite 5 times first",
+        "at": "self",
+        "color": "#dddddd",
+        "size": 18,
+        "if": "t_champion and counter('hailblade_smites') < 5"
+      },
+      {
+        "type": "damage",
+        "damage_type": "true",
+        "amount": "20 + 8 * (min(level, 18) - 1)",
+        "vfx": "burst",
+        "color": "#9fe8ff",
+        "if": "t_champion and counter('hailblade_smites') >= 5"
+      },
+      {
+        "type": "slow",
+        "amount": 0.2,
+        "duration": 2,
+        "if": "t_champion and counter('hailblade_smites') >= 5"
+      },
+      {
+        "type": "buff",
+        "target": "self",
+        "id": "hailblade_chill",
+        "duration": 2,
+        "add": {
+          "move_speed_bonus": 0.2
+        },
+        "if": "t_champion and counter('hailblade_smites') >= 5"
+      }
+    ]
+  }
 }

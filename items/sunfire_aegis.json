@@ -17,5 +17,62 @@
     "armor": 50.0
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Immolate",
+      "description": "Taking or dealing damage ignites you for 3s: each second, enemies within 325 units take 15 (+1.75% bonus health) magic damage (+25% vs minions). Each burn that reaches a champion adds a stack for 5s (max 6), each giving +10% Immolate damage.",
+      "on": "interval",
+      "interval": 1,
+      "if": "has('sunfire_aegis_burning')",
+      "effects": [
+        {
+          "type": "area",
+          "at": "self",
+          "radius": 325,
+          "show": false,
+          "effects": [
+            {
+              "type": "damage",
+              "damage_type": "magic",
+              "amount": "(15 + 0.0175 * bonus_hp) * (1 + 0.1 * stacks('sunfire_aegis_heat')) * (1 + 0.25 * t_minion)",
+              "vfx": "fire",
+              "color": "#ff8a2a"
+            }
+          ]
+        },
+        {
+          "type": "mark",
+          "target": "self",
+          "id": "sunfire_aegis_heat",
+          "duration": 5,
+          "max_stacks": 6,
+          "if": "near_enemies(345) > 0"
+        }
+      ]
+    },
+    {
+      "name": "Immolate",
+      "on": "take_damage",
+      "effects": [
+        {
+          "type": "mark",
+          "target": "self",
+          "id": "sunfire_aegis_burning",
+          "duration": 3
+        }
+      ]
+    },
+    {
+      "name": "Immolate",
+      "on": "deal_damage",
+      "effects": [
+        {
+          "type": "mark",
+          "target": "self",
+          "id": "sunfire_aegis_burning",
+          "duration": 3
+        }
+      ]
+    }
+  ]
 }

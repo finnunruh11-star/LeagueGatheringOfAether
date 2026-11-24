@@ -6,7 +6,226 @@
     "Jungle"
   ],
   "group": "jungle",
+  "display": "counter('gustwalker_hatchling_treats')",
   "stats": {},
-  "description": "",
-  "passives": []
+  "description": "No jungle in this game: the pet grows from minion kills and champion takedowns, monster effects work on minions and Smite is this item's active.",
+  "passives": [
+    {
+      "name": "Jungle Companions",
+      "description": "Your Gustwalker grows by 1 treat per minion kill and per champion takedown (shown on the slot). At 20 treats Smite becomes Unleashed Smite, at 40 the pet is fully grown.",
+      "on": "kill",
+      "if": "t_minion and counter('gustwalker_hatchling_treats') < 40",
+      "effects": [
+        {
+          "type": "counter",
+          "id": "gustwalker_hatchling_treats",
+          "add": 1,
+          "max": 40
+        },
+        {
+          "type": "text",
+          "text": "Unleashed Smite!",
+          "at": "self",
+          "color": "#7fe0d0",
+          "size": 22,
+          "if": "counter('gustwalker_hatchling_treats') == 20"
+        },
+        {
+          "type": "text",
+          "text": "Gustwalker fully grown!",
+          "at": "self",
+          "color": "#7fe0d0",
+          "size": 24,
+          "if": "counter('gustwalker_hatchling_treats') == 40"
+        }
+      ]
+    },
+    {
+      "name": "Jungle Companions",
+      "on": "takedown",
+      "if": "counter('gustwalker_hatchling_treats') < 40",
+      "effects": [
+        {
+          "type": "counter",
+          "id": "gustwalker_hatchling_treats",
+          "add": 1,
+          "max": 40
+        },
+        {
+          "type": "text",
+          "text": "Unleashed Smite!",
+          "at": "self",
+          "color": "#7fe0d0",
+          "size": 22,
+          "if": "counter('gustwalker_hatchling_treats') == 20"
+        },
+        {
+          "type": "text",
+          "text": "Gustwalker fully grown!",
+          "at": "self",
+          "color": "#7fe0d0",
+          "size": 24,
+          "if": "counter('gustwalker_hatchling_treats') == 40"
+        }
+      ]
+    },
+    {
+      "name": "Recoup",
+      "description": "Away from enemies (no enemy unit within 1000 range, standing in for the jungle), restore 8-18 (by level) mana per second.",
+      "on": "interval",
+      "interval": 1,
+      "if": "near_units(1000) == 0",
+      "effects": [
+        {
+          "type": "mana",
+          "target": "self",
+          "amount": "8 + 0.6 * (min(level, 18) - 1)"
+        }
+      ]
+    },
+    {
+      "name": "Gustwalker's Gait",
+      "description": "Fully grown: killing a minion grants 30% move speed and a champion takedown 45% (instead of brush), fading over 2s.",
+      "on": "kill",
+      "if": "t_minion and counter('gustwalker_hatchling_treats') >= 40",
+      "effects": [
+        {
+          "type": "buff",
+          "target": "self",
+          "id": "gustwalker_hatchling_gait_1",
+          "duration": 0.5,
+          "add": {
+            "move_speed_bonus": 0.075
+          }
+        },
+        {
+          "type": "buff",
+          "target": "self",
+          "id": "gustwalker_hatchling_gait_2",
+          "duration": 1.0,
+          "add": {
+            "move_speed_bonus": 0.075
+          }
+        },
+        {
+          "type": "buff",
+          "target": "self",
+          "id": "gustwalker_hatchling_gait_3",
+          "duration": 1.5,
+          "add": {
+            "move_speed_bonus": 0.075
+          }
+        },
+        {
+          "type": "buff",
+          "target": "self",
+          "id": "gustwalker_hatchling_gait_4",
+          "duration": 2.0,
+          "add": {
+            "move_speed_bonus": 0.075
+          }
+        }
+      ]
+    },
+    {
+      "name": "Gustwalker's Gait",
+      "on": "takedown",
+      "if": "counter('gustwalker_hatchling_treats') >= 40",
+      "effects": [
+        {
+          "type": "buff",
+          "target": "self",
+          "id": "gustwalker_hatchling_gait_1",
+          "duration": 0.5,
+          "add": {
+            "move_speed_bonus": 0.1125
+          }
+        },
+        {
+          "type": "buff",
+          "target": "self",
+          "id": "gustwalker_hatchling_gait_2",
+          "duration": 1.0,
+          "add": {
+            "move_speed_bonus": 0.1125
+          }
+        },
+        {
+          "type": "buff",
+          "target": "self",
+          "id": "gustwalker_hatchling_gait_3",
+          "duration": 1.5,
+          "add": {
+            "move_speed_bonus": 0.1125
+          }
+        },
+        {
+          "type": "buff",
+          "target": "self",
+          "id": "gustwalker_hatchling_gait_4",
+          "duration": 2.0,
+          "add": {
+            "move_speed_bonus": 0.1125
+          }
+        }
+      ]
+    }
+  ],
+  "active": {
+    "name": "Smite",
+    "description": "Deal 600 true damage to an enemy minion or summon (900 from 20 treats, 1200 when fully grown). From 20 treats it can also hit an enemy champion for 20-160 (by level) true damage and a 25% slow that fades over 2s.",
+    "cooldown": 45,
+    "targeting": "unit",
+    "range": 500,
+    "effects": [
+      {
+        "type": "damage",
+        "damage_type": "true",
+        "amount": "600 + 300 * int(counter('gustwalker_hatchling_treats') >= 20) + 300 * int(counter('gustwalker_hatchling_treats') >= 40)",
+        "vfx": "streaks",
+        "color": "#7fe0d0",
+        "if": "not t_champion"
+      },
+      {
+        "type": "item_cooldown",
+        "item": "gustwalker_hatchling",
+        "reset": true,
+        "if": "t_champion and counter('gustwalker_hatchling_treats') < 20"
+      },
+      {
+        "type": "text",
+        "text": "Your pet needs 20 treats",
+        "at": "self",
+        "color": "#dddddd",
+        "size": 18,
+        "if": "t_champion and counter('gustwalker_hatchling_treats') < 20"
+      },
+      {
+        "type": "damage",
+        "damage_type": "true",
+        "amount": "20 + 140 * (min(level, 18) - 1) / 17",
+        "vfx": "streaks",
+        "color": "#7fe0d0",
+        "if": "t_champion and counter('gustwalker_hatchling_treats') >= 20"
+      },
+      {
+        "type": "slow",
+        "amount": 0.25,
+        "duration": 1,
+        "if": "t_champion and counter('gustwalker_hatchling_treats') >= 20"
+      },
+      {
+        "type": "delay",
+        "time": 1,
+        "effects": [
+          {
+            "type": "slow",
+            "amount": 0.125,
+            "duration": 1
+          }
+        ],
+        "if": "t_champion and counter('gustwalker_hatchling_treats') >= 20"
+      }
+    ]
+  }
 }

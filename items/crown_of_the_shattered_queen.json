@@ -20,7 +20,82 @@
     "max_mana": 600.0,
     "ability_haste": 20.0
   },
-  "mythic_stats": {},
+  "mythic_stats": {
+    "move_speed_bonus": 0.01,
+    "ability_power": 8
+  },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Safeguard",
+      "description": "While Safeguarded you take 40% less damage from champions. The first champion hit breaks it, but it lingers for 2.5s; it comes back after 40s without taking champion damage.",
+      "on": "take_damage_pre",
+      "if": "t_champion and not t_self and (not has('crown_of_the_shattered_queen_down') or has('crown_of_the_shattered_queen_linger'))",
+      "effects": [
+        {
+          "type": "modify_damage",
+          "mult": 0.6
+        },
+        {
+          "type": "vfx",
+          "kind": "ring",
+          "at": "self",
+          "radius": 70,
+          "color": "#d6b8ff",
+          "if": "not has('crown_of_the_shattered_queen_down')"
+        },
+        {
+          "type": "mark",
+          "id": "crown_of_the_shattered_queen_linger",
+          "target": "self",
+          "duration": 2.5,
+          "if": "not has('crown_of_the_shattered_queen_down')"
+        },
+        {
+          "type": "mark",
+          "id": "crown_of_the_shattered_queen_grace",
+          "target": "self",
+          "duration": 5.5,
+          "if": "not has('crown_of_the_shattered_queen_down')"
+        },
+        {
+          "type": "mark",
+          "id": "crown_of_the_shattered_queen_down",
+          "target": "self",
+          "duration": 40
+        }
+      ]
+    },
+    {
+      "name": "Safeguard",
+      "on": "take_damage",
+      "if": "t_champion and not t_self",
+      "effects": [
+        {
+          "type": "mark",
+          "id": "crown_of_the_shattered_queen_down",
+          "target": "self",
+          "duration": 40
+        }
+      ]
+    },
+    {
+      "name": "Poise",
+      "description": "While Safeguarded, and for 3s after it ends, gain 10 AP (+3 per level from level 9, up to 40).",
+      "on": "interval",
+      "interval": 0.5,
+      "if": "not has('crown_of_the_shattered_queen_down') or has('crown_of_the_shattered_queen_grace')",
+      "effects": [
+        {
+          "type": "buff",
+          "target": "self",
+          "id": "crown_of_the_shattered_queen_poise",
+          "duration": 0.75,
+          "add": {
+            "ability_power": "10 + 3 * clamp(level - 8, 0, 10)"
+          }
+        }
+      ]
+    }
+  ]
 }

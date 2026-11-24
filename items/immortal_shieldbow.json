@@ -21,5 +21,37 @@
     "lifesteal": 0.1
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Lifeline",
+      "description": "When a hit would drop you below 30% health, you first gain a 290-500 shield (290, +30 per level from 12) for 3s and 30% attack speed for 8s (90s cooldown).",
+      "on": "take_damage_pre",
+      "if": "hp - dmg < 0.3 * max_hp",
+      "cooldown": 90,
+      "effects": [
+        {
+          "type": "shield",
+          "target": "self",
+          "amount": "290 + 30 * clamp(level - 11, 0, 7)",
+          "duration": 3
+        },
+        {
+          "type": "buff",
+          "target": "self",
+          "id": "immortal_shieldbow_lifeline",
+          "duration": 8,
+          "add": {
+            "bonus_attack_speed": 0.3
+          }
+        },
+        {
+          "type": "text",
+          "text": "Lifeline!",
+          "at": "self",
+          "color": "#ffd84d",
+          "size": 22
+        }
+      ]
+    }
+  ]
 }

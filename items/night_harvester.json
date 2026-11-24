@@ -19,7 +19,38 @@
     "max_hp": 300.0,
     "ability_haste": 25.0
   },
-  "mythic_stats": {},
+  "mythic_stats": {
+    "ability_haste": 5
+  },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Soulrend",
+      "description": "Hitting an enemy champion with an attack or ability deals 125 + 15% AP bonus magic damage and gives you 25% move speed for 1.5s (30s cooldown per champion).",
+      "on": "deal_damage",
+      "if": "(is_attack or is_ability) and t_champion and not t_self and not t_has('night_harvester_cd')",
+      "effects": [
+        {
+          "type": "damage",
+          "amount": "125 + 0.15 * ap",
+          "vfx": "slash2_c3",
+          "color": "#8f7bff"
+        },
+        {
+          "type": "mark",
+          "id": "night_harvester_cd",
+          "duration": 30
+        },
+        {
+          "type": "buff",
+          "target": "self",
+          "id": "night_harvester_speed",
+          "duration": 1.5,
+          "add": {
+            "move_speed_bonus": 0.25
+          }
+        }
+      ]
+    }
+  ]
 }

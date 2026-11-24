@@ -19,5 +19,19 @@
     "ability_haste": 20.0
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Bitter Cold",
+      "description": "Ability damage slows enemies by 30% for 1s.",
+      "on": "deal_damage",
+      "if": "is_ability and not t_self",
+      "effects": [
+        {
+          "type": "slow",
+          "amount": 0.3,
+          "duration": 1
+        }
+      ]
+    }
+  ]
 }

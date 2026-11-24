@@ -21,5 +21,52 @@
     "ability_haste": 20.0
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Spellblade",
+      "unique": "spellblade_charge",
+      "description": "After you cast an ability, your next attack within 10s deals bonus physical damage equal to 130% base AD + 20% bonus AD and restores mana equal to 40% of that damage (1.5s cooldown).",
+      "on": "cast",
+      "if": "not has('spellblade_cd')",
+      "effects": [
+        {
+          "type": "mark",
+          "id": "spellblade",
+          "target": "self",
+          "duration": 10
+        }
+      ]
+    },
+    {
+      "name": "Spellblade",
+      "unique": "spellblade_hit",
+      "on": "attack",
+      "if": "has('spellblade')",
+      "effects": [
+        {
+          "type": "remove",
+          "id": "spellblade",
+          "target": "self"
+        },
+        {
+          "type": "mark",
+          "id": "spellblade_cd",
+          "target": "self",
+          "duration": 1.5
+        },
+        {
+          "type": "damage",
+          "damage_type": "physical",
+          "amount": "1.3 * base_ad + 0.2 * bonus_ad",
+          "vfx": "star",
+          "color": "#8fb4ff"
+        },
+        {
+          "type": "mana",
+          "target": "self",
+          "amount": "0.4 * (1.3 * base_ad + 0.2 * bonus_ad)"
+        }
+      ]
+    }
+  ]
 }

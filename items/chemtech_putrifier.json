@@ -18,5 +18,21 @@
     "ability_haste": 15.0
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Puffcap Toxin",
+      "description": "Dealing damage to an enemy champion applies 40% Grievous Wounds for 3s.",
+      "on": "deal_damage",
+      "if": "t_champion",
+      "procs": true,
+      "effects": [
+        {
+          "type": "grievous",
+          "id": "chemtech_putrifier_gw",
+          "amount": 0.4,
+          "duration": 3
+        }
+      ]
+    }
+  ]
 }

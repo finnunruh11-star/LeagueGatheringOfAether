@@ -19,5 +19,19 @@
     "ability_haste": 25.0
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Hackshorn",
+      "description": "Physical damage to an enemy champion applies 40% Grievous Wounds for 3s.",
+      "on": "deal_damage",
+      "if": "dtype == 'physical' and t_champion",
+      "effects": [
+        {
+          "type": "grievous",
+          "amount": 0.4,
+          "duration": 3
+        }
+      ]
+    }
+  ]
 }

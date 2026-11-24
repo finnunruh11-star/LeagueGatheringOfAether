@@ -14,5 +14,58 @@
     "max_hp": 300.0
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Immolate",
+      "description": "Dealing or taking damage sets you ablaze for 3s. While ablaze, enemies within 325 units take 12 (+1% bonus health) magic damage every second, +25% against minions (no jungle monsters in this game).",
+      "on": "deal_damage",
+      "if": "not t_self",
+      "effects": [
+        {
+          "type": "mark",
+          "id": "bamis_cinder_burn",
+          "target": "self",
+          "duration": 3,
+          "max_stacks": 1
+        }
+      ]
+    },
+    {
+      "name": "Immolate",
+      "on": "take_damage",
+      "if": "not t_self",
+      "effects": [
+        {
+          "type": "mark",
+          "id": "bamis_cinder_burn",
+          "target": "self",
+          "duration": 3,
+          "max_stacks": 1
+        }
+      ]
+    },
+    {
+      "name": "Immolate",
+      "on": "interval",
+      "interval": 1,
+      "if": "has('bamis_cinder_burn')",
+      "effects": [
+        {
+          "type": "area",
+          "at": "self",
+          "radius": 325,
+          "show": false,
+          "effects": [
+            {
+              "type": "damage",
+              "damage_type": "magic",
+              "amount": "(12 + 0.01 * bonus_hp) * (1 + 0.25 * t_minion)",
+              "vfx": "fire",
+              "color": "#ff7a2f"
+            }
+          ]
+        }
+      ]
+    }
+  ]
 }

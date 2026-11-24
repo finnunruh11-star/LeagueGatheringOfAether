@@ -17,8 +17,17 @@
     "max_hp": 450.0,
     "magic_resist": 60.0,
     "ability_haste": 10.0,
-    "hp_regen_percent": 1.0
+    "hp_regen_percent": 1.0,
+    "heal_received": 0.25
+  },
+  "stats_mult": {
+    "hp_regen": 1.25
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Boundless Vitality",
+      "description": "Heals, shields and health regeneration on you are 25% stronger."
+    }
+  ]
 }

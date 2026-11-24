@@ -19,5 +19,29 @@
     "crit_chance": 0.2
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Bolt",
+      "description": "Moving and attacking build Energize. Your Energized attack deals 90 + 25% AD bonus magic damage and gives you 45% move speed for 1s.",
+      "on": "energized",
+      "effects": [
+        {
+          "type": "damage",
+          "damage_type": "magic",
+          "amount": "90 + 0.25 * ad",
+          "vfx": "streaks",
+          "color": "#b9a6ff"
+        },
+        {
+          "type": "buff",
+          "target": "self",
+          "id": "stormrazor_bolt",
+          "duration": 1,
+          "add": {
+            "move_speed_bonus": 0.45
+          }
+        }
+      ]
+    }
+  ]
 }

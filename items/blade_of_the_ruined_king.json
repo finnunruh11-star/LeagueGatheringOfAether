@@ -21,5 +21,68 @@
     "lifesteal": 0.08
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Mist's Edge",
+      "description": "Attacks deal 12% (melee) / 9% (ranged) of the target's current health as bonus physical damage (max 60 vs. minions and summons, none vs. structures).",
+      "on": "attack",
+      "if": "not t_structure",
+      "effects": [
+        {
+          "type": "damage",
+          "damage_type": "physical",
+          "amount": "min((0.09 + 0.03 * melee) * t_hp, 60 + 1000000 * t_champion)",
+          "vfx": "claw",
+          "color": "#4fe0b5"
+        }
+      ]
+    },
+    {
+      "name": "Siphon",
+      "description": "Every 3rd attack on the same champion within 6s deals 40-103 magic damage (40, +7 per level from 10) and steals 25% move speed for 2s (30s cooldown).",
+      "on": "attack",
+      "if": "t_champion and t_stacks('blade_of_the_ruined_king_siphon') >= 2",
+      "cooldown": 30,
+      "effects": [
+        {
+          "type": "remove",
+          "id": "blade_of_the_ruined_king_siphon"
+        },
+        {
+          "type": "damage",
+          "damage_type": "magic",
+          "amount": "40 + 7 * clamp(level - 9, 0, 9)",
+          "vfx": "magic",
+          "color": "#4fe0b5"
+        },
+        {
+          "type": "slow",
+          "amount": 0.25,
+          "duration": 2
+        },
+        {
+          "type": "buff",
+          "target": "self",
+          "id": "blade_of_the_ruined_king_speed",
+          "duration": 2,
+          "add": {
+            "move_speed_bonus": 0.25
+          }
+        }
+      ]
+    },
+    {
+      "name": "Siphon",
+      "on": "attack",
+      "if": "t_champion",
+      "effects": [
+        {
+          "type": "mark",
+          "id": "blade_of_the_ruined_king_siphon",
+          "duration": 6,
+          "max_stacks": 2
+        }
+      ]
+    }
+  ]
 }

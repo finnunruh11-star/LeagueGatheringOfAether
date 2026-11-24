@@ -18,5 +18,63 @@
     "armor": 45.0
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Ignore Pain",
+      "description": "30% of the damage you take (10% for ranged champions) is held back and dealt to you as true damage over 3s instead.",
+      "on": "take_damage_pre",
+      "effects": [
+        {
+          "type": "dot",
+          "target": "self",
+          "id": "deaths_dance_bleed",
+          "stack": true,
+          "amount": "dmg * (0.1 + 0.2 * melee) / 3",
+          "duration": 3,
+          "interval": 0.5,
+          "damage_type": "true",
+          "raw": true,
+          "color": "#a3203a"
+        },
+        {
+          "type": "modify_damage",
+          "mult": "0.9 - 0.2 * melee"
+        }
+      ]
+    },
+    {
+      "name": "Defy",
+      "description": "A champion takedown within 3s of you damaging a champion wipes out all held-back Ignore Pain damage and heals you for 50% bonus AD over 2s.",
+      "on": "takedown",
+      "if": "has('deaths_dance_window')",
+      "effects": [
+        {
+          "type": "remove",
+          "target": "self",
+          "id": "deaths_dance_bleed"
+        },
+        {
+          "type": "hot",
+          "target": "self",
+          "id": "deaths_dance_heal",
+          "amount": "0.25 * bonus_ad",
+          "duration": 2,
+          "interval": 0.5
+        }
+      ]
+    },
+    {
+      "name": "Defy",
+      "on": "deal_damage",
+      "if": "t_champion",
+      "effects": [
+        {
+          "type": "mark",
+          "target": "self",
+          "id": "deaths_dance_window",
+          "duration": 3
+        }
+      ]
+    }
+  ]
 }

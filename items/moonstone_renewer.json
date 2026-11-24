@@ -19,7 +19,109 @@
     "ability_haste": 20.0,
     "mana_regen_percent": 1.0
   },
-  "mythic_stats": {},
+  "mythic_stats": {
+    "heal_power": 0.05
+  },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Starlit Grace",
+      "description": "Healing or shielding an allied champion bounces to the nearest other allied champion within 800 (never you) for 35% of the heal or 40% of the shield. With nobody to bounce to, the ally gets an extra 25% heal / 30% shield instead.",
+      "on": "heal_ally",
+      "effects": [
+        {
+          "type": "area",
+          "at": "target",
+          "radius": 800,
+          "affects": "allies",
+          "filter": "champions",
+          "exclude_target": true,
+          "exclude_self": true,
+          "sort": "nearest",
+          "max_targets": 1,
+          "show": false,
+          "effects": [
+            {
+              "type": "vfx",
+              "kind": "line",
+              "from": "origin",
+              "to": "target",
+              "color": "#bfe8ff"
+            },
+            {
+              "type": "heal",
+              "amount": "0.35 * amount / (1 + stat('heal_power'))"
+            },
+            {
+              "type": "mark",
+              "id": "moonstone_renewer_bounced",
+              "target": "self",
+              "duration": 0.5
+            }
+          ]
+        },
+        {
+          "type": "heal",
+          "amount": "0.25 * amount / (1 + stat('heal_power'))",
+          "if": "not has('moonstone_renewer_bounced')"
+        },
+        {
+          "type": "remove",
+          "id": "moonstone_renewer_bounced",
+          "target": "self"
+        }
+      ]
+    },
+    {
+      "name": "Starlit Grace",
+      "on": "shield_ally",
+      "effects": [
+        {
+          "type": "area",
+          "at": "target",
+          "radius": 800,
+          "affects": "allies",
+          "filter": "champions",
+          "exclude_target": true,
+          "exclude_self": true,
+          "sort": "nearest",
+          "max_targets": 1,
+          "show": false,
+          "effects": [
+            {
+              "type": "vfx",
+              "kind": "line",
+              "from": "origin",
+              "to": "target",
+              "color": "#bfe8ff"
+            },
+            {
+              "type": "shield",
+              "id": "moonstone_renewer_shield",
+              "amount": "0.4 * amount / (1 + stat('heal_power'))",
+              "duration": 3
+            },
+            {
+              "type": "mark",
+              "id": "moonstone_renewer_bounced",
+              "target": "self",
+              "duration": 0.5
+            }
+          ]
+        },
+        {
+          "type": "shield",
+          "id": "moonstone_renewer_shield",
+          "amount": "0.3 * amount / (1 + stat('heal_power'))",
+          "duration": 3,
+          "if": "not has('moonstone_renewer_bounced')"
+        },
+        {
+          "type": "remove",
+          "id": "moonstone_renewer_bounced",
+          "target": "self"
+        }
+      ]
+    }
+  ]
 }

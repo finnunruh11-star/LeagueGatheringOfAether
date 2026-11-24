@@ -18,5 +18,45 @@
     "ability_haste": 15.0
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Sandstrike",
+      "description": "After you cast an ability (stand-in for dashes, blinks and leaving stealth, which the game can't detect), your next attack on a champion within 3s deals 85 + 55% bonus AD (melee) / 65 + 35% bonus AD (ranged) bonus physical damage; melee hits also slow by 99% for 0.5s (5s cooldown).",
+      "on": "cast",
+      "effects": [
+        {
+          "type": "mark",
+          "target": "self",
+          "id": "prowlers_claw_sandstrike",
+          "duration": 3
+        }
+      ]
+    },
+    {
+      "name": "Sandstrike",
+      "on": "attack",
+      "if": "t_champion and has('prowlers_claw_sandstrike')",
+      "cooldown": 5,
+      "effects": [
+        {
+          "type": "remove",
+          "target": "self",
+          "id": "prowlers_claw_sandstrike"
+        },
+        {
+          "type": "damage",
+          "damage_type": "physical",
+          "amount": "melee * (85 + 0.55 * bonus_ad) + ranged * (65 + 0.35 * bonus_ad)",
+          "vfx": "claw_red",
+          "color": "#ff5a4a"
+        },
+        {
+          "type": "slow",
+          "amount": 0.99,
+          "duration": 0.5,
+          "if": "melee"
+        }
+      ]
+    }
+  ]
 }

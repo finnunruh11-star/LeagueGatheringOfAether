@@ -14,5 +14,30 @@
     "attack_damage": 25.0
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Cleave",
+      "description": "Basic attacks deal 40% AD physical damage (20% for ranged champions) to other enemies within 350 units of the target. Not on structures.",
+      "on": "attack",
+      "if": "not t_structure",
+      "effects": [
+        {
+          "type": "area",
+          "at": "target",
+          "radius": 350,
+          "exclude_target": true,
+          "show": false,
+          "effects": [
+            {
+              "type": "damage",
+              "damage_type": "physical",
+              "amount": "(0.4 - 0.2 * ranged) * ad",
+              "vfx": "slash",
+              "color": "#e05a4f"
+            }
+          ]
+        }
+      ]
+    }
+  ]
 }

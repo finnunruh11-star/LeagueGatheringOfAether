@@ -18,5 +18,38 @@
     "move_speed_bonus": 0.05
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Absorb",
+      "description": "Taking magic damage from an enemy champion grants a Steadfast stack for 7s (max 10, at most one gain per second). Getting hit while stunned or rooted grants 3 stacks instead (stand-in for the immobilize bonus).",
+      "on": "take_damage",
+      "if": "dtype == 'magic' and t_champion and not t_self",
+      "cooldown": 1,
+      "effects": [
+        {
+          "type": "mark",
+          "target": "self",
+          "id": "force_of_nature_steadfast",
+          "duration": 7,
+          "max_stacks": 10,
+          "stacks": "1 + 2 * int(has('stun') or has('root'))"
+        },
+        {
+          "type": "buff",
+          "target": "self",
+          "id": "force_of_nature_dissipate",
+          "duration": 7,
+          "if": "stacks('force_of_nature_steadfast') >= 10",
+          "add": {
+            "magic_resist": 30,
+            "move_speed_bonus": 0.1
+          }
+        }
+      ]
+    },
+    {
+      "name": "Dissipate",
+      "description": "While at 10 Steadfast stacks, gain 30 magic resist and 10% move speed."
+    }
+  ]
 }

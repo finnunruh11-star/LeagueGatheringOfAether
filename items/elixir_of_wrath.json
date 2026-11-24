@@ -8,7 +8,45 @@
     "LifeSteal",
     "SpellVamp"
   ],
+  "min_level": 9,
   "stats": {},
   "description": "",
-  "passives": []
+  "passives": [],
+  "active": {
+    "name": "Drink",
+    "description": "For 3 minutes: +30 attack damage, and heal for 12% of the physical damage you deal to champions. Replaces your other elixir.",
+    "cooldown": 1,
+    "targeting": "self",
+    "consume": true,
+    "effects": [
+      {
+        "type": "buff",
+        "target": "self",
+        "id": "elixir",
+        "duration": 180,
+        "add": {
+          "attack_damage": 30
+        },
+        "triggers": [
+          {
+            "on": "deal_damage",
+            "procs": true,
+            "if": "t_champion and dtype == 'physical'",
+            "effects": [
+              {
+                "type": "heal",
+                "target": "self",
+                "amount": "0.12 * dmg"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "remove",
+        "target": "self",
+        "id": "elixir_of_iron_path"
+      }
+    ]
+  }
 }

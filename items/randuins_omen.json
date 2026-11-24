@@ -17,5 +17,54 @@
     "armor": 60.0
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Rock Solid",
+      "unique": "rock_solid",
+      "description": "Basic attacks deal 5 (+3.5 per 1000 max health) less damage to you, at most 20% of each hit.",
+      "on": "take_damage_pre",
+      "if": "is_attack",
+      "effects": [
+        {
+          "type": "modify_damage",
+          "add": "-min(5 + 0.0035 * max_hp, 0.2 * dmg)"
+        }
+      ]
+    },
+    {
+      "name": "Critical Resilience",
+      "description": "Critical strikes deal 25% less damage to you.",
+      "on": "take_damage_pre",
+      "if": "crit_hit",
+      "effects": [
+        {
+          "type": "modify_damage",
+          "mult": 0.75
+        }
+      ]
+    }
+  ],
+  "active": {
+    "name": "Humility",
+    "description": "Slow enemies within 500 units by 55% for 2s.",
+    "cooldown": 60,
+    "targeting": "self",
+    "range": 500,
+    "effects": [
+      {
+        "type": "area",
+        "at": "self",
+        "radius": 500,
+        "color": "#9fb3c8",
+        "vfx": "smoke",
+        "effects": [
+          {
+            "type": "slow",
+            "amount": 0.55,
+            "duration": 2
+          }
+        ]
+      }
+    ]
+  }
 }

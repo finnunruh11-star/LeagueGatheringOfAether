@@ -19,5 +19,50 @@
     "move_speed_bonus": 0.05
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Shipwrecker",
+      "description": "Moving builds Momentum over 4s, up to +40 move speed (it fades 1.5s after you stop). Your next basic attack spends it to deal up to 40 (+100% base AD) bonus physical damage; at full Momentum a melee attacker also slows the target by 50% for 1s.",
+      "on": "interval",
+      "interval": 0.5,
+      "if": "moving",
+      "effects": [
+        {
+          "type": "buff",
+          "target": "self",
+          "id": "dead_mans_plate_momentum",
+          "duration": 1.5,
+          "max_stacks": 8,
+          "add": {
+            "move_speed": 5
+          }
+        }
+      ]
+    },
+    {
+      "name": "Shipwrecker",
+      "on": "attack",
+      "if": "has('dead_mans_plate_momentum')",
+      "effects": [
+        {
+          "type": "damage",
+          "damage_type": "physical",
+          "amount": "(40 + base_ad) * stacks('dead_mans_plate_momentum') / 8",
+          "vfx": "streaks",
+          "color": "#c9a66b"
+        },
+        {
+          "type": "slow",
+          "amount": 0.5,
+          "duration": 1,
+          "if": "melee and stacks('dead_mans_plate_momentum') >= 8"
+        },
+        {
+          "type": "remove",
+          "target": "self",
+          "id": "dead_mans_plate_momentum"
+        }
+      ]
+    }
+  ]
 }

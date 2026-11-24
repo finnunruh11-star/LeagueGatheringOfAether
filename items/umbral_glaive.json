@@ -20,5 +20,69 @@
     "ability_haste": 15.0
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Blackout",
+      "description": "Enemy Control Wards that can see you lose their vision for 8s (50s cooldown; there are no traps to reveal in this game). Your attacks deal 3 (melee) / 2 (ranged) damage to wards.",
+      "on": "interval",
+      "interval": 0.5,
+      "if": "not has('umbral_glaive_cd')",
+      "effects": [
+        {
+          "type": "area",
+          "at": "self",
+          "radius": 1000,
+          "show": false,
+          "effects": [
+            {
+              "type": "mark",
+              "target": "self",
+              "id": "umbral_glaive_cd",
+              "duration": 50,
+              "if": "t_summon and t_max_hp <= 10 and dist <= t_stat('vision')"
+            },
+            {
+              "type": "vfx",
+              "kind": "ring",
+              "at": "target",
+              "radius": 45,
+              "color": "#8a5cff",
+              "if": "t_summon and t_max_hp <= 10 and dist <= t_stat('vision')"
+            },
+            {
+              "type": "buff",
+              "id": "umbral_glaive_blackout",
+              "duration": 8,
+              "multiply": {
+                "vision": 0
+              },
+              "if": "t_summon and t_max_hp <= 10 and dist <= t_stat('vision')"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Blackout",
+      "on": "attack",
+      "if": "t_summon and t_max_hp <= 10",
+      "effects": [
+        {
+          "type": "repeat",
+          "count": "1 + melee",
+          "interval": 0,
+          "effects": [
+            {
+              "type": "damage",
+              "damage_type": "physical",
+              "amount": 1,
+              "attack": true,
+              "vfx": "spark",
+              "color": "#8a5cff"
+            }
+          ]
+        }
+      ]
+    }
+  ]
 }

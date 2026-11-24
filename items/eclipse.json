@@ -18,7 +18,64 @@
     "lethality": 12.0,
     "ability_haste": 15.0
   },
-  "mythic_stats": {},
+  "mythic_stats": {
+    "armor_pen": 0.04,
+    "move_speed": 5
+  },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Ever Rising Moon",
+      "description": "Hitting an enemy champion with 2 separate attacks or abilities within 1.5s deals bonus physical damage equal to 6% of its max health and gives you 15% move speed and a 160 + 35% bonus AD shield for 2s (6s cooldown). Ranged: 3% max health, half shield, 12s cooldown.",
+      "on": "deal_damage",
+      "if": "(is_attack or is_ability) and not is_dot and t_champion and not t_self and not has('eclipse_cd') and t_has('eclipse_moon')",
+      "cooldown": "12 - 6 * melee",
+      "effects": [
+        {
+          "type": "remove",
+          "id": "eclipse_moon"
+        },
+        {
+          "type": "mark",
+          "target": "self",
+          "id": "eclipse_cd",
+          "duration": "12 - 6 * melee"
+        },
+        {
+          "type": "damage",
+          "damage_type": "physical",
+          "amount": "(0.03 + 0.03 * melee) * t_max_hp",
+          "vfx": "star",
+          "color": "#d9c8ff"
+        },
+        {
+          "type": "buff",
+          "target": "self",
+          "id": "eclipse_speed",
+          "duration": 2,
+          "add": {
+            "move_speed_bonus": 0.15
+          }
+        },
+        {
+          "type": "shield",
+          "target": "self",
+          "amount": "(80 + 0.175 * bonus_ad) * (1 + melee)",
+          "duration": 2
+        }
+      ]
+    },
+    {
+      "name": "Ever Rising Moon",
+      "on": "deal_damage",
+      "if": "(is_attack or is_ability) and not is_dot and t_champion and not t_self and not has('eclipse_cd') and not t_has('eclipse_moon')",
+      "effects": [
+        {
+          "type": "mark",
+          "id": "eclipse_moon",
+          "duration": 1.5
+        }
+      ]
+    }
+  ]
 }

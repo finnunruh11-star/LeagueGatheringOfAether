@@ -19,5 +19,45 @@
     "crit_chance": 0.2
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Electroshock",
+      "description": "Moving and attacking build Energize. Your Energized attack releases chain lightning: 100-180 (+15% AP) magic damage (150 vs. minions) to the target and the nearest enemies within 500, 6 targets in total (9 from level 11, 12 from level 16).",
+      "on": "energized",
+      "effects": [
+        {
+          "type": "damage",
+          "damage_type": "magic",
+          "amount": "150 * t_minion + (1 - t_minion) * (100 + 10 * clamp(level - 6, 0, 4) + 5 * clamp(level - 10, 0, 8) + 0.15 * ap)",
+          "vfx": "spark",
+          "color": "#8fe8ff"
+        },
+        {
+          "type": "area",
+          "at": "target",
+          "radius": 500,
+          "exclude_target": true,
+          "max_targets": "5 + 3 * int(level >= 11) + 3 * int(level >= 16)",
+          "sort": "nearest",
+          "show": false,
+          "effects": [
+            {
+              "type": "vfx",
+              "kind": "line",
+              "from": "origin",
+              "to": "target",
+              "color": "#8fe8ff"
+            },
+            {
+              "type": "damage",
+              "damage_type": "magic",
+              "amount": "150 * t_minion + (1 - t_minion) * (100 + 10 * clamp(level - 6, 0, 4) + 5 * clamp(level - 10, 0, 8) + 0.15 * ap)",
+              "vfx": "spark",
+              "color": "#8fe8ff"
+            }
+          ]
+        }
+      ]
+    }
+  ]
 }

@@ -22,5 +22,33 @@
     "magic_resist": 50.0
   },
   "description": "",
-  "passives": []
+  "passives": [],
+  "active": {
+    "name": "Quicksilver",
+    "description": "Cleanse all stuns, roots, slows, silences, damage over time and Grievous Wounds on you and gain 50% move speed for 1.5s.",
+    "cooldown": 90,
+    "targeting": "self",
+    "effects": [
+      {
+        "type": "cleanse",
+        "target": "self"
+      },
+      {
+        "type": "buff",
+        "target": "self",
+        "id": "mercurial_scimitar_quicksilver",
+        "duration": 1.5,
+        "add": {
+          "move_speed_bonus": 0.5
+        }
+      },
+      {
+        "type": "vfx",
+        "kind": "ring",
+        "at": "self",
+        "radius": 80,
+        "color": "#e6eeff"
+      }
+    ]
+  }
 }

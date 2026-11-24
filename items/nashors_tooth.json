@@ -19,5 +19,20 @@
     "ability_haste": 15.0
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Icathian Bite",
+      "description": "Basic attacks deal 15 + 20% AP bonus magic damage on-hit.",
+      "on": "attack",
+      "effects": [
+        {
+          "type": "damage",
+          "damage_type": "magic",
+          "amount": "15 + 0.2 * ap",
+          "vfx": "twinkle",
+          "color": "#c27bff"
+        }
+      ]
+    }
+  ]
 }

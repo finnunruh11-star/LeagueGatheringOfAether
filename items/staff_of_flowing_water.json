@@ -18,5 +18,57 @@
     "move_speed_bonus": 0.05
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Rapids",
+      "description": "Healing or shielding another allied champion gives you both 30-45 ability power (by each one's level) and 20 ability haste for 4s.",
+      "on": "heal_ally",
+      "effects": [
+        {
+          "type": "buff",
+          "id": "staff_of_flowing_water_rapids",
+          "duration": 4,
+          "add": {
+            "ability_power": "30 + 15 * (min(t_level, 18) - 1) / 17.0",
+            "ability_haste": 20
+          }
+        },
+        {
+          "type": "buff",
+          "id": "staff_of_flowing_water_rapids",
+          "target": "self",
+          "duration": 4,
+          "add": {
+            "ability_power": "30 + 15 * (min(level, 18) - 1) / 17.0",
+            "ability_haste": 20
+          }
+        }
+      ]
+    },
+    {
+      "name": "Rapids",
+      "on": "shield_ally",
+      "effects": [
+        {
+          "type": "buff",
+          "id": "staff_of_flowing_water_rapids",
+          "duration": 4,
+          "add": {
+            "ability_power": "30 + 15 * (min(t_level, 18) - 1) / 17.0",
+            "ability_haste": 20
+          }
+        },
+        {
+          "type": "buff",
+          "id": "staff_of_flowing_water_rapids",
+          "target": "self",
+          "duration": 4,
+          "add": {
+            "ability_power": "30 + 15 * (min(level, 18) - 1) / 17.0",
+            "ability_haste": 20
+          }
+        }
+      ]
+    }
+  ]
 }

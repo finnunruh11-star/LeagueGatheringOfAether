@@ -21,7 +21,102 @@
     "ability_haste": 20.0,
     "mana_regen_percent": 1.0
   },
-  "mythic_stats": {},
+  "mythic_stats": {
+    "ability_haste": 5
+  },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Motivate",
+      "description": "Healing or shielding another allied champion gives both of you 20% move speed for 1.5s (4s cooldown per ally). Here only heals and shields count, not other ally buffs.",
+      "on": "heal_ally",
+      "if": "not t_has('shurelyas_battlesong_cd')",
+      "effects": [
+        {
+          "type": "buff",
+          "id": "shurelyas_battlesong_motivate",
+          "duration": 1.5,
+          "add": {
+            "move_speed_bonus": 0.2
+          }
+        },
+        {
+          "type": "buff",
+          "target": "self",
+          "id": "shurelyas_battlesong_motivate",
+          "duration": 1.5,
+          "add": {
+            "move_speed_bonus": 0.2
+          }
+        },
+        {
+          "type": "mark",
+          "id": "shurelyas_battlesong_cd",
+          "duration": 4
+        }
+      ]
+    },
+    {
+      "name": "Motivate",
+      "on": "shield_ally",
+      "if": "not t_has('shurelyas_battlesong_cd')",
+      "effects": [
+        {
+          "type": "buff",
+          "id": "shurelyas_battlesong_motivate",
+          "duration": 1.5,
+          "add": {
+            "move_speed_bonus": 0.2
+          }
+        },
+        {
+          "type": "buff",
+          "target": "self",
+          "id": "shurelyas_battlesong_motivate",
+          "duration": 1.5,
+          "add": {
+            "move_speed_bonus": 0.2
+          }
+        },
+        {
+          "type": "mark",
+          "id": "shurelyas_battlesong_cd",
+          "duration": 4
+        }
+      ]
+    }
+  ],
+  "active": {
+    "name": "Inspire",
+    "description": "Allied champions within 1000 (you included) gain 30% move speed for 4s.",
+    "cooldown": 75,
+    "targeting": "self",
+    "effects": [
+      {
+        "type": "area",
+        "at": "self",
+        "radius": 1000,
+        "affects": "allies",
+        "filter": "champions",
+        "show": false,
+        "effects": [
+          {
+            "type": "buff",
+            "id": "shurelyas_battlesong_inspire",
+            "duration": 4,
+            "add": {
+              "move_speed_bonus": 0.3
+            }
+          },
+          {
+            "type": "vfx",
+            "kind": "ring",
+            "at": "target",
+            "radius": 70,
+            "color": "#ffd166"
+          }
+        ]
+      }
+    ]
+  }
 }

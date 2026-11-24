@@ -12,10 +12,157 @@
     "CooldownReduction",
     "AbilityHaste"
   ],
+  "display": "counter('anathemas_chains_vendetta')",
   "stats": {
     "max_hp": 650.0,
     "ability_haste": 20.0
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Vendetta",
+      "description": "Once you have a Nemesis, gain a Vendetta stack every 2s (max 30 after 60s) and take 1% less damage from your Nemesis per stack. If your Nemesis dies, the Vow breaks: stacks reset and Vow is ready again.",
+      "on": "interval",
+      "interval": 2,
+      "if": "counter('anathemas_chains_vow') > 0",
+      "effects": [
+        {
+          "type": "area",
+          "at": "self",
+          "radius": 30000,
+          "show": false,
+          "filter": "champions",
+          "effects": [
+            {
+              "type": "mark",
+              "target": "self",
+              "id": "anathemas_chains_bound",
+              "duration": 6.5,
+              "if": "t_has('anathemas_chains_nemesis')"
+            }
+          ]
+        },
+        {
+          "type": "counter",
+          "id": "anathemas_chains_vendetta",
+          "add": 1,
+          "max": 30,
+          "if": "has('anathemas_chains_bound')"
+        },
+        {
+          "type": "counter",
+          "id": "anathemas_chains_vendetta",
+          "set": 0,
+          "if": "not has('anathemas_chains_bound')"
+        },
+        {
+          "type": "item_cooldown",
+          "item": "anathemas_chains",
+          "reset": true,
+          "if": "not has('anathemas_chains_bound')"
+        },
+        {
+          "type": "counter",
+          "id": "anathemas_chains_vow",
+          "set": 0,
+          "if": "not has('anathemas_chains_bound')"
+        }
+      ]
+    },
+    {
+      "name": "Vendetta",
+      "on": "take_damage_pre",
+      "if": "not t_self and t_has('anathemas_chains_nemesis')",
+      "effects": [
+        {
+          "type": "modify_damage",
+          "mult": "1 - 0.01 * counter('anathemas_chains_vendetta')"
+        }
+      ]
+    },
+    {
+      "name": "Vengeance",
+      "description": "At 30 stacks, your Nemesis has 20% less tenacity while within 700 units of you.",
+      "on": "interval",
+      "interval": 0.5,
+      "if": "counter('anathemas_chains_vendetta') >= 30",
+      "effects": [
+        {
+          "type": "area",
+          "at": "self",
+          "radius": 700,
+          "show": false,
+          "filter": "champions",
+          "effects": [
+            {
+              "type": "buff",
+              "id": "anathemas_chains_vengeance",
+              "duration": 1,
+              "if": "t_has('anathemas_chains_nemesis')",
+              "multiply": {
+                "tenacity": 0.8
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "active": {
+    "name": "Vow",
+    "description": "Choose an enemy champion anywhere on the map as your Nemesis; Vendetta stacks restart from 0. (Can't be used while dead or on non-champions.)",
+    "cooldown": 90,
+    "targeting": "unit",
+    "range": 30000,
+    "effects": [
+      {
+        "type": "area",
+        "at": "self",
+        "radius": 30000,
+        "show": false,
+        "filter": "champions",
+        "if": "t_champion",
+        "effects": [
+          {
+            "type": "remove",
+            "id": "anathemas_chains_nemesis"
+          }
+        ]
+      },
+      {
+        "type": "mark",
+        "id": "anathemas_chains_nemesis",
+        "duration": 99999,
+        "if": "t_champion"
+      },
+      {
+        "type": "counter",
+        "id": "anathemas_chains_vendetta",
+        "set": 0,
+        "if": "t_champion"
+      },
+      {
+        "type": "counter",
+        "id": "anathemas_chains_vow",
+        "set": 1,
+        "if": "t_champion"
+      },
+      {
+        "type": "vfx",
+        "kind": "line",
+        "from": "self",
+        "to": "target",
+        "color": "#8a5cff",
+        "if": "t_champion"
+      },
+      {
+        "type": "vfx",
+        "kind": "ring",
+        "at": "target",
+        "radius": 70,
+        "color": "#8a5cff",
+        "if": "t_champion"
+      }
+    ]
+  }
 }

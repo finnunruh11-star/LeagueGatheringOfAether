@@ -11,10 +11,41 @@
     "NonbootsMovement"
   ],
   "group": "glory",
+  "display": "counter('glory')",
   "stats": {
-    "ability_power": 20.0,
-    "max_hp": 100.0
+    "ability_power": "20 + 5 * counter('glory')",
+    "max_hp": 100.0,
+    "move_speed_bonus": "0.1 * int(counter('glory') >= 10)"
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Glory",
+      "description": "Gain 4 Glory for a champion kill or 2 for an assist (up to 25). Dying costs 10 Glory. Glory carries over from Dark Seal.",
+      "on": "takedown",
+      "effects": [
+        {
+          "type": "counter",
+          "id": "glory",
+          "add": "2 + 2 * int(amount > 0.5)",
+          "max": 25
+        }
+      ]
+    },
+    {
+      "name": "Glory",
+      "on": "death",
+      "effects": [
+        {
+          "type": "counter",
+          "id": "glory",
+          "add": -10
+        }
+      ]
+    },
+    {
+      "name": "Dread",
+      "description": "+5 ability power per Glory. With at least 10 Glory, gain 10% move speed."
+    }
+  ]
 }

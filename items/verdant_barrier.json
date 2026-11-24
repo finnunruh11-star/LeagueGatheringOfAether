@@ -10,10 +10,26 @@
     "SpellBlock",
     "SpellDamage"
   ],
+  "display": "counter('verdant_barrier_stacks')",
   "stats": {
     "ability_power": 20.0,
-    "magic_resist": 25.0
+    "magic_resist": "25 + 0.3 * counter('verdant_barrier_stacks')"
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Adaptive",
+      "description": "25 magic resist, +0.3 more magic resist per unit you kill, up to +9 (30 kills).",
+      "on": "kill",
+      "if": "not t_structure and not t_summon",
+      "effects": [
+        {
+          "type": "counter",
+          "id": "verdant_barrier_stacks",
+          "add": 1,
+          "max": 30
+        }
+      ]
+    }
+  ]
 }

@@ -13,12 +13,97 @@
     "CooldownReduction",
     "AbilityHaste"
   ],
+  "display": "counter('heartsteel_hp')",
   "stats": {
-    "max_hp": 800.0,
+    "max_hp": "800 + counter('heartsteel_hp')",
     "hp_regen_percent": 2.0,
     "ability_haste": 20.0
   },
-  "mythic_stats": {},
+  "stats_mult": {
+    "max_hp": "1 + 0.01 * legendaries"
+  },
+  "mythic_stats": {
+    "size": 0.06
+  },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Colossal Consumption",
+      "description": "Staying within 700 of an enemy champion for 3s charges up your next attack against a champion: it deals 125 + 6% max health bonus physical damage and permanently adds 10% of that amount to this item's 800 health. 30s cooldown per champion.",
+      "on": "interval",
+      "interval": 0.5,
+      "if": "near_enemies(700) > 0",
+      "effects": [
+        {
+          "type": "mark",
+          "id": "heartsteel_ready",
+          "target": "self",
+          "duration": 5,
+          "if": "has('heartsteel_ready')"
+        },
+        {
+          "type": "mark",
+          "id": "heartsteel_charge",
+          "target": "self",
+          "duration": 1,
+          "max_stacks": 6,
+          "if": "not has('heartsteel_ready')"
+        },
+        {
+          "type": "vfx",
+          "kind": "ring",
+          "at": "self",
+          "radius": 60,
+          "color": "#ff5c5c",
+          "if": "stacks('heartsteel_charge') >= 6"
+        },
+        {
+          "type": "mark",
+          "id": "heartsteel_ready",
+          "target": "self",
+          "duration": 5,
+          "if": "stacks('heartsteel_charge') >= 6"
+        },
+        {
+          "type": "remove",
+          "id": "heartsteel_charge",
+          "target": "self",
+          "if": "has('heartsteel_ready')"
+        }
+      ]
+    },
+    {
+      "name": "Colossal Consumption",
+      "on": "attack",
+      "if": "has('heartsteel_ready') and t_champion and not t_has('heartsteel_cd')",
+      "effects": [
+        {
+          "type": "damage",
+          "damage_type": "physical",
+          "amount": "125 + 0.06 * max_hp",
+          "vfx": "burst",
+          "color": "#ff4a4a"
+        },
+        {
+          "type": "counter",
+          "id": "heartsteel_hp",
+          "add": "0.1 * (125 + 0.06 * max_hp)"
+        },
+        {
+          "type": "mark",
+          "id": "heartsteel_cd",
+          "duration": 30
+        },
+        {
+          "type": "remove",
+          "id": "heartsteel_ready",
+          "target": "self"
+        }
+      ]
+    },
+    {
+      "name": "Mythic Passive",
+      "description": "Each other legendary item also raises your max health by 1% (and your size by 6%)."
+    }
+  ]
 }

@@ -18,5 +18,18 @@
     "armor_pen": 0.3
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Giant Slayer",
+      "description": "Deal up to 22% more damage to champions with more max health than you (full bonus at 2500 more health).",
+      "on": "deal_damage_pre",
+      "if": "t_champion and not t_self and t_max_hp > max_hp",
+      "effects": [
+        {
+          "type": "modify_damage",
+          "mult": "1 + 0.22 * min((t_max_hp - max_hp) / 2500, 1)"
+        }
+      ]
+    }
+  ]
 }

@@ -12,10 +12,49 @@
   "group": "tear",
   "buyable": false,
   "stats": {
-    "attack_damage": 35.0,
+    "attack_damage": "35 + 0.025 * max_mana",
     "max_mana": 860.0,
     "ability_haste": 15.0
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Awe",
+      "description": "Gain bonus AD equal to 2.5% of your max mana (on top of the item's 35 AD)."
+    },
+    {
+      "name": "Shock",
+      "description": "Attacks on champions deal 1.5% of your max mana as bonus physical damage. Ability hits on champions deal 3.5% (melee) / 2.7% (ranged) of your max mana + 6% AD bonus physical damage (once per target per second, not from damage over time).",
+      "on": "attack",
+      "if": "t_champion",
+      "effects": [
+        {
+          "type": "damage",
+          "damage_type": "physical",
+          "amount": "0.015 * max_mana",
+          "vfx": "streaks",
+          "color": "#7fc4ff"
+        }
+      ]
+    },
+    {
+      "name": "Shock",
+      "on": "deal_damage",
+      "if": "is_ability and not is_dot and t_champion and not t_self and not t_has('muramana_shock_lock')",
+      "effects": [
+        {
+          "type": "mark",
+          "id": "muramana_shock_lock",
+          "duration": 1
+        },
+        {
+          "type": "damage",
+          "damage_type": "physical",
+          "amount": "(0.027 + 0.008 * melee) * max_mana + 0.06 * ad",
+          "vfx": "slash",
+          "color": "#7fc4ff"
+        }
+      ]
+    }
+  ]
 }

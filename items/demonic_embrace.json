@@ -12,9 +12,31 @@
     "SpellDamage"
   ],
   "stats": {
-    "ability_power": 75.0,
+    "ability_power": "75 + 0.02 * bonus_hp",
     "max_hp": 350.0
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Azakana's Gaze",
+      "description": "Ability damage burns enemies for 4s, dealing magic damage equal to 1.6% (melee) or 1% (ranged) of their max health every second (at most 40 per second against minions).",
+      "on": "deal_damage",
+      "if": "is_ability",
+      "effects": [
+        {
+          "type": "dot",
+          "id": "demonic_embrace_burn",
+          "amount": "min((0.01 + 0.006 * melee) * t_max_hp, 40 + 999999 * int(not t_minion))",
+          "duration": 4,
+          "interval": 1,
+          "damage_type": "magic",
+          "color": "#a040ff"
+        }
+      ]
+    },
+    {
+      "name": "Dark Pact",
+      "description": "Gain ability power equal to 2% of your bonus health."
+    }
+  ]
 }

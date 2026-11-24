@@ -19,5 +19,36 @@
     "hp_regen_percent": 2.0
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Warmog's Heart",
+      "description": "With at least 1100 bonus health, regenerate 5% max health per second once you haven't taken champion damage for 6s (3s for other damage).",
+      "on": "interval",
+      "interval": 0.5,
+      "if": "bonus_hp >= 1100 and hp < max_hp and since_hit >= 3 and not has('warmogs_armor_hurt')",
+      "effects": [
+        {
+          "type": "hot",
+          "target": "self",
+          "id": "warmogs_armor_regen",
+          "amount": "0.05 * max_hp",
+          "duration": 0.6,
+          "interval": 0.5
+        }
+      ]
+    },
+    {
+      "name": "Warmog's Heart",
+      "on": "take_damage",
+      "if": "t_champion and not t_self",
+      "effects": [
+        {
+          "type": "mark",
+          "target": "self",
+          "id": "warmogs_armor_hurt",
+          "duration": 6
+        }
+      ]
+    }
+  ]
 }

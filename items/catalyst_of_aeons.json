@@ -18,5 +18,49 @@
     "max_mana": 300.0
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Eternity",
+      "description": "Taking damage from champions restores mana equal to 7% of the damage before armor/magic resist. Spending mana on an ability heals you for 25% of the mana spent (max 20 per cast, at most once per second).",
+      "on": "take_damage",
+      "if": "t_champion and not t_self",
+      "effects": [
+        {
+          "type": "mana",
+          "target": "self",
+          "amount": "0.07 * dmg * (1 + max(armor, 0) / 100 * int(dtype == 'physical') + max(mr, 0) / 100 * int(dtype == 'magic'))"
+        }
+      ]
+    },
+    {
+      "name": "Eternity",
+      "on": "cast",
+      "if": "counter('catalyst_of_aeons_mana') > mana + 1",
+      "cooldown": 1,
+      "effects": [
+        {
+          "type": "heal",
+          "target": "self",
+          "amount": "min(20, 0.25 * (counter('catalyst_of_aeons_mana') - mana))"
+        },
+        {
+          "type": "counter",
+          "id": "catalyst_of_aeons_mana",
+          "set": "mana"
+        }
+      ]
+    },
+    {
+      "name": "Eternity",
+      "on": "interval",
+      "interval": 0.25,
+      "effects": [
+        {
+          "type": "counter",
+          "id": "catalyst_of_aeons_mana",
+          "set": "mana"
+        }
+      ]
+    }
+  ]
 }

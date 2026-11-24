@@ -9,7 +9,24 @@
     "Jungle"
   ],
   "group": "potion",
+  "charges": 2,
   "stats": {},
   "description": "",
-  "passives": []
+  "passives": [],
+  "active": {
+    "name": "Drink",
+    "description": "Use a charge to restore 100 health over 12s. Holds 2 charges, refilled at your fountain.",
+    "cooldown": 0.5,
+    "targeting": "self",
+    "consume": true,
+    "effects": [
+      {
+        "type": "hot",
+        "amount": "100 / 12.0",
+        "duration": 12,
+        "interval": 0.5,
+        "id": "refillable_potion"
+      }
+    ]
+  }
 }

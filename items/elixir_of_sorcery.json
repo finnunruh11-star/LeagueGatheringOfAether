@@ -7,7 +7,61 @@
     "ManaRegen",
     "SpellDamage"
   ],
+  "min_level": 9,
   "stats": {},
   "description": "",
-  "passives": []
+  "passives": [],
+  "active": {
+    "name": "Drink",
+    "description": "For 3 minutes: +50 ability power and +15% base mana regen. Damaging an enemy champion deals 25 bonus true damage (5s cooldown); every hit on a turret does. Replaces your other elixir.",
+    "cooldown": 1,
+    "targeting": "self",
+    "consume": true,
+    "effects": [
+      {
+        "type": "buff",
+        "target": "self",
+        "id": "elixir",
+        "duration": 180,
+        "add": {
+          "ability_power": 50,
+          "mana_regen_percent": 0.15
+        },
+        "triggers": [
+          {
+            "on": "deal_damage",
+            "if": "t_structure",
+            "effects": [
+              {
+                "type": "damage",
+                "amount": 25,
+                "damage_type": "true",
+                "vfx": "magic",
+                "color": "#8a6bff"
+              }
+            ]
+          },
+          {
+            "on": "deal_damage",
+            "if": "t_champion",
+            "cooldown": 5,
+            "effects": [
+              {
+                "type": "damage",
+                "amount": 25,
+                "damage_type": "true",
+                "vfx": "magic",
+                "color": "#8a6bff"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "remove",
+        "target": "self",
+        "id": "elixir_of_iron_path"
+      }
+    ]
+  }
 }

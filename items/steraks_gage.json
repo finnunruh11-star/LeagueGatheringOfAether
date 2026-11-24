@@ -14,8 +14,62 @@
   ],
   "group": "lifeline",
   "stats": {
-    "max_hp": 450.0
+    "max_hp": 450.0,
+    "attack_damage": "0.5 * base('attack_damage')"
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "The Claws that Catch",
+      "description": "Gain 50% of your base AD as bonus AD."
+    },
+    {
+      "name": "Lifeline",
+      "description": "When damage leaves you below 30% health, gain a shield of 80% bonus health that decays over 4.5s, 30% tenacity for 8s, and grow 25% larger (60s cooldown).",
+      "on": "low_health",
+      "threshold": 0.3,
+      "cooldown": 60,
+      "effects": [
+        {
+          "type": "repeat",
+          "count": 5,
+          "interval": 0,
+          "effects": [
+            {
+              "type": "shield",
+              "target": "self",
+              "stack": true,
+              "amount": "0.8 * bonus_hp / 5",
+              "duration": "0.75 + 0.75 * (i + 1)"
+            }
+          ]
+        },
+        {
+          "type": "buff",
+          "target": "self",
+          "id": "steraks_gage_fury",
+          "duration": 8,
+          "add": {
+            "tenacity": 0.3
+          }
+        },
+        {
+          "type": "buff",
+          "target": "self",
+          "id": "steraks_gage_size",
+          "duration": 4.5,
+          "add": {
+            "size": 0.25
+          }
+        },
+        {
+          "type": "vfx",
+          "kind": "ring",
+          "at": "self",
+          "radius": 100,
+          "color": "#e04a3a"
+        }
+      ]
+    }
+  ]
 }

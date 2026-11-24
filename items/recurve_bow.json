@@ -13,5 +13,20 @@
     "bonus_attack_speed": 0.15
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Steeltipped",
+      "description": "Basic attacks deal +15 magic damage on hit.",
+      "on": "attack",
+      "effects": [
+        {
+          "type": "damage",
+          "damage_type": "magic",
+          "amount": 15,
+          "vfx": "twinkle",
+          "color": "#c9a6ff"
+        }
+      ]
+    }
+  ]
 }

@@ -16,8 +16,50 @@
   "stats": {
     "max_hp": 250.0,
     "mana_regen_percent": 1.0,
-    "heal_power": 0.15
+    "heal_power": 0.15,
+    "hp_regen_percent": "0.25 * floor(stat('mana_regen_percent') / 0.25 + 0.001)"
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Harmony",
+      "description": "Gain +25% base health regen for every +25% base mana regen you have."
+    }
+  ],
+  "active": {
+    "name": "Purify",
+    "description": "Remove stuns, roots, slows, silences, damage over time and Grievous Wounds from an allied champion within 650 range and heal them for 100-250 (by your level). It can't affect you: used on yourself, it picks the nearest allied champion instead.",
+    "cooldown": 120,
+    "targeting": "ally",
+    "range": 650,
+    "effects": [
+      {
+        "type": "area",
+        "at": "target",
+        "radius": "10 + 640 * int(t_self)",
+        "affects": "allies",
+        "filter": "champions",
+        "exclude_self": true,
+        "sort": "nearest",
+        "max_targets": 1,
+        "show": false,
+        "effects": [
+          {
+            "type": "cleanse"
+          },
+          {
+            "type": "heal",
+            "amount": "100 + 150 * (min(level, 18) - 1) / 17.0"
+          },
+          {
+            "type": "vfx",
+            "kind": "ring",
+            "at": "target",
+            "radius": 70,
+            "color": "#9ff0ff"
+          }
+        ]
+      }
+    ]
+  }
 }

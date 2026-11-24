@@ -18,5 +18,45 @@
     "max_hp": 325.0
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Annul",
+      "description": "You have a spell shield that blocks the next enemy ability. It returns 40s after breaking; taking damage from champions restarts that timer.",
+      "on": "interval",
+      "interval": 0.5,
+      "if": "not has('spellshield') and not has('edge_of_night_cd')",
+      "effects": [
+        {
+          "type": "spellshield",
+          "target": "self",
+          "id": "edge_of_night_annul"
+        }
+      ]
+    },
+    {
+      "name": "Annul",
+      "on": "spellshield_pop",
+      "effects": [
+        {
+          "type": "mark",
+          "target": "self",
+          "id": "edge_of_night_cd",
+          "duration": 40
+        }
+      ]
+    },
+    {
+      "name": "Annul",
+      "on": "take_damage",
+      "if": "t_champion and not t_self and has('edge_of_night_cd')",
+      "effects": [
+        {
+          "type": "mark",
+          "target": "self",
+          "id": "edge_of_night_cd",
+          "duration": 40
+        }
+      ]
+    }
+  ]
 }

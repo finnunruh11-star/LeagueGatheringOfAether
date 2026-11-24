@@ -10,7 +10,8 @@
     "SpellDamage"
   ],
   "stats": {
-    "ability_power": 30.0
+    "ability_power": 30.0,
+    "move_speed_bonus": 0.05
   },
   "description": "",
   "passives": []

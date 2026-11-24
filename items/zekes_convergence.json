@@ -21,5 +21,88 @@
     "ability_haste": 15.0
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Convergence",
+      "description": "Stunning, rooting, knocking back or pulling an enemy champion marks them for 8s. Each basic attack or ability hit your Accomplice lands on a marked enemy deals 30-70 (by level) + 1.5% of your max health + 7.5% AP bonus magic damage.",
+      "on": "cc_applied",
+      "if": "cc == 'stun' or cc == 'root' or cc == 'knockback' or cc == 'pull'",
+      "effects": [
+        {
+          "type": "vfx",
+          "kind": "ring",
+          "at": "target",
+          "radius": 60,
+          "color": "#8fd3ff"
+        },
+        {
+          "type": "mark",
+          "id": "zekes_convergence_target",
+          "duration": 8
+        }
+      ]
+    }
+  ],
+  "active": {
+    "name": "Conduit",
+    "description": "Choose an allied champion within 1250 range as your Accomplice (replaces the previous one; the bond ends if they die). Used on yourself, it picks the nearest allied champion instead.",
+    "cooldown": 60,
+    "targeting": "ally",
+    "range": 1250,
+    "effects": [
+      {
+        "type": "area",
+        "at": "self",
+        "radius": 30000,
+        "affects": "allies",
+        "show": false,
+        "effects": [
+          {
+            "type": "remove",
+            "id": "zekes_convergence_accomplice"
+          }
+        ]
+      },
+      {
+        "type": "area",
+        "at": "target",
+        "radius": "10 + 1240 * int(t_self)",
+        "affects": "allies",
+        "filter": "champions",
+        "exclude_self": true,
+        "sort": "nearest",
+        "max_targets": 1,
+        "show": false,
+        "effects": [
+          {
+            "type": "mark",
+            "id": "zekes_convergence_accomplice",
+            "duration": 99999,
+            "triggers": [
+              {
+                "on": "deal_damage",
+                "if": "t_has('zekes_convergence_target') and (is_attack or (is_ability and not is_dot))",
+                "effects": [
+                  {
+                    "type": "damage",
+                    "damage_type": "magic",
+                    "amount": "30 + 40 * (min(level, 18) - 1) / 17.0 + 0.015 * max_hp + 0.075 * ap",
+                    "vfx": "streaks",
+                    "color": "#8fd3ff"
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "vfx",
+            "kind": "line",
+            "from": "caster",
+            "to": "target",
+            "color": "#8fd3ff"
+          }
+        ]
+      }
+    ]
+  }
 }

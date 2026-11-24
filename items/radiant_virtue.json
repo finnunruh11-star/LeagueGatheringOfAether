@@ -20,7 +20,62 @@
     "magic_resist": 30.0,
     "ability_haste": 10.0
   },
-  "mythic_stats": {},
+  "mythic_stats": {
+    "max_hp": 75
+  },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Guiding Light",
+      "description": "Casting your ultimate makes you Transcend for 9s: +12.5% max health, and you and allied champions within 1200 heal 2.5% of your max health every 3s (4 heals). 90s cooldown.",
+      "on": "cast",
+      "if": "slot == 'r'",
+      "cooldown": 90,
+      "effects": [
+        {
+          "type": "buff",
+          "target": "self",
+          "id": "radiant_virtue_transcend",
+          "duration": 9,
+          "multiply": {
+            "max_hp": 1.125
+          }
+        },
+        {
+          "type": "delay",
+          "time": 0.05,
+          "effects": [
+            {
+              "type": "repeat",
+              "count": 4,
+              "interval": 2.95,
+              "effects": [
+                {
+                  "type": "vfx",
+                  "kind": "ring",
+                  "at": "self",
+                  "radius": 90,
+                  "color": "#ffe58a"
+                },
+                {
+                  "type": "area",
+                  "at": "self",
+                  "radius": 1200,
+                  "affects": "allies",
+                  "filter": "champions",
+                  "show": false,
+                  "effects": [
+                    {
+                      "type": "heal",
+                      "amount": "0.025 * max_hp"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
 }

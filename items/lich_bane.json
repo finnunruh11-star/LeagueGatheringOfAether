@@ -19,5 +19,47 @@
     "move_speed_bonus": 0.08
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Spellblade",
+      "unique": "spellblade_charge",
+      "description": "After you cast an ability, your next basic attack within 10s deals bonus magic damage equal to 75% of your base AD + 50% AP (1.5s cooldown).",
+      "on": "cast",
+      "if": "not has('spellblade_cd')",
+      "effects": [
+        {
+          "type": "mark",
+          "id": "spellblade",
+          "target": "self",
+          "duration": 10
+        }
+      ]
+    },
+    {
+      "name": "Spellblade",
+      "unique": "spellblade_hit",
+      "on": "attack",
+      "if": "has('spellblade')",
+      "effects": [
+        {
+          "type": "remove",
+          "id": "spellblade",
+          "target": "self"
+        },
+        {
+          "type": "mark",
+          "id": "spellblade_cd",
+          "target": "self",
+          "duration": 1.5
+        },
+        {
+          "type": "damage",
+          "damage_type": "magic",
+          "amount": "0.75 * base_ad + 0.5 * ap",
+          "vfx": "magic",
+          "color": "#b48cff"
+        }
+      ]
+    }
+  ]
 }

@@ -16,5 +16,23 @@
     "magic_resist": 25.0
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Incorporeal",
+      "description": "Champion damage boosts your base health regen by 150% for 1s per 3 damage taken (max 10s).",
+      "on": "take_damage",
+      "if": "t_champion and not t_self and (dmg >= 30 or not has('spectres_cowl_regen'))",
+      "effects": [
+        {
+          "type": "buff",
+          "target": "self",
+          "id": "spectres_cowl_regen",
+          "duration": "min(10, 0.333 * dmg)",
+          "add": {
+            "hp_regen_percent": 1.5
+          }
+        }
+      ]
+    }
+  ]
 }

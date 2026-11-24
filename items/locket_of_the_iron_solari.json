@@ -23,5 +23,68 @@
   },
   "mythic_stats": {},
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Consecrate",
+      "description": "Allied champions within 850 (you included) gain 3 armor and magic resist, +2 more for each other legendary item you own (mythic bonus).",
+      "on": "interval",
+      "interval": 1,
+      "effects": [
+        {
+          "type": "area",
+          "at": "self",
+          "radius": 850,
+          "affects": "allies",
+          "filter": "champions",
+          "show": false,
+          "effects": [
+            {
+              "type": "buff",
+              "id": "locket_of_the_iron_solari_consecrate",
+              "duration": 1.5,
+              "add": {
+                "armor": "3 + 2 * legendaries",
+                "magic_resist": "3 + 2 * legendaries"
+              }
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "active": {
+    "name": "Devotion",
+    "description": "Shield allied champions within 850 (you included) for 200-360 (by level) for 2.5s (the shield doesn't decay here). Champions shielded by a Locket in the last 20s only get 25%.",
+    "cooldown": 90,
+    "targeting": "self",
+    "effects": [
+      {
+        "type": "area",
+        "at": "self",
+        "radius": 850,
+        "affects": "allies",
+        "filter": "champions",
+        "show": false,
+        "effects": [
+          {
+            "type": "shield",
+            "amount": "(200 + 160 * (clamp(level, 1, 18) - 1) / 17) * (1 - 0.75 * int(t_has_any('locket_of_the_iron_solari_recent')))",
+            "duration": 2.5
+          },
+          {
+            "type": "mark",
+            "id": "locket_of_the_iron_solari_recent",
+            "duration": 20
+          },
+          {
+            "type": "vfx",
+            "kind": "ring",
+            "at": "target",
+            "radius": 70,
+            "color": "#ffe08a"
+          }
+        ]
+      }
+    ]
+  }
 }

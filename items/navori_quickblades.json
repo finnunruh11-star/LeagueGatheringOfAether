@@ -20,7 +20,35 @@
     "crit_chance": 0.2,
     "ability_haste": 15.0
   },
-  "mythic_stats": {},
+  "mythic_stats": {
+    "attack_damage": 5
+  },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Transcendence",
+      "description": "Each basic attack hit cuts the remaining cooldowns of your Q, W and E by 15%.",
+      "on": "attack",
+      "effects": [
+        {
+          "type": "cooldown",
+          "slot": "basic",
+          "amount": 0.15,
+          "percent": true
+        }
+      ]
+    },
+    {
+      "name": "Impermanence",
+      "description": "Your abilities deal extra damage equal to 20% of your crit chance (+12% at 60% crit, +20% at 100%).",
+      "on": "deal_damage_pre",
+      "if": "is_ability",
+      "effects": [
+        {
+          "type": "modify_damage",
+          "mult": "1 + 0.2 * min(crit, 1)"
+        }
+      ]
+    }
+  ]
 }

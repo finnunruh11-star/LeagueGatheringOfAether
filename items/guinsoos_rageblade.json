@@ -19,7 +19,62 @@
     "ability_power": 30.0,
     "bonus_attack_speed": 0.25
   },
-  "mythic_stats": {},
+  "stats_mult": {
+    "crit_chance": 0
+  },
+  "mythic_stats": {
+    "armor_pen": 0.05,
+    "magic_pen_percent": 0.06
+  },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Wrath",
+      "description": "Basic attacks deal 30 bonus magic damage on-hit. You can't crit: every 1% crit chance adds 1.5 magic damage to this instead (scales with crit damage, max +150).",
+      "on": "attack",
+      "effects": [
+        {
+          "type": "damage",
+          "amount": "30 + min(150, 10 * floor(min(pre('crit_chance'), 1) * 20 + 0.001) * (stat('crit_damage') - 1))",
+          "vfx": "spark",
+          "color": "#ff8a3d"
+        }
+      ]
+    },
+    {
+      "name": "Seething Strike",
+      "description": "Each basic attack gives 8% attack speed for 3s, stacking up to 4 times (32%). While fully stacked, every third attack applies your on-hit effects a second time 0.15s later.",
+      "on": "attack_launch",
+      "effects": [
+        {
+          "type": "buff",
+          "target": "self",
+          "id": "guinsoos_rageblade_seething",
+          "duration": 3,
+          "max_stacks": 4,
+          "add": {
+            "bonus_attack_speed": 0.08
+          }
+        }
+      ]
+    },
+    {
+      "name": "Seething Strike",
+      "on": "attack",
+      "every": 3,
+      "if": "stacks('guinsoos_rageblade_seething') >= 4",
+      "effects": [
+        {
+          "type": "delay",
+          "time": 0.15,
+          "effects": [
+            {
+              "type": "fire_event",
+              "event": "attack"
+            }
+          ]
+        }
+      ]
+    }
+  ]
 }

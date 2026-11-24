@@ -17,5 +17,22 @@
     "bonus_attack_speed": 0.15
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Nimble",
+      "description": "Basic attacks grant +20 move speed (+10 for ranged champions) for 2s.",
+      "on": "attack",
+      "effects": [
+        {
+          "type": "buff",
+          "target": "self",
+          "id": "hearthbound_axe_nimble",
+          "duration": 2,
+          "add": {
+            "move_speed": "20 - 10 * ranged"
+          }
+        }
+      ]
+    }
+  ]
 }

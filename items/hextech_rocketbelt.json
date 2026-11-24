@@ -22,7 +22,58 @@
     "max_hp": 250.0,
     "ability_haste": 15.0
   },
-  "mythic_stats": {},
+  "mythic_stats": {
+    "magic_pen": 5
+  },
   "description": "",
-  "passives": []
+  "passives": [],
+  "active": {
+    "name": "Supersonic",
+    "description": "Dash 275 units in the aimed direction while firing 7 rockets in an arc ahead of you that deal 125 + 15% AP magic damage (each enemy is hit only once). Afterwards gain 30% move speed for 1.5s (in LoL only while moving toward enemy champions).",
+    "cooldown": 40,
+    "targeting": "direction",
+    "range": 275,
+    "effects": [
+      {
+        "type": "projectile",
+        "count": 7,
+        "spread": 50,
+        "speed": 1400,
+        "range": 550,
+        "radius": 12,
+        "color": "#ffa94d",
+        "on_hit": [
+          {
+            "type": "damage",
+            "amount": "125 + 0.15 * ap",
+            "if": "not t_has('hextech_rocketbelt_hit')",
+            "vfx": "burst",
+            "color": "#ffa94d"
+          },
+          {
+            "type": "mark",
+            "id": "hextech_rocketbelt_hit",
+            "duration": 1
+          }
+        ]
+      },
+      {
+        "type": "dash",
+        "to": "direction",
+        "distance": 275,
+        "speed": 1300,
+        "on_end": [
+          {
+            "type": "buff",
+            "target": "self",
+            "id": "hextech_rocketbelt_speed",
+            "duration": 1.5,
+            "add": {
+              "move_speed_bonus": 0.3
+            }
+          }
+        ]
+      }
+    ]
+  }
 }

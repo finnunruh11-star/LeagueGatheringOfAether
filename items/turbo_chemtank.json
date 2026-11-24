@@ -23,5 +23,98 @@
     "ability_haste": 10.0
   },
   "description": "",
-  "passives": []
+  "passives": [],
+  "active": {
+    "name": "Supercharged",
+    "description": "Gain 40% move speed for 4s (in any direction). When an enemy champion comes within 225 units, or after 4s, release a shockwave that slows enemy champions within 450 units by 50% for 1.5s and ends the speed boost.",
+    "cooldown": 90,
+    "targeting": "self",
+    "effects": [
+      {
+        "type": "mark",
+        "target": "self",
+        "id": "turbo_chemtank_charge",
+        "duration": 4.5
+      },
+      {
+        "type": "buff",
+        "target": "self",
+        "id": "turbo_chemtank_haste",
+        "duration": 4,
+        "add": {
+          "move_speed_bonus": 0.4
+        }
+      },
+      {
+        "type": "repeat",
+        "count": 16,
+        "interval": 0.25,
+        "effects": [
+          {
+            "type": "area",
+            "at": "self",
+            "radius": 225,
+            "show": false,
+            "filter": "champions",
+            "max_targets": 1,
+            "if": "has('turbo_chemtank_charge')",
+            "effects": [
+              {
+                "type": "area",
+                "at": "self",
+                "radius": 450,
+                "filter": "champions",
+                "color": "#5fd38a",
+                "vfx": "smoke",
+                "effects": [
+                  {
+                    "type": "slow",
+                    "amount": 0.5,
+                    "duration": 1.5
+                  }
+                ]
+              },
+              {
+                "type": "remove",
+                "target": "self",
+                "id": "turbo_chemtank_charge"
+              },
+              {
+                "type": "remove",
+                "target": "self",
+                "id": "turbo_chemtank_haste"
+              }
+            ]
+          }
+        ]
+      },
+      {
+        "type": "delay",
+        "time": 4,
+        "effects": [
+          {
+            "type": "area",
+            "at": "self",
+            "radius": 450,
+            "filter": "champions",
+            "color": "#5fd38a",
+            "vfx": "smoke",
+            "if": "has('turbo_chemtank_charge')",
+            "effects": [
+              {
+                "type": "slow",
+                "amount": 0.5,
+                "duration": 1.5
+              }
+            ]
+          },
+          {
+            "type": "remove",
+            "target": "self",
+            "id": "turbo_chemtank_charge"
+          }
+        ]
+      }
+    ]
+  }
 }

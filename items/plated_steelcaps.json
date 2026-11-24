@@ -15,5 +15,18 @@
     "move_speed": 45.0
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Plating",
+      "description": "Basic attacks deal 12% less damage to you.",
+      "on": "take_damage_pre",
+      "if": "is_attack",
+      "effects": [
+        {
+          "type": "modify_damage",
+          "mult": 0.88
+        }
+      ]
+    }
+  ]
 }

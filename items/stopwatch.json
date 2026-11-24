@@ -6,7 +6,29 @@
     "Active"
   ],
   "group": "stopwatch",
+  "charges": 1,
+  "refill": false,
   "stats": {},
-  "description": "",
-  "passives": []
+  "description": "Single use: afterwards it stays in your inventory (greyed out, like a Broken Stopwatch) and still counts as a Stopwatch for recipes.",
+  "passives": [],
+  "active": {
+    "name": "Stasis",
+    "description": "Single use: freeze yourself in stasis for 2.5s - nothing can hurt or target you, but you can't act either.",
+    "cooldown": 0,
+    "targeting": "self",
+    "consume": true,
+    "effects": [
+      {
+        "type": "stasis",
+        "duration": 2.5
+      },
+      {
+        "type": "text",
+        "text": "Stasis!",
+        "at": "self",
+        "color": "#ffd84d",
+        "size": 24
+      }
+    ]
+  }
 }

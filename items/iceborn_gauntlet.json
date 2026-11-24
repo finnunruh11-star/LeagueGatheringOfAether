@@ -20,7 +20,92 @@
     "armor": 50.0,
     "ability_haste": 20.0
   },
-  "mythic_stats": {},
+  "mythic_stats": {
+    "max_hp": 50,
+    "tenacity": 0.05,
+    "slow_resist": 0.05
+  },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Spellblade",
+      "unique": "spellblade_charge",
+      "description": "After you cast an ability, your next basic attack within 10s deals bonus physical damage equal to 100% base AD and leaves a 300-radius frost field for 2.5s that slows enemies inside by 15% +0.4% per 100 max health (ranged: half). The target is crippled for 2.5s: slowed twice as much and deals 10% less damage to you (1.5s cooldown).",
+      "on": "cast",
+      "if": "not has('spellblade_cd')",
+      "effects": [
+        {
+          "type": "mark",
+          "id": "spellblade",
+          "target": "self",
+          "duration": 10
+        }
+      ]
+    },
+    {
+      "name": "Spellblade",
+      "unique": "spellblade_hit",
+      "on": "attack",
+      "if": "has('spellblade')",
+      "effects": [
+        {
+          "type": "remove",
+          "id": "spellblade",
+          "target": "self"
+        },
+        {
+          "type": "mark",
+          "id": "spellblade_cd",
+          "target": "self",
+          "duration": 1.5
+        },
+        {
+          "type": "damage",
+          "damage_type": "physical",
+          "amount": "1.0 * base_ad",
+          "vfx": "twinkle",
+          "color": "#9fe8ff"
+        },
+        {
+          "type": "zone",
+          "at": "target",
+          "radius": 300,
+          "duration": 2.5,
+          "interval": 0.25,
+          "color": "#9fe8ff",
+          "effects": [
+            {
+              "type": "slow",
+              "id": "iceborn_gauntlet_field",
+              "amount": "(0.075 + 0.00002 * max_hp) * (1 + melee)",
+              "duration": 0.4
+            }
+          ]
+        },
+        {
+          "type": "slow",
+          "id": "iceborn_gauntlet_cripple_slow",
+          "amount": "2 * (0.075 + 0.00002 * max_hp) * (1 + melee)",
+          "duration": 2.5
+        },
+        {
+          "type": "mark",
+          "id": "iceborn_gauntlet_cripple",
+          "duration": 2.5,
+          "max_stacks": 1
+        }
+      ]
+    },
+    {
+      "name": "Spellblade",
+      "on": "take_damage_pre",
+      "if": "t_has('iceborn_gauntlet_cripple')",
+      "effects": [
+        {
+          "type": "modify_damage",
+          "mult": 0.9
+        }
+      ]
+    }
+  ]
 }

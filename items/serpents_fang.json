@@ -15,5 +15,20 @@
     "lethality": 15.0
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Shield Reaver",
+      "description": "Damaging an enemy champion that isn't already affected cuts its shields by 50% (melee) / 35% (ranged) and shrinks shields it gains by the same amount for 3s.",
+      "on": "deal_damage",
+      "if": "t_champion and not t_self and not t_has('serpents_fang_reaver')",
+      "effects": [
+        {
+          "type": "shield_break",
+          "id": "serpents_fang_reaver",
+          "amount": "0.35 + 0.15 * melee",
+          "duration": 3
+        }
+      ]
+    }
+  ]
 }

@@ -6,9 +6,54 @@
     "Damage",
     "OnHit"
   ],
+  "display": "counter('cull_kills')",
   "stats": {
     "attack_damage": 7.0
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Sustain",
+      "description": "Basic attacks restore 3 health.",
+      "on": "attack",
+      "effects": [
+        {
+          "type": "heal",
+          "target": "self",
+          "amount": 3
+        }
+      ]
+    },
+    {
+      "name": "Reap",
+      "description": "Killing a minion grants 1 extra gold. Your 100th minion kill (counted on the slot) grants 350 bonus gold at once and ends Reap.",
+      "on": "kill",
+      "if": "t_minion and counter('cull_kills') < 100",
+      "effects": [
+        {
+          "type": "counter",
+          "id": "cull_kills",
+          "add": 1,
+          "max": 100
+        },
+        {
+          "type": "gold",
+          "amount": 1
+        },
+        {
+          "type": "gold",
+          "amount": 350,
+          "if": "counter('cull_kills') >= 100"
+        },
+        {
+          "type": "text",
+          "text": "Reaped! +350 gold",
+          "at": "self",
+          "color": "#ffd84d",
+          "size": 22,
+          "if": "counter('cull_kills') >= 100"
+        }
+      ]
+    }
+  ]
 }

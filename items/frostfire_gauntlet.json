@@ -22,7 +22,110 @@
     "magic_resist": 25.0,
     "ability_haste": 20.0
   },
-  "mythic_stats": {},
+  "mythic_stats": {
+    "max_hp": 100,
+    "size": 0.06
+  },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Immolate",
+      "description": "Dealing or taking damage ignites you for 3s: every second you deal 12 + 1% bonus health magic damage to enemies within 325 units (grows with your size). +25% against minions, and minions the next tick would kill die at once.",
+      "on": "deal_damage",
+      "if": "not t_self",
+      "effects": [
+        {
+          "type": "mark",
+          "target": "self",
+          "id": "frostfire_gauntlet_immolate",
+          "duration": 3,
+          "max_stacks": 1
+        }
+      ]
+    },
+    {
+      "name": "Immolate",
+      "on": "take_damage",
+      "if": "not t_self",
+      "effects": [
+        {
+          "type": "mark",
+          "target": "self",
+          "id": "frostfire_gauntlet_immolate",
+          "duration": 3,
+          "max_stacks": 1
+        }
+      ]
+    },
+    {
+      "name": "Immolate",
+      "on": "interval",
+      "interval": 1,
+      "if": "has('frostfire_gauntlet_immolate')",
+      "effects": [
+        {
+          "type": "area",
+          "at": "self",
+          "radius": "325 * size",
+          "show": false,
+          "effects": [
+            {
+              "type": "damage",
+              "amount": "(12 + 0.01 * bonus_hp) * (1 + 0.25 * t_minion)",
+              "vfx": "fire",
+              "color": "#ff9a4d"
+            },
+            {
+              "type": "damage",
+              "if": "t_minion and t_hp <= 1.25 * (12 + 0.01 * bonus_hp)",
+              "damage_type": "true",
+              "amount": "t_hp + 1",
+              "vfx": "fire",
+              "color": "#ff9a4d"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Snowbind",
+      "description": "Basic attacks leave a 250-radius frost field around the target for 1.5s: it deals 12-85 magic damage (by level) to enemies inside and slows enemies in it by 25% +4% per 1000 max health. Ranged: half damage and slow. 4s cooldown (ranged 6s).",
+      "on": "attack",
+      "if": "not t_structure",
+      "cooldown": "6 - 2 * melee",
+      "effects": [
+        {
+          "type": "area",
+          "at": "target",
+          "radius": 250,
+          "color": "#9fe8ff",
+          "vfx": "twinkle",
+          "effects": [
+            {
+              "type": "damage",
+              "amount": "(12 + 73 * (min(level, 18) - 1) / 17) * (0.5 + 0.5 * melee)",
+              "vfx": "twinkle",
+              "color": "#9fe8ff"
+            }
+          ]
+        },
+        {
+          "type": "zone",
+          "at": "target",
+          "radius": 250,
+          "duration": 1.5,
+          "interval": 0.25,
+          "color": "#9fe8ff",
+          "effects": [
+            {
+              "type": "slow",
+              "id": "frostfire_gauntlet_slow",
+              "amount": "(0.125 + 0.00002 * max_hp) * (1 + melee)",
+              "duration": 0.4
+            }
+          ]
+        }
+      ]
+    }
+  ]
 }

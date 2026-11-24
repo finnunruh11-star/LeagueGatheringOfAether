@@ -10,8 +10,14 @@
   "group": "dorans",
   "stats": {
     "attack_damage": 10.0,
-    "max_hp": 100.0
+    "max_hp": 100.0,
+    "omnivamp": 0.025
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Warmonger",
+      "description": "Heal for 2.5% of all damage you deal (omnivamp)."
+    }
+  ]
 }

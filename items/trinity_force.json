@@ -22,7 +22,80 @@
     "max_hp": 300.0,
     "ability_haste": 20.0
   },
-  "mythic_stats": {},
+  "mythic_stats": {
+    "attack_damage": 3,
+    "ability_haste": 3,
+    "move_speed": 3
+  },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Threefold Strike",
+      "description": "Basic attacks give you 20 move speed for 5s. Attacks on champions or structures also grant +6% base AD for 5s, stacking up to 3 times (+18%).",
+      "on": "attack",
+      "effects": [
+        {
+          "type": "buff",
+          "target": "self",
+          "id": "trinity_force_speed",
+          "duration": 5,
+          "add": {
+            "move_speed": 20
+          }
+        },
+        {
+          "type": "buff",
+          "if": "t_champion or t_structure",
+          "target": "self",
+          "id": "trinity_force_threefold",
+          "duration": 5,
+          "max_stacks": 3,
+          "add": {
+            "attack_damage": "0.06 * base_ad"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Spellblade",
+      "unique": "spellblade_charge",
+      "description": "After you cast an ability, your next basic attack within 10s deals bonus physical damage equal to 200% of your base AD (1.5s cooldown).",
+      "on": "cast",
+      "if": "not has('spellblade_cd')",
+      "effects": [
+        {
+          "type": "mark",
+          "id": "spellblade",
+          "target": "self",
+          "duration": 10
+        }
+      ]
+    },
+    {
+      "name": "Spellblade",
+      "unique": "spellblade_hit",
+      "on": "attack",
+      "if": "has('spellblade')",
+      "effects": [
+        {
+          "type": "remove",
+          "id": "spellblade",
+          "target": "self"
+        },
+        {
+          "type": "mark",
+          "id": "spellblade_cd",
+          "target": "self",
+          "duration": 1.5
+        },
+        {
+          "type": "damage",
+          "damage_type": "physical",
+          "amount": "2.0 * base_ad",
+          "vfx": "star",
+          "color": "#ffd27a"
+        }
+      ]
+    }
+  ]
 }

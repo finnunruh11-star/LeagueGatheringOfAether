@@ -10,7 +10,8 @@
     "NonbootsMovement"
   ],
   "stats": {
-    "max_hp": 150.0
+    "max_hp": 150.0,
+    "move_speed_bonus": 0.05
   },
   "description": "",
   "passives": []

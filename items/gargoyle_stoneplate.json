@@ -20,5 +20,69 @@
     "ability_haste": 15.0
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Fortify",
+      "description": "Taking damage from an enemy champion grants +5% bonus armor and bonus magic resist for 6s, stacking up to 5 times (one stack per champion).",
+      "on": "take_damage",
+      "if": "t_champion and not t_self",
+      "effects": [
+        {
+          "type": "buff",
+          "target": "self",
+          "id": "gargoyle_stoneplate_fortify",
+          "duration": 6,
+          "max_stacks": 5,
+          "stacks": "1 - int(t_has('gargoyle_stoneplate_source'))",
+          "add": {
+            "armor": "0.05 * bonus_armor / (1 + 0.05 * stacks('gargoyle_stoneplate_fortify'))",
+            "magic_resist": "0.05 * bonus_mr / (1 + 0.05 * stacks('gargoyle_stoneplate_fortify'))"
+          }
+        },
+        {
+          "type": "mark",
+          "id": "gargoyle_stoneplate_source",
+          "duration": 6
+        }
+      ]
+    }
+  ],
+  "active": {
+    "name": "Unbreakable",
+    "description": "Gain a 100 (+90% bonus health) shield that decays over 2.5s and grow 25% larger for 2.5s.",
+    "cooldown": 90,
+    "targeting": "self",
+    "effects": [
+      {
+        "type": "repeat",
+        "count": 5,
+        "interval": 0,
+        "effects": [
+          {
+            "type": "shield",
+            "target": "self",
+            "stack": true,
+            "amount": "(100 + 0.9 * bonus_hp) / 5",
+            "duration": "0.5 * (i + 1)"
+          }
+        ]
+      },
+      {
+        "type": "buff",
+        "target": "self",
+        "id": "gargoyle_stoneplate_size",
+        "duration": 2.5,
+        "add": {
+          "size": 0.25
+        }
+      },
+      {
+        "type": "vfx",
+        "kind": "ring",
+        "at": "self",
+        "radius": 90,
+        "color": "#9aa8bc"
+      }
+    ]
+  }
 }

@@ -12,5 +12,19 @@
     "attack_damage": 15.0
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Rend",
+      "description": "Your physical damage gives champions 40% Grievous Wounds for 3s.",
+      "on": "deal_damage",
+      "if": "dtype == 'physical' and t_champion and not t_self",
+      "effects": [
+        {
+          "type": "grievous",
+          "amount": 0.4,
+          "duration": 3
+        }
+      ]
+    }
+  ]
 }

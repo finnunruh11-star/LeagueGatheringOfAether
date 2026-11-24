@@ -8,7 +8,56 @@
     "NonbootsMovement",
     "Tenacity"
   ],
+  "min_level": 9,
   "stats": {},
   "description": "",
-  "passives": []
+  "passives": [],
+  "active": {
+    "name": "Drink",
+    "description": "For 3 minutes: +300 health, +25% tenacity and a bigger body, and allied champions within 150 of you move 15% faster (instead of the original's speed trail). Replaces your other elixir.",
+    "cooldown": 1,
+    "targeting": "self",
+    "consume": true,
+    "effects": [
+      {
+        "type": "buff",
+        "target": "self",
+        "id": "elixir",
+        "duration": 180,
+        "add": {
+          "max_hp": 300,
+          "tenacity": 0.25,
+          "size": 0.15
+        }
+      },
+      {
+        "type": "mark",
+        "target": "self",
+        "id": "elixir_of_iron_path",
+        "duration": 180,
+        "max_stacks": 1
+      },
+      {
+        "type": "zone",
+        "at": "self",
+        "follow": true,
+        "radius": 150,
+        "duration": 180,
+        "interval": 0.5,
+        "affects": "allies",
+        "color": "#b8c4d0",
+        "effects": [
+          {
+            "type": "buff",
+            "id": "elixir_of_iron_speed",
+            "duration": 1,
+            "add": {
+              "move_speed_bonus": 0.15
+            },
+            "if": "t_champion and not t_self and has('elixir_of_iron_path')"
+          }
+        ]
+      }
+    ]
+  }
 }

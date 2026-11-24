@@ -12,7 +12,71 @@
     "CooldownReduction",
     "NonbootsMovement"
   ],
-  "stats": {},
+  "stats": {
+    "ability_power": 55.0,
+    "ability_haste": 20.0,
+    "mana_regen_percent": 1.0
+  },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Coordinated Fire",
+      "description": "Slowing or immobilizing an enemy champion deals 40-60 (by level) bonus magic damage and marks them for 4s. When an allied champion damages the marked enemy, the mark bursts for another 80-120 (by level) magic damage and you and that ally gain 25% move speed for 2s. 6s cooldown per target.",
+      "on": "cc_applied",
+      "if": "cc != 'silence' and not t_has('imperial_mandate_cd')",
+      "effects": [
+        {
+          "type": "mark",
+          "id": "imperial_mandate_cd",
+          "duration": 6
+        },
+        {
+          "type": "damage",
+          "damage_type": "magic",
+          "amount": "40 + 2 * max(0, min(level, 18) - 8)",
+          "vfx": "star",
+          "color": "#ffd75e"
+        },
+        {
+          "type": "mark",
+          "id": "imperial_mandate_mark",
+          "duration": 4,
+          "triggers": [
+            {
+              "on": "take_damage",
+              "if": "ally and t_champion and not t_self",
+              "consume": true,
+              "effects": [
+                {
+                  "type": "damage",
+                  "target": "holder",
+                  "damage_type": "magic",
+                  "amount": "80 + 4 * max(0, min(level, 18) - 8)",
+                  "vfx": "burst",
+                  "color": "#ffd75e"
+                },
+                {
+                  "type": "buff",
+                  "id": "imperial_mandate_speed",
+                  "target": "self",
+                  "duration": 2,
+                  "add": {
+                    "move_speed_bonus": 0.25
+                  }
+                },
+                {
+                  "type": "buff",
+                  "id": "imperial_mandate_speed",
+                  "duration": 2,
+                  "add": {
+                    "move_speed_bonus": 0.25
+                  }
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ]
 }

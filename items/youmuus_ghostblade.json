@@ -13,12 +13,73 @@
     "ArmorPenetration",
     "AbilityHaste"
   ],
+  "display": "counter('youmuus_ghostblade_shards')",
   "stats": {
     "attack_damage": 60.0,
-    "lethality": 18.0,
-    "ability_haste": 15.0
+    "lethality": "18 + (7 + max(0, min(level, 18) - 7)) * int(counter('youmuus_ghostblade_shards') >= 100)",
+    "ability_haste": 15.0,
+    "move_speed": "0.4 * counter('youmuus_ghostblade_shards') * (1 - in_combat)"
   },
-  "mythic_stats": {},
+  "mythic_stats": {
+    "attack_damage": 7
+  },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Haunt",
+      "description": "Build up to 100 Spectral Shards over time (about 7 per second, standing in for 1 per 55 units walked). Out of champion combat each shard gives 0.4 move speed (40 at 100). At 100 shards you also gain 7-18 lethality (by level). Shards reset 3s after you damage an enemy champion.",
+      "on": "interval",
+      "interval": 0.5,
+      "if": "counter('youmuus_ghostblade_shards') < 100",
+      "effects": [
+        {
+          "type": "counter",
+          "id": "youmuus_ghostblade_shards",
+          "add": 3.5,
+          "max": 100
+        }
+      ]
+    },
+    {
+      "name": "Haunt",
+      "on": "deal_damage",
+      "if": "t_champion and not t_self and not has('youmuus_ghostblade_fade')",
+      "effects": [
+        {
+          "type": "mark",
+          "target": "self",
+          "id": "youmuus_ghostblade_fade",
+          "duration": 3
+        },
+        {
+          "type": "delay",
+          "time": 3,
+          "effects": [
+            {
+              "type": "counter",
+              "id": "youmuus_ghostblade_shards",
+              "set": 0
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "active": {
+    "name": "Wraith Step",
+    "description": "Gain 25% move speed for 6s (units never block each other here, so the ghosting part is built in).",
+    "cooldown": 45,
+    "targeting": "self",
+    "effects": [
+      {
+        "type": "buff",
+        "target": "self",
+        "id": "youmuus_ghostblade_wraith",
+        "duration": 6,
+        "add": {
+          "move_speed_bonus": 0.25
+        }
+      }
+    ]
+  }
 }

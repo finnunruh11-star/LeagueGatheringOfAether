@@ -23,7 +23,84 @@
     "max_hp": 200.0,
     "ability_haste": 20.0
   },
-  "mythic_stats": {},
+  "mythic_stats": {
+    "move_speed_bonus": 0.03
+  },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Heroic Gait",
+      "description": "Dealing physical damage gives you 30 move speed for 2s.",
+      "on": "deal_damage",
+      "if": "dtype == 'physical' and not t_self",
+      "effects": [
+        {
+          "type": "buff",
+          "target": "self",
+          "id": "stridebreaker_gait",
+          "duration": 2,
+          "add": {
+            "move_speed": 30
+          }
+        }
+      ]
+    }
+  ],
+  "active": {
+    "name": "Halting Slash",
+    "description": "Lunge up to 300 units toward the cursor, then slash enemies within 450 units of you for 75% AD physical damage and slow them by 40%, fading over 2s. 20s cooldown, reduced by ability haste.",
+    "cooldown": "20 * 100 / (100 + ah)",
+    "targeting": "point",
+    "range": 300,
+    "effects": [
+      {
+        "type": "dash",
+        "to": "aim",
+        "distance": 300,
+        "speed": 1100,
+        "on_end": [
+          {
+            "type": "area",
+            "at": "self",
+            "radius": 450,
+            "color": "#e8b45a",
+            "vfx": "slash",
+            "effects": [
+              {
+                "type": "damage",
+                "damage_type": "physical",
+                "amount": "0.75 * ad",
+                "vfx": "slash",
+                "color": "#e8b45a"
+              },
+              {
+                "type": "slow",
+                "id": "stridebreaker_slow_1",
+                "amount": 0.4,
+                "duration": 0.5
+              },
+              {
+                "type": "slow",
+                "id": "stridebreaker_slow_2",
+                "amount": 0.3,
+                "duration": 1
+              },
+              {
+                "type": "slow",
+                "id": "stridebreaker_slow_3",
+                "amount": 0.2,
+                "duration": 1.5
+              },
+              {
+                "type": "slow",
+                "id": "stridebreaker_slow_4",
+                "amount": 0.1,
+                "duration": 2
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
 }

@@ -8,7 +8,14 @@
   "tags": [
     "Boots"
   ],
-  "stats": {},
+  "stats": {
+    "move_speed": "25 + 90 * int(since_combat >= 5)"
+  },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Mobility",
+      "description": "+25 move speed, rising to +115 once you have not dealt or taken champion damage for 5s."
+    }
+  ]
 }

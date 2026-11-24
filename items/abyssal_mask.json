@@ -20,5 +20,41 @@
     "ability_haste": 10.0
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Unmake",
+      "description": "Enemy champions within 550 units are cursed, losing 5 (+1.2% bonus health) magic resist (max 25). You gain 9 magic resist per cursed enemy (max 5).",
+      "on": "interval",
+      "interval": 0.5,
+      "effects": [
+        {
+          "type": "area",
+          "at": "self",
+          "radius": 550,
+          "show": false,
+          "filter": "champions",
+          "effects": [
+            {
+              "type": "buff",
+              "id": "abyssal_mask_curse",
+              "duration": 1,
+              "add": {
+                "magic_resist": "-min(5 + 0.012 * bonus_hp, 25)"
+              }
+            }
+          ]
+        },
+        {
+          "type": "buff",
+          "target": "self",
+          "id": "abyssal_mask_unmake",
+          "duration": 1,
+          "if": "near_enemies(570) > 0",
+          "add": {
+            "magic_resist": "9 * min(near_enemies(570), 5)"
+          }
+        }
+      ]
+    }
+  ]
 }

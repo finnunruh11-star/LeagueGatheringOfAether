@@ -13,5 +13,18 @@
     "armor": 40.0
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Rock Solid",
+      "description": "Basic attacks against you deal 5 (+3.5 per 1000 max health) less damage, at most 20% of the hit.",
+      "on": "take_damage_pre",
+      "if": "is_attack and not t_self",
+      "effects": [
+        {
+          "type": "modify_damage",
+          "add": "-min(5 + 0.0035 * max_hp, 0.2 * dmg)"
+        }
+      ]
+    }
+  ]
 }

@@ -10,10 +10,30 @@
   "group": "tear",
   "buyable": false,
   "stats": {
-    "max_hp": 400.0,
+    "max_hp": "400 + 0.08 * max_mana",
     "max_mana": 860.0,
     "ability_haste": 15.0
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Awe",
+      "description": "Gain bonus health equal to 8% of your maximum mana."
+    },
+    {
+      "name": "Everlasting",
+      "description": "Slowing or immobilizing an enemy champion shields you for 100-180 (by level) + 4.5% of your current mana for 3s. The shield is 80% stronger if more than one enemy champion is within 1000 range (8s cooldown).",
+      "on": "cc_applied",
+      "if": "cc != 'silence'",
+      "cooldown": 8,
+      "effects": [
+        {
+          "type": "shield",
+          "target": "self",
+          "amount": "(100 + 80 * (min(level, 18) - 1) / 17.0 + 0.045 * mana) * (1 + 0.8 * int(near_enemies(1000) > 1))",
+          "duration": 3
+        }
+      ]
+    }
+  ]
 }

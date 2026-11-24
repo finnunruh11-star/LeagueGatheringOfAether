@@ -15,9 +15,46 @@
   ],
   "group": "hydra",
   "stats": {
-    "attack_damage": 30.0,
+    "attack_damage": "30 + 0.02 * bonus_hp",
     "max_hp": 500.0
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Colossus",
+      "description": "Gain bonus AD equal to 2% of your bonus health."
+    },
+    {
+      "name": "Cleave",
+      "description": "Basic attacks deal 4 (+1.5% max health) bonus physical damage, and a shockwave hits other enemies in a cone behind the target for 40 (+3% max health) physical damage (no shockwave off structures). Ranged champions deal 75%.",
+      "on": "attack",
+      "effects": [
+        {
+          "type": "damage",
+          "damage_type": "physical",
+          "amount": "(4 + 0.015 * max_hp) * (0.75 + 0.25 * melee)",
+          "vfx": "burst",
+          "color": "#e3a64a"
+        },
+        {
+          "type": "area",
+          "at": "target",
+          "radius": 400,
+          "angle": 100,
+          "exclude_target": true,
+          "show": false,
+          "if": "not t_structure",
+          "effects": [
+            {
+              "type": "damage",
+              "damage_type": "physical",
+              "amount": "(40 + 0.03 * max_hp) * (0.75 + 0.25 * melee)",
+              "vfx": "streaks",
+              "color": "#e3a64a"
+            }
+          ]
+        }
+      ]
+    }
+  ]
 }

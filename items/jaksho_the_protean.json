@@ -21,7 +21,84 @@
     "magic_resist": 30.0,
     "ability_haste": 20.0
   },
-  "mythic_stats": {},
+  "mythic_stats": {
+    "armor": 5,
+    "magic_resist": 5
+  },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Voidborn Resilience",
+      "description": "Every second in champion combat grants +2 armor and magic resist (up to 8 stacks). At 8 stacks you drain enemies within 700 for 80 + 7% bonus health magic damage, healing that much per champion drained, and your bonus armor and magic resist rise by 20% until combat ends.",
+      "on": "interval",
+      "interval": 1,
+      "effects": [
+        {
+          "type": "buff",
+          "target": "self",
+          "id": "jaksho_the_protean_resilience",
+          "duration": 1.5,
+          "max_stacks": 8,
+          "add": {
+            "armor": 2,
+            "magic_resist": 2
+          },
+          "if": "in_combat"
+        },
+        {
+          "type": "area",
+          "at": "self",
+          "radius": 700,
+          "show": false,
+          "if": "in_combat and stacks('jaksho_the_protean_resilience') >= 8 and not has('jaksho_the_protean_empowered')",
+          "effects": [
+            {
+              "type": "vfx",
+              "kind": "line",
+              "from": "target",
+              "to": "caster",
+              "color": "#b77cff"
+            },
+            {
+              "type": "damage",
+              "amount": "80 + 0.07 * bonus_hp",
+              "vfx": "magic",
+              "color": "#b77cff"
+            },
+            {
+              "type": "heal",
+              "target": "self",
+              "amount": "80 + 0.07 * bonus_hp",
+              "if": "t_champion"
+            }
+          ]
+        },
+        {
+          "type": "vfx",
+          "kind": "ring",
+          "at": "self",
+          "radius": 90,
+          "color": "#b77cff",
+          "if": "in_combat and stacks('jaksho_the_protean_resilience') >= 8 and not has('jaksho_the_protean_empowered')"
+        },
+        {
+          "type": "buff",
+          "target": "self",
+          "id": "jaksho_the_protean_empowered",
+          "duration": 9999,
+          "add": {
+            "armor": "0.2 * bonus_armor",
+            "magic_resist": "0.2 * bonus_mr"
+          },
+          "if": "in_combat and stacks('jaksho_the_protean_resilience') >= 8 and not has('jaksho_the_protean_empowered')"
+        },
+        {
+          "type": "remove",
+          "id": "jaksho_the_protean_empowered",
+          "target": "self",
+          "if": "not in_combat"
+        }
+      ]
+    }
+  ]
 }

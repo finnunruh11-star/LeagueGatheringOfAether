@@ -7,10 +7,40 @@
     "SpellDamage"
   ],
   "group": "glory",
+  "display": "counter('glory')",
   "stats": {
-    "ability_power": 15.0,
+    "ability_power": "15 + 4 * min(counter('glory'), 10)",
     "max_hp": 50.0
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Glory",
+      "description": "Gain 2 Glory for a champion kill or 1 for an assist (up to 10). Dying costs 5 Glory. Glory carries over to Mejai's Soulstealer.",
+      "on": "takedown",
+      "effects": [
+        {
+          "type": "counter",
+          "id": "glory",
+          "add": "1 + amount",
+          "max": "max(10, counter('glory'))"
+        }
+      ]
+    },
+    {
+      "name": "Glory",
+      "on": "death",
+      "effects": [
+        {
+          "type": "counter",
+          "id": "glory",
+          "add": -5
+        }
+      ]
+    },
+    {
+      "name": "Dread",
+      "description": "+4 ability power per Glory (up to +40)."
+    }
+  ]
 }

@@ -14,5 +14,37 @@
     "bonus_attack_speed": 0.25
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Wrath",
+      "description": "Basic attacks deal +20 magic damage on hit.",
+      "on": "attack",
+      "effects": [
+        {
+          "type": "damage",
+          "damage_type": "magic",
+          "amount": 20,
+          "vfx": "streaks",
+          "color": "#ff6a3d"
+        }
+      ]
+    },
+    {
+      "name": "Seething Strike",
+      "description": "Basic attacks grant +5% attack speed for 3s, stacking up to 3 times (+15%).",
+      "on": "attack",
+      "effects": [
+        {
+          "type": "buff",
+          "target": "self",
+          "id": "rageknife_seething",
+          "duration": 3,
+          "max_stacks": 3,
+          "add": {
+            "bonus_attack_speed": 0.05
+          }
+        }
+      ]
+    }
+  ]
 }

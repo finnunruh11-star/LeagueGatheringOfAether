@@ -12,7 +12,59 @@
     "ManaRegen"
   ],
   "group": "potion",
+  "charges": 3,
   "stats": {},
   "description": "",
-  "passives": []
+  "passives": [],
+  "active": {
+    "name": "Drink",
+    "description": "Use a charge to restore 100 health and 75 mana over 12s. Meanwhile your attacks and abilities that damage an enemy champion burn it for 15 magic damage over 3s (20 if you have no mana, half from area or periodic damage). Holds 3 charges, refilled at your fountain.",
+    "cooldown": 0.5,
+    "targeting": "self",
+    "consume": true,
+    "effects": [
+      {
+        "type": "hot",
+        "amount": "100 / 12.0",
+        "duration": 12,
+        "interval": 0.5,
+        "id": "corrupting_potion"
+      },
+      {
+        "type": "repeat",
+        "count": 12,
+        "interval": 1,
+        "effects": [
+          {
+            "type": "mana",
+            "target": "self",
+            "amount": 6.25
+          }
+        ]
+      },
+      {
+        "type": "buff",
+        "target": "self",
+        "id": "corrupting_potion_corruption",
+        "duration": 12,
+        "triggers": [
+          {
+            "on": "deal_damage",
+            "if": "t_champion and (is_attack or is_ability)",
+            "effects": [
+              {
+                "type": "dot",
+                "id": "corrupting_potion_burn",
+                "amount": "(15 + 5 * int(max_mana == 0)) / 3.0 * (1 - 0.5 * int(is_aoe or is_dot))",
+                "duration": 3,
+                "interval": 0.5,
+                "damage_type": "magic",
+                "color": "#a24bff"
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
 }

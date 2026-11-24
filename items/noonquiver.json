@@ -17,5 +17,21 @@
     "bonus_attack_speed": 0.15
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Precision",
+      "description": "Basic attacks deal 20 bonus physical damage to minions (no jungle monsters in this game).",
+      "on": "attack",
+      "if": "t_minion",
+      "effects": [
+        {
+          "type": "damage",
+          "damage_type": "physical",
+          "amount": 20,
+          "vfx": "spark",
+          "color": "#ffd27f"
+        }
+      ]
+    }
+  ]
 }

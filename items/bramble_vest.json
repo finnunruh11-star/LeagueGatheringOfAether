@@ -13,5 +13,26 @@
     "armor": 30.0
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Thorns",
+      "description": "When hit by a basic attack, deal 6 magic damage to the attacker and give champions 40% Grievous Wounds for 3s.",
+      "on": "attacked",
+      "effects": [
+        {
+          "type": "damage",
+          "amount": 6,
+          "damage_type": "magic",
+          "vfx": "spark",
+          "color": "#b8c8a0"
+        },
+        {
+          "type": "grievous",
+          "amount": 0.4,
+          "duration": 3,
+          "if": "t_champion"
+        }
+      ]
+    }
+  ]
 }

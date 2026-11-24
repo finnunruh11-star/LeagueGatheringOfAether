@@ -19,5 +19,19 @@
     "crit_chance": 0.2
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Sepsis",
+      "description": "Your physical damage applies 40% Grievous Wounds to enemy champions for 3s.",
+      "on": "deal_damage",
+      "if": "dtype == 'physical' and t_champion and not t_self",
+      "effects": [
+        {
+          "type": "grievous",
+          "amount": 0.4,
+          "duration": 3
+        }
+      ]
+    }
+  ]
 }

@@ -20,5 +20,39 @@
     "move_speed_bonus": 0.07
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Spectral Waltz",
+      "description": "Attacks give 7% move speed for 3s. After 4 attacks in a row (each within 3s of the last) they also give 30% attack speed. Ghosting isn't simulated.",
+      "on": "attack",
+      "effects": [
+        {
+          "type": "buff",
+          "target": "self",
+          "id": "phantom_dancer_waltz",
+          "duration": 3,
+          "add": {
+            "move_speed_bonus": 0.07
+          }
+        },
+        {
+          "type": "mark",
+          "target": "self",
+          "id": "phantom_dancer_stacks",
+          "duration": 3,
+          "max_stacks": 4
+        },
+        {
+          "type": "buff",
+          "target": "self",
+          "id": "phantom_dancer_frenzy",
+          "duration": 3,
+          "add": {
+            "bonus_attack_speed": 0.3
+          },
+          "if": "stacks('phantom_dancer_stacks') >= 4"
+        }
+      ]
+    }
+  ]
 }

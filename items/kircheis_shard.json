@@ -13,5 +13,20 @@
     "attack_damage": 15.0
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Jolt",
+      "description": "Moving and attacking builds Energize; at full charge your next basic attack deals 60 bonus magic damage.",
+      "on": "energized",
+      "effects": [
+        {
+          "type": "damage",
+          "damage_type": "magic",
+          "amount": 60,
+          "vfx": "spark",
+          "color": "#8fd8ff"
+        }
+      ]
+    }
+  ]
 }

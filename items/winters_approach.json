@@ -13,11 +13,46 @@
     "AbilityHaste"
   ],
   "group": "tear",
+  "display": "counter('mana_charge')",
   "stats": {
-    "max_hp": 400.0,
-    "max_mana": 500.0,
+    "max_hp": "400 + 0.08 * max_mana",
+    "max_mana": "500 + counter('mana_charge')",
     "ability_haste": 15.0
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Awe",
+      "description": "Gain bonus health equal to 8% of your maximum mana."
+    },
+    {
+      "name": "Mana Charge",
+      "unique": "mana_charge",
+      "description": "Hitting enemies with attacks or abilities grants +3 max mana (+6 vs champions), every 2s, up to +360.",
+      "on": "deal_damage",
+      "if": "(is_attack or is_ability) and counter('mana_charge') < 360",
+      "cooldown": 2,
+      "effects": [
+        {
+          "type": "counter",
+          "id": "mana_charge",
+          "add": "3 + 3 * int(t_champion)",
+          "max": 360
+        }
+      ]
+    },
+    {
+      "name": "Mana Charge",
+      "description": "Once you have gained the full +360 mana, this item turns into Fimbulwinter.",
+      "on": "interval",
+      "interval": 1,
+      "if": "counter('mana_charge') >= 360",
+      "effects": [
+        {
+          "type": "transform",
+          "into": "fimbulwinter"
+        }
+      ]
+    }
+  ]
 }

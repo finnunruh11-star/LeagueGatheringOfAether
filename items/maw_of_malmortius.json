@@ -17,5 +17,55 @@
     "magic_resist": 50.0
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Lifeline",
+      "description": "When magic damage leaves you below 30% health, gain a 200 (+225% bonus AD) magic damage shield for 2.5s (75% for ranged champions) and 12% omnivamp until you leave combat (90s cooldown).",
+      "on": "take_damage",
+      "if": "dtype == 'magic' and hp > 0 and hp < 0.3 * max_hp",
+      "cooldown": 90,
+      "effects": [
+        {
+          "type": "shield",
+          "target": "self",
+          "damage_type": "magic",
+          "amount": "(200 + 2.25 * bonus_ad) * (1 - 0.25 * ranged)",
+          "duration": 2.5
+        },
+        {
+          "type": "buff",
+          "target": "self",
+          "id": "maw_of_malmortius_vamp",
+          "duration": 5,
+          "add": {
+            "omnivamp": 0.12
+          }
+        },
+        {
+          "type": "vfx",
+          "kind": "ring",
+          "at": "self",
+          "radius": 90,
+          "color": "#c06bff"
+        }
+      ]
+    },
+    {
+      "name": "Lifeline",
+      "on": "interval",
+      "interval": 0.5,
+      "if": "has('maw_of_malmortius_vamp') and in_combat",
+      "effects": [
+        {
+          "type": "buff",
+          "target": "self",
+          "id": "maw_of_malmortius_vamp",
+          "duration": 1,
+          "add": {
+            "omnivamp": 0.12
+          }
+        }
+      ]
+    }
+  ]
 }

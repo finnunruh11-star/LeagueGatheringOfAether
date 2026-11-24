@@ -16,5 +16,19 @@
     "max_hp": 200.0
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Cinderbloom",
+      "description": "Your magic damage to champions gets 10-20 extra magic penetration, more the lower their current health (20 at 1000 health or less, 10 at 2500 or more). Against a champion that has a shield you always get the full 20.",
+      "on": "deal_damage_pre",
+      "if": "dtype == 'magic' and t_champion",
+      "procs": true,
+      "effects": [
+        {
+          "type": "modify_damage",
+          "mult": "(100 + max(0, t_mr * (1 - stat('magic_pen_percent')) - stat('magic_pen'))) / (100 + max(0, t_mr * (1 - stat('magic_pen_percent')) - stat('magic_pen') - max(clamp(10 + (2500 - t_hp) / 150.0, 10.0, 20.0), 20 * int(t_has('shield')))))"
+        }
+      ]
+    }
+  ]
 }

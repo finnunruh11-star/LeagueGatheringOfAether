@@ -20,7 +20,95 @@
     "crit_chance": 0.2,
     "move_speed_bonus": 0.07
   },
-  "mythic_stats": {},
+  "mythic_stats": {
+    "attack_damage": 5
+  },
   "description": "",
-  "passives": []
+  "passives": [],
+  "active": {
+    "name": "Cloudburst",
+    "description": "Dash up to 425 units toward the cursor, then fire 3 homing bolts at the lowest-health enemy champion within 750 units of where you land (a minion or pet if no champion is near). Together they deal 150 (+20 per level after level 8, max 350) +45% bonus AD physical damage, increased by up to 50% based on the target's missing health (full bonus below 25% health).",
+    "cooldown": 120,
+    "targeting": "point",
+    "range": 425,
+    "effects": [
+      {
+        "type": "dash",
+        "to": "aim",
+        "distance": 425,
+        "speed": 1350,
+        "on_end": [
+          {
+            "type": "area",
+            "at": "self",
+            "radius": 750,
+            "filter": "champions",
+            "sort": "lowest_hp",
+            "max_targets": 1,
+            "show": false,
+            "effects": [
+              {
+                "type": "repeat",
+                "count": 3,
+                "interval": 0.13,
+                "effects": [
+                  {
+                    "type": "projectile",
+                    "homing": true,
+                    "speed": 1400,
+                    "radius": 9,
+                    "color": "#a8ecff",
+                    "on_hit": [
+                      {
+                        "type": "damage",
+                        "damage_type": "physical",
+                        "amount": "(150 + 20 * max(0, min(level, 18) - 8) + 0.45 * bonus_ad) / 3 * (1 + 0.5 * min(1, t_missing_hp / t_max_hp / 0.75))",
+                        "vfx": "streaks",
+                        "color": "#a8ecff"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          },
+          {
+            "type": "area",
+            "if": "near_enemies(750) == 0",
+            "at": "self",
+            "radius": 750,
+            "filter": "minions",
+            "sort": "lowest_hp",
+            "max_targets": 1,
+            "show": false,
+            "effects": [
+              {
+                "type": "repeat",
+                "count": 3,
+                "interval": 0.13,
+                "effects": [
+                  {
+                    "type": "projectile",
+                    "homing": true,
+                    "speed": 1400,
+                    "radius": 9,
+                    "color": "#a8ecff",
+                    "on_hit": [
+                      {
+                        "type": "damage",
+                        "damage_type": "physical",
+                        "amount": "(150 + 20 * max(0, min(level, 18) - 8) + 0.45 * bonus_ad) / 3 * (1 + 0.5 * min(1, t_missing_hp / t_max_hp / 0.75))",
+                        "vfx": "streaks",
+                        "color": "#a8ecff"
+                      }
+                    ]
+                  }
+                ]
+              }
+            ]
+          }
+        ]
+      }
+    ]
+  }
 }

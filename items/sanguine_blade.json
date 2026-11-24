@@ -15,9 +15,25 @@
   ],
   "stats": {
     "attack_damage": 50.0,
-    "lethality": 10.0,
-    "lifesteal": 0.12
+    "lethality": "10 + 8 * clamp(1 - (time - counter('sanguine_blade_alone')) / 3, 0, 1)",
+    "lifesteal": 0.12,
+    "bonus_attack_speed": "(0.2 + 0.6 * (min(level, 18) - 1) / 17) * clamp(1 - (time - counter('sanguine_blade_alone')) / 3, 0, 1)"
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Frenzy",
+      "description": "While at most one enemy champion is within 1000 units, gain 8 lethality (on top of the item's 10) and 20-80% attack speed (by level). The bonus fades over 3s once more enemy champions come close.",
+      "on": "interval",
+      "interval": 0.25,
+      "if": "near_enemies(1000) <= 1",
+      "effects": [
+        {
+          "type": "counter",
+          "id": "sanguine_blade_alone",
+          "set": "time"
+        }
+      ]
+    }
+  ]
 }

@@ -17,5 +17,39 @@
     "ability_haste": 25.0
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Flux",
+      "description": "When an enemy champion dies (your kill or assist) within 3s of you damaging a champion, refund 10% (+0.4% per lethality) of your ultimate's total cooldown.",
+      "on": "deal_damage_pre",
+      "if": "t_champion and not t_self",
+      "effects": [
+        {
+          "type": "mark",
+          "target": "self",
+          "id": "axiom_arc_recent",
+          "duration": 3
+        }
+      ]
+    },
+    {
+      "name": "Flux",
+      "on": "takedown",
+      "if": "has('axiom_arc_recent')",
+      "effects": [
+        {
+          "type": "cooldown",
+          "slot": "r",
+          "amount": "cd_total('r') * (0.1 + 0.004 * lethality)"
+        },
+        {
+          "type": "vfx",
+          "kind": "ring",
+          "at": "self",
+          "radius": 60,
+          "color": "#c9a2ff"
+        }
+      ]
+    }
+  ]
 }

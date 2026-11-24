@@ -12,5 +12,19 @@
     "ability_power": 30.0
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Cursed",
+      "description": "Your magic damage gives champions 40% Grievous Wounds for 3s.",
+      "on": "deal_damage",
+      "if": "dtype == 'magic' and t_champion and not t_self",
+      "effects": [
+        {
+          "type": "grievous",
+          "amount": 0.4,
+          "duration": 3
+        }
+      ]
+    }
+  ]
 }

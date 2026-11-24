@@ -16,5 +16,30 @@
     "magic_resist": 35.0
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Lifeline",
+      "description": "Taking magic damage that leaves you below 30% health grants a 110-280 (by level) magic damage shield for 2.5s, 75% as strong for ranged champions (90s cooldown).",
+      "on": "take_damage",
+      "if": "dtype == 'magic' and hp < 0.3 * max_hp",
+      "cooldown": 90,
+      "effects": [
+        {
+          "type": "shield",
+          "target": "self",
+          "id": "hexdrinker_lifeline",
+          "damage_type": "magic",
+          "duration": 2.5,
+          "amount": "(110 + 10 * (min(level, 18) - 1)) * (1 - 0.25 * ranged)"
+        },
+        {
+          "type": "vfx",
+          "kind": "ring",
+          "at": "self",
+          "radius": 70,
+          "color": "#c08cff"
+        }
+      ]
+    }
+  ]
 }

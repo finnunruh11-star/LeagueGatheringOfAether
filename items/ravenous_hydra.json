@@ -15,11 +15,91 @@
     "AbilityHaste"
   ],
   "group": "hydra",
+  "display": "counter('ravenous_hydra_carnivore')",
   "stats": {
-    "attack_damage": 65.0,
+    "attack_damage": "65 + 0.5 * counter('ravenous_hydra_carnivore')",
     "ability_haste": 25.0,
     "lifesteal": 0.1
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Cleave",
+      "description": "Basic attacks and ability hits deal 40% AD (20% for ranged champions) physical damage to other enemies within 350 units of the target. Doesn't trigger on structures; abilities cleave each enemy at most once per 0.5s.",
+      "on": "attack",
+      "if": "not t_structure",
+      "effects": [
+        {
+          "type": "area",
+          "at": "target",
+          "radius": 350,
+          "exclude_target": true,
+          "show": false,
+          "effects": [
+            {
+              "type": "damage",
+              "damage_type": "physical",
+              "amount": "(0.2 + 0.2 * melee) * ad",
+              "vfx": "slash",
+              "color": "#d8343a"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Cleave",
+      "on": "deal_damage",
+      "if": "is_ability and not is_dot and not t_structure",
+      "effects": [
+        {
+          "type": "area",
+          "at": "target",
+          "radius": 350,
+          "exclude_target": true,
+          "show": false,
+          "effects": [
+            {
+              "type": "damage",
+              "damage_type": "physical",
+              "amount": "(0.2 + 0.2 * melee) * ad",
+              "vfx": "slash",
+              "color": "#d8343a",
+              "if": "not t_has('ravenous_hydra_cleaved')"
+            },
+            {
+              "type": "mark",
+              "id": "ravenous_hydra_cleaved",
+              "duration": 0.5
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Carnivorous",
+      "description": "Killing a minion grants 0.5 AD and killing a champion 1 AD, up to 20 AD (there are no siege minions or monsters). Dying loses 60% of it.",
+      "on": "kill",
+      "if": "t_minion or t_champion",
+      "effects": [
+        {
+          "type": "counter",
+          "id": "ravenous_hydra_carnivore",
+          "add": "1 + t_champion",
+          "max": 40
+        }
+      ]
+    },
+    {
+      "name": "Carnivorous",
+      "on": "death",
+      "effects": [
+        {
+          "type": "counter",
+          "id": "ravenous_hydra_carnivore",
+          "set": "floor(0.4 * counter('ravenous_hydra_carnivore'))"
+        }
+      ]
+    }
+  ]
 }

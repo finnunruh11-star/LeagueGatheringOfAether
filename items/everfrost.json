@@ -22,7 +22,51 @@
     "max_mana": 600.0,
     "ability_haste": 20.0
   },
-  "mythic_stats": {},
+  "mythic_stats": {
+    "ability_power": 10
+  },
   "description": "",
-  "passives": []
+  "passives": [],
+  "active": {
+    "name": "Glaciate",
+    "description": "Blast an 850-range cone for 100 + 30% AP magic damage and slow enemies hit by 65% for 1s. Enemies in the middle of the cone are rooted for 1s instead.",
+    "cooldown": 30,
+    "targeting": "direction",
+    "range": 850,
+    "effects": [
+      {
+        "type": "area",
+        "at": "self",
+        "radius": 850,
+        "angle": 60,
+        "color": "#9fe6ff",
+        "effects": [
+          {
+            "type": "damage",
+            "amount": "100 + 0.3 * ap",
+            "vfx": "twinkle",
+            "color": "#9fe6ff"
+          },
+          {
+            "type": "slow",
+            "amount": 0.65,
+            "duration": 1
+          }
+        ]
+      },
+      {
+        "type": "area",
+        "at": "self",
+        "radius": 850,
+        "angle": 20,
+        "show": false,
+        "effects": [
+          {
+            "type": "root",
+            "duration": 1
+          }
+        ]
+      }
+    ]
+  }
 }

@@ -13,6 +13,6 @@
     "ability_haste": 20.0,
     "move_speed": 45.0
   },
-  "description": "",
+  "description": "The original's summoner spell haste is left out - this game has no summoner spells.",
   "passives": []
 }

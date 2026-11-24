@@ -21,5 +21,34 @@
     "magic_resist": 40.0
   },
   "description": "",
-  "passives": []
+  "passives": [],
+  "active": {
+    "name": "Quicksilver",
+    "description": "Cleanse all stuns, roots, slows, silences, damage over time and Grievous Wounds on you, then gain 50% tenacity and 50% slow resist for 3s.",
+    "cooldown": 90,
+    "targeting": "self",
+    "effects": [
+      {
+        "type": "cleanse",
+        "target": "self"
+      },
+      {
+        "type": "buff",
+        "target": "self",
+        "id": "silvermere_dawn_quicksilver",
+        "duration": 3,
+        "add": {
+          "tenacity": 0.5,
+          "slow_resist": 0.5
+        }
+      },
+      {
+        "type": "vfx",
+        "kind": "ring",
+        "at": "self",
+        "radius": 80,
+        "color": "#e6eeff"
+      }
+    ]
+  }
 }

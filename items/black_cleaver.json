@@ -22,5 +22,40 @@
     "ability_haste": 30.0
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Carve",
+      "description": "Physical damage to an enemy champion lowers its armor by 5% for 6s, stacking up to 6 times (30%).",
+      "on": "deal_damage",
+      "if": "dtype == 'physical' and t_champion",
+      "effects": [
+        {
+          "type": "buff",
+          "id": "black_cleaver_shred",
+          "duration": 6,
+          "max_stacks": 6,
+          "multiply": {
+            "armor": 0.95
+          }
+        }
+      ]
+    },
+    {
+      "name": "Rage",
+      "description": "Physical damage to a champion gives you 3 move speed per Carve stack on it for 2s (up to 18).",
+      "on": "deal_damage",
+      "if": "dtype == 'physical' and t_champion",
+      "effects": [
+        {
+          "type": "buff",
+          "target": "self",
+          "id": "black_cleaver_rage",
+          "duration": 2,
+          "add": {
+            "move_speed": "3 * t_stacks('black_cleaver_shred')"
+          }
+        }
+      ]
+    }
+  ]
 }

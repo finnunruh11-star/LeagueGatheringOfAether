@@ -16,5 +16,10 @@
     "magic_pen_percent": 0.4
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Dissolve",
+      "description": "Your damage ignores 40% of the target's magic resist."
+    }
+  ]
 }

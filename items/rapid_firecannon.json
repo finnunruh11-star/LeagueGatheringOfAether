@@ -17,8 +17,24 @@
     "attack_damage": 30.0,
     "bonus_attack_speed": 0.15,
     "crit_chance": 0.2,
-    "move_speed_bonus": 0.07
+    "move_speed_bonus": 0.07,
+    "attack_range": "min(0.35 * base('attack_range'), 150) * int(energy >= 100)"
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Sharpshooter",
+      "description": "Moving and attacking build Energize. While Energized you gain 35% bonus attack range (max +150), and your Energized attack deals 60 bonus magic damage.",
+      "on": "energized",
+      "effects": [
+        {
+          "type": "damage",
+          "damage_type": "magic",
+          "amount": 60,
+          "vfx": "burst",
+          "color": "#ffc65a"
+        }
+      ]
+    }
+  ]
 }

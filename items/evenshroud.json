@@ -18,7 +18,98 @@
     "magic_resist": 30.0,
     "ability_haste": 20.0
   },
-  "mythic_stats": {},
+  "mythic_stats": {
+    "armor": 5,
+    "magic_resist": 5
+  },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Coruscation",
+      "description": "Stunning, rooting, knocking back or pulling an enemy champion makes it and every enemy champion within 600 of it take 7% more damage for 5s. Getting stunned or rooted yourself does the same to enemy champions within 600 of you (the caster of the CC can't be tracked).",
+      "on": "cc_applied",
+      "if": "cc == 'stun' or cc == 'root' or cc == 'knockback' or cc == 'pull'",
+      "effects": [
+        {
+          "type": "area",
+          "at": "target",
+          "radius": 600,
+          "filter": "champions",
+          "show": false,
+          "effects": [
+            {
+              "type": "mark",
+              "id": "evenshroud_amp",
+              "duration": 5,
+              "triggers": [
+                {
+                  "on": "take_damage_pre",
+                  "effects": [
+                    {
+                      "type": "modify_damage",
+                      "mult": 1.07
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "vfx",
+              "kind": "ring",
+              "at": "target",
+              "radius": 55,
+              "color": "#ffd98a"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "Coruscation",
+      "on": "interval",
+      "interval": 0.25,
+      "if": "has('stun') or has('root')",
+      "effects": [
+        {
+          "type": "area",
+          "at": "self",
+          "radius": 600,
+          "filter": "champions",
+          "show": false,
+          "if": "not has('evenshroud_immobilized')",
+          "effects": [
+            {
+              "type": "mark",
+              "id": "evenshroud_amp",
+              "duration": 5,
+              "triggers": [
+                {
+                  "on": "take_damage_pre",
+                  "effects": [
+                    {
+                      "type": "modify_damage",
+                      "mult": 1.07
+                    }
+                  ]
+                }
+              ]
+            },
+            {
+              "type": "vfx",
+              "kind": "ring",
+              "at": "target",
+              "radius": 55,
+              "color": "#ffd98a"
+            }
+          ]
+        },
+        {
+          "type": "mark",
+          "id": "evenshroud_immobilized",
+          "target": "self",
+          "duration": 0.4
+        }
+      ]
+    }
+  ]
 }

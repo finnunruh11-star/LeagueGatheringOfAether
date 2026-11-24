@@ -21,7 +21,58 @@
     "max_hp": 300.0,
     "ability_haste": 20.0
   },
-  "mythic_stats": {},
+  "mythic_stats": {
+    "armor_pen": 0.03,
+    "magic_pen_percent": 0.03
+  },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Spellblade",
+      "unique": "spellblade_charge",
+      "description": "After you cast an ability, your next basic attack within 10s deals 160% base AD + 4% (ranged: 2%) of the target's max health as bonus physical damage (only the AD part against structures). Against champions you also heal for 55% of that amount (1.5s cooldown).",
+      "on": "cast",
+      "if": "not has('spellblade_cd')",
+      "effects": [
+        {
+          "type": "mark",
+          "id": "spellblade",
+          "target": "self",
+          "duration": 10
+        }
+      ]
+    },
+    {
+      "name": "Spellblade",
+      "unique": "spellblade_hit",
+      "on": "attack",
+      "if": "has('spellblade')",
+      "effects": [
+        {
+          "type": "remove",
+          "id": "spellblade",
+          "target": "self"
+        },
+        {
+          "type": "mark",
+          "id": "spellblade_cd",
+          "target": "self",
+          "duration": 1.5
+        },
+        {
+          "type": "damage",
+          "damage_type": "physical",
+          "amount": "1.6 * base_ad + (1 - t_structure) * (0.02 + 0.02 * melee) * t_max_hp",
+          "vfx": "star",
+          "color": "#ffe08a"
+        },
+        {
+          "type": "heal",
+          "if": "t_champion",
+          "target": "self",
+          "amount": "0.55 * (1.6 * base_ad + (0.02 + 0.02 * melee) * t_max_hp)"
+        }
+      ]
+    }
+  ]
 }

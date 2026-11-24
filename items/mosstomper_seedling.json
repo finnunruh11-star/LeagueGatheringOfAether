@@ -6,7 +6,172 @@
     "Jungle"
   ],
   "group": "jungle",
-  "stats": {},
-  "description": "",
-  "passives": []
+  "display": "counter('mosstomper_seedling_treats')",
+  "stats": {
+    "tenacity": "0.2 * int(has('mosstomper_seedling_courage'))",
+    "slow_resist": "0.2 * int(has('mosstomper_seedling_courage'))"
+  },
+  "description": "No jungle in this game: the pet grows from minion kills and champion takedowns, monster effects work on minions and Smite is this item's active.",
+  "passives": [
+    {
+      "name": "Jungle Companions",
+      "description": "Your Mosstomper grows by 1 treat per minion kill and per champion takedown (shown on the slot). At 20 treats Smite becomes Unleashed Smite, at 40 the pet is fully grown.",
+      "on": "kill",
+      "if": "t_minion and counter('mosstomper_seedling_treats') < 40",
+      "effects": [
+        {
+          "type": "counter",
+          "id": "mosstomper_seedling_treats",
+          "add": 1,
+          "max": 40
+        },
+        {
+          "type": "text",
+          "text": "Unleashed Smite!",
+          "at": "self",
+          "color": "#86d65c",
+          "size": 22,
+          "if": "counter('mosstomper_seedling_treats') == 20"
+        },
+        {
+          "type": "text",
+          "text": "Mosstomper fully grown!",
+          "at": "self",
+          "color": "#86d65c",
+          "size": 24,
+          "if": "counter('mosstomper_seedling_treats') == 40"
+        }
+      ]
+    },
+    {
+      "name": "Jungle Companions",
+      "on": "takedown",
+      "if": "counter('mosstomper_seedling_treats') < 40",
+      "effects": [
+        {
+          "type": "counter",
+          "id": "mosstomper_seedling_treats",
+          "add": 1,
+          "max": 40
+        },
+        {
+          "type": "text",
+          "text": "Unleashed Smite!",
+          "at": "self",
+          "color": "#86d65c",
+          "size": 22,
+          "if": "counter('mosstomper_seedling_treats') == 20"
+        },
+        {
+          "type": "text",
+          "text": "Mosstomper fully grown!",
+          "at": "self",
+          "color": "#86d65c",
+          "size": 24,
+          "if": "counter('mosstomper_seedling_treats') == 40"
+        }
+      ]
+    },
+    {
+      "name": "Recoup",
+      "description": "Away from enemies (no enemy unit within 1000 range, standing in for the jungle), restore 8-18 (by level) mana per second.",
+      "on": "interval",
+      "interval": 1,
+      "if": "near_units(1000) == 0",
+      "effects": [
+        {
+          "type": "mana",
+          "target": "self",
+          "amount": "8 + 0.6 * (min(level, 18) - 1)"
+        }
+      ]
+    },
+    {
+      "name": "Mosstomper's Courage",
+      "description": "Fully grown: gain a lasting 180-300 shield (rises from level 11). It refills after 10s without taking damage, or when you kill a minion outside champion combat. While it holds, gain 20% tenacity and slow resist.",
+      "on": "interval",
+      "interval": 1,
+      "if": "counter('mosstomper_seedling_treats') >= 40 and since_hit >= 10",
+      "effects": [
+        {
+          "type": "shield",
+          "target": "self",
+          "id": "mosstomper_seedling_courage",
+          "amount": "180 + 15 * max(0, min(level, 18) - 10)",
+          "duration": 9999
+        }
+      ]
+    },
+    {
+      "name": "Mosstomper's Courage",
+      "on": "kill",
+      "if": "t_minion and not in_combat and counter('mosstomper_seedling_treats') >= 40",
+      "effects": [
+        {
+          "type": "shield",
+          "target": "self",
+          "id": "mosstomper_seedling_courage",
+          "amount": "180 + 15 * max(0, min(level, 18) - 10)",
+          "duration": 9999
+        }
+      ]
+    }
+  ],
+  "active": {
+    "name": "Smite",
+    "description": "Deal 600 true damage to an enemy minion or summon (900 from 20 treats, 1200 when fully grown). From 20 treats it can also hit an enemy champion for 20-160 (by level) true damage and a 25% slow that fades over 2s.",
+    "cooldown": 45,
+    "targeting": "unit",
+    "range": 500,
+    "effects": [
+      {
+        "type": "damage",
+        "damage_type": "true",
+        "amount": "600 + 300 * int(counter('mosstomper_seedling_treats') >= 20) + 300 * int(counter('mosstomper_seedling_treats') >= 40)",
+        "vfx": "burst",
+        "color": "#86d65c",
+        "if": "not t_champion"
+      },
+      {
+        "type": "item_cooldown",
+        "item": "mosstomper_seedling",
+        "reset": true,
+        "if": "t_champion and counter('mosstomper_seedling_treats') < 20"
+      },
+      {
+        "type": "text",
+        "text": "Your pet needs 20 treats",
+        "at": "self",
+        "color": "#dddddd",
+        "size": 18,
+        "if": "t_champion and counter('mosstomper_seedling_treats') < 20"
+      },
+      {
+        "type": "damage",
+        "damage_type": "true",
+        "amount": "20 + 140 * (min(level, 18) - 1) / 17",
+        "vfx": "burst",
+        "color": "#86d65c",
+        "if": "t_champion and counter('mosstomper_seedling_treats') >= 20"
+      },
+      {
+        "type": "slow",
+        "amount": 0.25,
+        "duration": 1,
+        "if": "t_champion and counter('mosstomper_seedling_treats') >= 20"
+      },
+      {
+        "type": "delay",
+        "time": 1,
+        "effects": [
+          {
+            "type": "slow",
+            "amount": 0.125,
+            "duration": 1
+          }
+        ],
+        "if": "t_champion and counter('mosstomper_seedling_treats') >= 20"
+      }
+    ]
+  }
 }

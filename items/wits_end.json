@@ -20,5 +20,29 @@
     "magic_resist": 40.0
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Fray",
+      "description": "Attacks deal 15-80 bonus magic damage on-hit (15, +10 per level from 9 to 14, then +1.25 per level) and give 20 move speed for 2s.",
+      "on": "attack",
+      "effects": [
+        {
+          "type": "damage",
+          "damage_type": "magic",
+          "amount": "15 + 10 * clamp(level - 8, 0, 6) + 1.25 * clamp(level - 14, 0, 4)",
+          "vfx": "twinkle",
+          "color": "#c58cff"
+        },
+        {
+          "type": "buff",
+          "target": "self",
+          "id": "wits_end_fray",
+          "duration": 2,
+          "add": {
+            "move_speed": 20
+          }
+        }
+      ]
+    }
+  ]
 }

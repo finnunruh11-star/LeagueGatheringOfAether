@@ -17,8 +17,43 @@
   "stats": {
     "attack_damage": 55.0,
     "max_hp": 500.0,
-    "ability_haste": 20.0
+    "ability_haste": 20.0,
+    "move_speed_bonus": "(0.1 + 0.05 * melee) * clamp((1 - hp / max_hp) / 0.67, 0, 1)"
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Dragonforce",
+      "description": "Your Q, W and E have 16 (+4 per 100 bonus AD) extra ability haste (12 (+3 per 100 bonus AD) if ranged), applied as a cooldown cut after each cast. Not halved for crowd-control spells.",
+      "on": "cast",
+      "if": "slot != 'r'",
+      "effects": [
+        {
+          "type": "cooldown",
+          "slot": "q",
+          "percent": true,
+          "if": "slot == 'q'",
+          "amount": "(melee * (16 + 0.04 * bonus_ad) + ranged * (12 + 0.03 * bonus_ad)) / (100 + ah + melee * (16 + 0.04 * bonus_ad) + ranged * (12 + 0.03 * bonus_ad))"
+        },
+        {
+          "type": "cooldown",
+          "slot": "w",
+          "percent": true,
+          "if": "slot == 'w'",
+          "amount": "(melee * (16 + 0.04 * bonus_ad) + ranged * (12 + 0.03 * bonus_ad)) / (100 + ah + melee * (16 + 0.04 * bonus_ad) + ranged * (12 + 0.03 * bonus_ad))"
+        },
+        {
+          "type": "cooldown",
+          "slot": "e",
+          "percent": true,
+          "if": "slot == 'e'",
+          "amount": "(melee * (16 + 0.04 * bonus_ad) + ranged * (12 + 0.03 * bonus_ad)) / (100 + ah + melee * (16 + 0.04 * bonus_ad) + ranged * (12 + 0.03 * bonus_ad))"
+        }
+      ]
+    },
+    {
+      "name": "Exigency",
+      "description": "Gain up to 15% move speed (10% if ranged) based on missing health, maxed below 33% health."
+    }
+  ]
 }

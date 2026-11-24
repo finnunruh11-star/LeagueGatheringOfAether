@@ -13,5 +13,54 @@
     "max_hp": 90.0
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Focus",
+      "description": "Basic attacks deal 5 bonus physical damage to minions.",
+      "on": "attack",
+      "if": "t_minion",
+      "effects": [
+        {
+          "type": "damage",
+          "damage_type": "physical",
+          "amount": 5,
+          "vfx": "spark",
+          "color": "#b8c8ff"
+        }
+      ]
+    },
+    {
+      "name": "Drain",
+      "description": "Restore 1 mana per second, or 1.5 for 10s after you damage an enemy champion. Champions without mana regain 45% of that as health instead.",
+      "on": "interval",
+      "interval": 1,
+      "effects": [
+        {
+          "type": "mana",
+          "target": "self",
+          "amount": "1 + 0.5 * int(has('dorans_ring_drain'))"
+        },
+        {
+          "type": "heal",
+          "target": "self",
+          "amount": "0.45 * (1 + 0.5 * int(has('dorans_ring_drain')))",
+          "if": "max_mana == 0"
+        }
+      ]
+    },
+    {
+      "name": "Drain",
+      "on": "deal_damage",
+      "if": "t_champion",
+      "effects": [
+        {
+          "type": "mark",
+          "target": "self",
+          "id": "dorans_ring_drain",
+          "duration": 10,
+          "max_stacks": 1
+        }
+      ]
+    }
+  ]
 }

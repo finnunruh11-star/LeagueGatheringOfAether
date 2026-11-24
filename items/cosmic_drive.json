@@ -19,5 +19,48 @@
     "move_speed_bonus": 0.05
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Spelldance",
+      "description": "Damaging an enemy champion starts a 5s window (refreshed by more damage). During it you gain a stack of 2.5% move speed every 1.5s, up to 4 stacks; at 4 stacks you gain another 10% (20% in total).",
+      "on": "deal_damage",
+      "if": "t_champion",
+      "effects": [
+        {
+          "type": "mark",
+          "id": "cosmic_drive_dance",
+          "target": "self",
+          "duration": 5
+        }
+      ]
+    },
+    {
+      "name": "Spelldance",
+      "on": "interval",
+      "interval": 1.5,
+      "if": "has('cosmic_drive_dance')",
+      "effects": [
+        {
+          "type": "buff",
+          "id": "cosmic_drive_speed",
+          "target": "self",
+          "duration": 2,
+          "max_stacks": 4,
+          "add": {
+            "move_speed_bonus": 0.025
+          }
+        },
+        {
+          "type": "buff",
+          "id": "cosmic_drive_surge",
+          "target": "self",
+          "duration": 2,
+          "if": "stacks('cosmic_drive_speed') >= 4",
+          "add": {
+            "move_speed_bonus": 0.1
+          }
+        }
+      ]
+    }
+  ]
 }

@@ -13,8 +13,52 @@
   "stats": {
     "max_hp": 250.0,
     "mana_regen_percent": 1.0,
-    "heal_power": 0.15
+    "heal_power": 0.15,
+    "hp_regen_percent": "0.25 * floor(stat('mana_regen_percent') / 0.25 + 0.001) * int(not has_item('mikaels_blessing'))"
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Harmony",
+      "description": "Gain +25% base health regen for every +25% base mana regen you have (doesn't stack with Mikael's Blessing)."
+    }
+  ],
+  "active": {
+    "name": "Intervention",
+    "description": "Call down a beam of light on a spot within 5500 range. After 2.5s, allied champions in a 550 radius heal for 200-400 (by their level) and enemy champions take true damage equal to 10% of their max health. Champions hit by another Intervention in the last 8s get only half.",
+    "cooldown": 90,
+    "targeting": "point",
+    "range": 5500,
+    "effects": [
+      {
+        "type": "area",
+        "radius": 550,
+        "delay": 2.5,
+        "affects": "all",
+        "filter": "champions",
+        "color": "#ffe9a0",
+        "vfx": "star",
+        "effects": [
+          {
+            "type": "heal",
+            "if": "ally",
+            "amount": "(200 + 200 * (min(t_level, 18) - 1) / 17.0) * (1 - 0.5 * int(t_has_any('redemption_recent')))"
+          },
+          {
+            "type": "damage",
+            "if": "not ally",
+            "damage_type": "true",
+            "amount": "0.1 * t_max_hp * (1 - 0.5 * int(t_has_any('redemption_recent')))",
+            "vfx": "star",
+            "color": "#ffe9a0"
+          },
+          {
+            "type": "mark",
+            "id": "redemption_recent",
+            "duration": 8
+          }
+        ]
+      }
+    ]
+  }
 }

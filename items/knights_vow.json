@@ -22,5 +22,109 @@
     "hp_regen_percent": 1.25
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Sacrifice",
+      "description": "While your Worthy ally is within 1250 range, 10% of the damage they take is redirected to you, and you heal for 10% of the damage they deal to champions.",
+      "on": "interval",
+      "interval": 0.5,
+      "effects": [
+        {
+          "type": "area",
+          "at": "self",
+          "radius": 1250,
+          "affects": "allies",
+          "filter": "champions",
+          "exclude_self": true,
+          "show": false,
+          "effects": [
+            {
+              "type": "mark",
+              "id": "knights_vow_link",
+              "duration": 0.75,
+              "if": "t_has('knights_vow_worthy')",
+              "triggers": [
+                {
+                  "on": "take_damage_pre",
+                  "if": "not ally",
+                  "effects": [
+                    {
+                      "type": "modify_damage",
+                      "mult": 0.9
+                    },
+                    {
+                      "type": "damage",
+                      "target": "self",
+                      "damage_type": "true",
+                      "amount": "0.1 * dmg",
+                      "raw": true,
+                      "vfx": "none"
+                    }
+                  ]
+                },
+                {
+                  "on": "deal_damage",
+                  "if": "t_champion and not ally",
+                  "effects": [
+                    {
+                      "type": "heal",
+                      "target": "self",
+                      "amount": "0.1 * dmg"
+                    }
+                  ]
+                }
+              ]
+            }
+          ]
+        }
+      ]
+    }
+  ],
+  "active": {
+    "name": "Pledge",
+    "description": "Choose an allied champion within 1250 range as your Worthy ally (replaces the previous one; the bond ends if they die). Used on yourself, it picks the nearest allied champion instead.",
+    "cooldown": 60,
+    "targeting": "ally",
+    "range": 1250,
+    "effects": [
+      {
+        "type": "area",
+        "at": "self",
+        "radius": 30000,
+        "affects": "allies",
+        "show": false,
+        "effects": [
+          {
+            "type": "remove",
+            "id": "knights_vow_worthy"
+          }
+        ]
+      },
+      {
+        "type": "area",
+        "at": "target",
+        "radius": "10 + 1240 * int(t_self)",
+        "affects": "allies",
+        "filter": "champions",
+        "exclude_self": true,
+        "sort": "nearest",
+        "max_targets": 1,
+        "show": false,
+        "effects": [
+          {
+            "type": "mark",
+            "id": "knights_vow_worthy",
+            "duration": 99999
+          },
+          {
+            "type": "vfx",
+            "kind": "line",
+            "from": "caster",
+            "to": "target",
+            "color": "#9fd0ff"
+          }
+        ]
+      }
+    ]
+  }
 }

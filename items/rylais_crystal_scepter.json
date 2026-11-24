@@ -17,5 +17,20 @@
     "max_hp": 400.0
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Rimefrost",
+      "description": "Ability damage slows enemies by 30% for 1s.",
+      "on": "deal_damage",
+      "if": "is_ability",
+      "effects": [
+        {
+          "type": "slow",
+          "id": "rylais_crystal_scepter_slow",
+          "amount": 0.3,
+          "duration": 1
+        }
+      ]
+    }
+  ]
 }

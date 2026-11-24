@@ -19,5 +19,25 @@
     "ability_haste": 10.0
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Enlighten",
+      "description": "Each level up refills 20% of your max mana over 3s.",
+      "on": "level_up",
+      "effects": [
+        {
+          "type": "repeat",
+          "count": 6,
+          "interval": 0.5,
+          "effects": [
+            {
+              "type": "mana",
+              "target": "self",
+              "amount": "0.2 * max_mana / 6"
+            }
+          ]
+        }
+      ]
+    }
+  ]
 }

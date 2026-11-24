@@ -14,11 +14,38 @@
   ],
   "buyable": false,
   "stats": {
-    "ability_power": 70.0,
+    "ability_power": "70 + 0.025 * bonus('max_mana')",
     "max_mana": 860.0,
     "max_hp": 200.0,
     "ability_haste": 10.0
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Awe",
+      "description": "Gain ability power equal to 2.5% of your bonus mana."
+    },
+    {
+      "name": "Lifeline",
+      "description": "When a hit would leave you below 30% health, gain a shield of 250 + 20% of your current mana for 3s that also absorbs that hit (90s cooldown).",
+      "on": "take_damage_pre",
+      "if": "hp - dmg < 0.3 * max_hp",
+      "cooldown": 90,
+      "effects": [
+        {
+          "type": "shield",
+          "target": "self",
+          "amount": "250 + 0.2 * mana",
+          "duration": 3
+        },
+        {
+          "type": "text",
+          "text": "Lifeline!",
+          "at": "self",
+          "color": "#8fd0ff",
+          "size": 22
+        }
+      ]
+    }
+  ]
 }

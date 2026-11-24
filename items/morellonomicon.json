@@ -18,5 +18,21 @@
     "magic_pen": 10.0
   },
   "description": "",
-  "passives": []
+  "passives": [
+    {
+      "name": "Affliction",
+      "description": "Dealing magic damage to an enemy champion applies 40% Grievous Wounds for 3s.",
+      "on": "deal_damage",
+      "if": "dtype == 'magic' and t_champion",
+      "procs": true,
+      "effects": [
+        {
+          "type": "grievous",
+          "id": "morellonomicon_gw",
+          "amount": 0.4,
+          "duration": 3
+        }
+      ]
+    }
+  ]
 }
