@@ -37,8 +37,16 @@ func setup(d: Dictionary) -> void:
 	var spr := str(d.get("sprite", ""))
 	if spr != "":
 		tex = Content.char_texture(char_id, spr)
+	is_ward = bool(d.get("ward", false))
+	reveal = bool(d.get("reveal", false))
+	if is_ward:
+		stationary = true
+		base_stats.attack_damage = 0.0
+		base_stats.max_hp = float(st.get("max_hp", 4.0)) if st is Dictionary else 4.0
+		base_stats.hp_regen = 0.0
+		gold_value = 25.0
 	separate = not stationary
-	xp_value = 15.0
+	xp_value = 0.0 if is_ward else 15.0
 	global_position = d.pos
 
 
@@ -91,6 +99,15 @@ func _on_death() -> void:
 
 func _draw_body() -> void:
 	var c := color.lerp(Color.WHITE, 0.6) if flash > 0.0 else color
+	if is_ward:
+		var r := radius
+		draw_line(Vector2(0, r * 0.2), Vector2(0, r * 1.1), Color(0.35, 0.3, 0.25), 3.0)
+		draw_colored_polygon(PackedVector2Array([Vector2(0, -r * 1.2), Vector2(r * 0.75, -r * 0.2), Vector2(0, r * 0.5), Vector2(-r * 0.75, -r * 0.2)]), c.darkened(0.3))
+		draw_circle(Vector2(0, -r * 0.3), r * 0.42, Color(0.95, 0.95, 0.9))
+		draw_circle(Vector2(0, -r * 0.3), r * 0.22, c.lightened(0.2) if not reveal else Color(1, 0.3, 0.4))
+		draw_circle(Vector2(0, -r * 0.3), r * 0.1, Color(0.05, 0.05, 0.08))
+		draw_arc(Vector2.ZERO, r * 1.3, 0, TAU, 24, Color(team_color(), 0.5), 1.5, true)
+		return
 	if tex != null:
 		var s := radius * 2.6 / maxf(tex.get_width(), tex.get_height())
 		var size := Vector2(tex.get_width(), tex.get_height()) * s

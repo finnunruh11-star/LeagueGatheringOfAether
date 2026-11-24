@@ -43,9 +43,12 @@ var is_champion := false
 var separate := false
 var xp_value := 0.0
 var gold_value := 0.0
+var is_ward := false        # wards: take 1 damage per basic attack, ignored by minions/towers
+var reveal := false         # reveals stealthed enemies inside its vision (control wards)
 
 var base_stats := Content.DEFAULT_STATS.duplicate()
 var stats := Content.DEFAULT_STATS.duplicate()
+var pre_mult := {}          # stats before multipliers (only filled when some multiplier applies)
 var hp := 100.0
 var mana := 0.0
 var shield := 0.0
@@ -381,10 +384,18 @@ func take_damage(amount: float, source = null, dtype := "physical", hit := {}) -
 		return 0.0
 	var src = source if is_instance_valid(source) and source != self else null
 	var raw := bool(hit.get("raw", false))
+	if is_ward:
+		amount = 1.0 if hit.get("attack", false) else 0.0
+		raw = true
 	if not raw:
 		if src != null:
 			amount *= src.stats.get("damage_mult", 1.0)
 		amount *= stats.get("damage_taken_mult", 1.0)
+		if dtype == "physical":
+			amount *= _mitigation(stats.armor, src, true)
+		elif dtype == "magic":
+			amount *= _mitigation(stats.magic_resist, src, false)
+		# Item/passive hooks see the damage after armor/MR and may change it.
 		var info := {"amount": amount}
 		var vars := _hit_vars(hit, amount, dtype)
 		vars["dmg_info"] = info
@@ -393,11 +404,7 @@ func take_damage(amount: float, source = null, dtype := "physical", hit := {}) -
 		vars.dmg = info.amount
 		trigger("take_damage_pre", src, null, vars)
 		amount = maxf(info.amount, 0.0)
-		if dtype == "physical":
-			amount *= _mitigation(stats.armor, src, true)
-		elif dtype == "magic":
-			amount *= _mitigation(stats.magic_resist, src, false)
-	if amount <= 0.0:
+	if amount <= 0.0 or dead:
 		return 0.0
 	var dealt := amount
 	for s in statuses:
@@ -478,7 +485,7 @@ func heal(amount: float, _source = null, show := true) -> float:
 	amount *= 1.0 - clampf(g, 0.0, 1.0)
 	var before := hp
 	hp = minf(hp + amount, stats.max_hp)
-	if Game.debug_log and amount >= 1.0:
+	if Game.debug_log and hp - before >= 0.5:
 		print("[heal] t=%.2f %s +%.1f (raw %.1f)" % [world.time, display_name, hp - before, amount])
 	if show and hp - before >= 1.0 and (is_champion or self is Summon):
 		world.fx("heal", {"p": global_position, "a": hp - before, "v": net_id, "r": radius})
@@ -617,6 +624,10 @@ func recompute_stats() -> void:
 				mult[k] = float(mult.get(k, 1.0)) * s.mult[k]
 		elif s.type == "slow":
 			slow = maxf(slow, s.amount)
+	if not mult.is_empty():
+		pre_mult = st.duplicate()
+	elif not pre_mult.is_empty():
+		pre_mult = {}
 	for k in mult:
 		st[k] = float(st.get(k, 0.0)) * mult[k]
 	st.attack_speed = minf(st.attack_speed * maxf(1.0 + st.bonus_attack_speed, 0.1), st.attack_speed_cap)

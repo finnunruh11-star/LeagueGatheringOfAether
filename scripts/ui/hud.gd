@@ -534,20 +534,22 @@ func _draw_item_slot(c: Control, i: int) -> void:
 	if it == null:
 		c.draw_rect(r, Color(0.25, 0.27, 0.32), false, 1.0)
 	else:
-		ItemUI.draw_icon(c, r.grow(-2), it)
-		var inst: Dictionary = ch.items[i]
-		if inst.cd > 0.0:
-			var frac := clampf(inst.cd / maxf(inst.cd_total, 0.01), 0.0, 1.0)
+		var view := ch.item_view(i)
+		var n := int(view[0])
+		var cd: float = view[1]
+		ItemUI.draw_icon(c, r.grow(-2), it, it.charges > 0 and n <= 0)
+		if cd > 0.0:
+			var frac := clampf(cd / maxf(view[2], 0.01), 0.0, 1.0)
 			c.draw_rect(Rect2(0, c.size.y * (1.0 - frac), c.size.x, c.size.y * frac), Color(0, 0, 0, 0.65))
-			var txt := ("%.1f" % inst.cd) if inst.cd < 1.0 else str(ceili(inst.cd))
+			var txt := ("%.1f" % cd) if cd < 1.0 else str(ceili(cd))
 			c.draw_string_outline(font, Vector2(0, 29), txt, HORIZONTAL_ALIGNMENT_CENTER, c.size.x, 16, 4, Color.BLACK)
 			c.draw_string(font, Vector2(0, 29), txt, HORIZONTAL_ALIGNMENT_CENTER, c.size.x, 16)
-		if int(inst.n) > 1:
-			c.draw_string_outline(font, Vector2(0, c.size.y - 3), str(inst.n), HORIZONTAL_ALIGNMENT_RIGHT, c.size.x - 3, 13, 3, Color.BLACK)
-			c.draw_string(font, Vector2(0, c.size.y - 3), str(inst.n), HORIZONTAL_ALIGNMENT_RIGHT, c.size.x - 3, 13)
+		if n > 1 or it.display != null or it.charges > 0:
+			c.draw_string_outline(font, Vector2(0, c.size.y - 3), str(n), HORIZONTAL_ALIGNMENT_RIGHT, c.size.x - 3, 13, 3, Color.BLACK)
+			c.draw_string(font, Vector2(0, c.size.y - 3), str(n), HORIZONTAL_ALIGNMENT_RIGHT, c.size.x - 3, 13)
 		if world.aim_slot == "i%d" % i:
 			c.draw_rect(r, Color(0.45, 0.8, 1.0), false, 3.0)
-		elif it.active != null and inst.cd <= 0.0:
+		elif it.active != null and cd <= 0.0:
 			c.draw_rect(r, Color(0.9, 0.8, 0.45, 0.8), false, 1.5)
 	c.draw_string_outline(font, Vector2(3, 12), str(i + 1), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, 3, Color.BLACK)
 	c.draw_string(font, Vector2(3, 12), str(i + 1), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1, 0.95, 0.8))

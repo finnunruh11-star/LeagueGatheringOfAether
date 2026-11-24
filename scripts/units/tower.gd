@@ -76,7 +76,7 @@ func _pick() -> Unit:
 	var best: Unit = null
 	var best_score := INF
 	for u in world.units:
-		if u.team == team or u.dead or u.is_structure or not u.targetable():
+		if u.team == team or u.dead or u.is_structure or u.is_ward or not u.targetable() or not u.visible_to(team):
 			continue
 		var d := global_position.distance_to(u.global_position)
 		if d > attack_reach(u):

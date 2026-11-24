@@ -8,6 +8,9 @@ const SKILL_POINT_LEVELS := 18
 const SLOTS := ["q", "w", "e", "r"]
 const ITEM_SLOTS := 6
 const SELL_RATIO := 0.7
+## Events that item/passive effects can't set off again (no infinite proc chains) unless the
+## trigger has "procs": true.
+const PROC_GUARDED := ["deal_damage", "deal_damage_pre", "heal_ally", "shield_ally"]
 
 var peer := 0
 var def := {}
@@ -35,6 +38,8 @@ var trig_list: Array = []      # [{tr, key, src, slot, name, color}]
 var trig_by_event := {}
 var trigger_counts := {}
 var trigger_cds := {}
+var trigger_cd_total := {}
+var slot_keys: Array = [[], [], [], [], [], []]   # item slot -> its trigger keys (passive cooldown display)
 var interval_timers := {}
 var _trigger_depth := 0
 var _dynamic_stats := false
@@ -308,6 +313,7 @@ func max_ranks() -> void:
 ## Passives with the same "unique" name (default: item id + index) don't stack.
 func _rebuild_triggers() -> void:
 	trig_list = []
+	slot_keys = [[], [], [], [], [], []]
 	var seen := {}
 	var ptr: Array = def.passive.triggers
 	for i in ptr.size():
@@ -328,6 +334,7 @@ func _rebuild_triggers() -> void:
 			if seen.has(u):
 				continue
 			seen[u] = true
+			slot_keys[slot].append(key)
 			trig_list.append({"tr": p, "key": key, "src": inst.id, "slot": slot, "name": it.name, "color": it.color})
 	trig_by_event = {}
 	for r in trig_list:
@@ -344,11 +351,12 @@ func trigger(event: String, target = null, pos = null, extra := {}, only := "") 
 	if list == null:
 		return _status_triggers(event, target, pos, extra) if only == "" else false
 	var fired := false
+	var excl := str(extra.get("exclude", ""))
 	for r in list:
 		var tr: Dictionary = r.tr
-		if (only != "" and r.key != only) or trigger_cds.get(r.key, 0.0) > 0.0:
+		if (only != "" and r.key != only) or trigger_cds.get(r.key, 0.0) > 0.0 or (excl != "" and r.key == excl):
 			continue
-		if extra.get("is_proc", false) and event.begins_with("deal_damage") and not tr.get("procs", false):
+		if extra.get("is_proc", false) and event in PROC_GUARDED and not tr.get("procs", false):
 			continue
 		if event == "low_health" and hp > stats.max_hp * float(tr.get("threshold", 0.3)):
 			continue
@@ -371,6 +379,7 @@ func trigger(event: String, target = null, pos = null, extra := {}, only := "") 
 		if tr.has("chance") and randf() > Effects.num(tr.chance, ctx, 1.0):
 			continue
 		trigger_cds[r.key] = Effects.num(tr.get("cooldown", 0.0), ctx, 0.0)
+		trigger_cd_total[r.key] = trigger_cds[r.key]
 		if Game.debug_log and event != "interval":
 			print("[proc] t=%.2f %s: %s '%s' on %s" % [world.time, display_name, r.key, str(tr.get("name", r.name)), event])
 		_trigger_depth += 1
@@ -397,7 +406,7 @@ func _status_triggers(event: String, target, pos, extra: Dictionary) -> bool:
 			var key := "s:%s:%d" % [s.key, j]
 			if trigger_cds.get(key, 0.0) > 0.0:
 				continue
-			if extra.get("is_proc", false) and event.begins_with("deal_damage") and not tr.get("procs", false):
+			if extra.get("is_proc", false) and event in PROC_GUARDED and not tr.get("procs", false):
 				continue
 			var giver = s.source if is_instance_valid(s.source) and not s.source.dead else self
 			var tgt = target if is_instance_valid(target) else self
@@ -539,6 +548,8 @@ func check_buy(id: String) -> String:
 		return "That item can't be bought"
 	if not can_shop():
 		return "You can only shop in your base (or while dead)"
+	if level < int(it.min_level):
+		return "Requires level %d" % int(it.min_level)
 	var p := price_for(id)
 	if gold + 0.01 < p.cost:
 		return "Not enough gold (%d needed)" % p.cost
@@ -604,11 +615,17 @@ func buy(id: String) -> String:
 		for s in freed:
 			items[s] = null
 		var slot: int = freed[0] if not freed.is_empty() else _free_slot()
-		items[slot] = {"id": id, "n": 1, "cd": 0.0, "cd_total": 1.0}
+		items[slot] = new_instance(id)
 	_items_changed()
 	world.fx("buy", {"v": net_id, "i": id})
 	trigger("buy", self, null, {"amount": float(p.cost)})
 	return ""
+
+
+func new_instance(id: String) -> Dictionary:
+	var it = Game.items.get(id)
+	var n: int = it.charges if it != null and it.charges > 0 else 1
+	return {"id": id, "n": n, "cd": 0.0, "cd_total": 1.0}
 
 
 func sell(slot: int) -> String:
@@ -619,7 +636,7 @@ func sell(slot: int) -> String:
 		return "You can only sell in your base (or while dead)"
 	gold += floorf(it.cost * SELL_RATIO)
 	items[slot].n -= 1
-	if items[slot].n <= 0:
+	if items[slot].n <= 0 or it.charges > 0:
 		items[slot] = null
 	_items_changed()
 	return ""
@@ -629,7 +646,7 @@ func sell(slot: int) -> String:
 func transform_item(slot: int, into: String) -> void:
 	if slot < 0 or slot >= ITEM_SLOTS or items[slot] == null or not Game.items.has(into):
 		return
-	items[slot] = {"id": into, "n": 1, "cd": 0.0, "cd_total": 1.0}
+	items[slot] = new_instance(into)
 	_items_changed()
 	world.fx("text", {"pos": global_position + Vector2(0, -90), "text": Game.items[into].name + "!", "color": Color(1, 0.85, 0.4), "size": 22})
 
@@ -650,7 +667,7 @@ func use_item(slot: int, aim: Vector2, tid: int) -> bool:
 	if it == null or it.active == null or dead or has_status("stasis"):
 		return false
 	var inst: Dictionary = items[slot]
-	if inst.cd > 0.0:
+	if inst.cd > 0.0 or (it.charges > 0 and int(inst.n) <= 0):
 		return false
 	var ab: Dictionary = it.active
 	var ctx := _make_ctx(ab, aim, tid)
@@ -673,7 +690,7 @@ func use_item(slot: int, aim: Vector2, tid: int) -> bool:
 	Effects.run(ab.effects, ctx)
 	if ab.get("consume", false) and items[slot] == inst:
 		inst.n -= 1
-		if inst.n <= 0:
+		if inst.n <= 0 and it.charges <= 0:
 			items[slot] = null
 			_items_changed()
 	trigger("item_used", self, ctx.pos, {"cast_slot": inst.id})
@@ -777,9 +794,18 @@ func _think(delta: float) -> void:
 func _tick_items(delta: float) -> void:
 	for k in trigger_cds:
 		trigger_cds[k] -= delta
+	var home := -1.0
 	for inst in items:
-		if inst != null and inst.cd > 0.0:
+		if inst == null:
+			continue
+		if inst.cd > 0.0:
 			inst.cd = maxf(inst.cd - delta, 0.0)
+		var it = Game.items.get(inst.id)
+		if it != null and it.refill and int(inst.n) < it.charges:
+			if home < 0.0:
+				home = global_position.distance_to(world.map.spawn_point(team))
+			if home <= world.map.fountain_radius * 1.25:
+				inst.n = it.charges
 
 
 func _act(delta: float) -> void:
@@ -888,11 +914,12 @@ func net_state() -> PackedFloat32Array:
 		cooldowns.q, cooldowns.w, cooldowns.e, cooldowns.r, cd_total.q, cd_total.w, cd_total.e, cd_total.r,
 		stats.attack_range, stats.move_speed, stats.attack_damage, stats.ability_power,
 		mana, stats.max_mana, gold, skill_points, ranks.q, ranks.w, ranks.e, ranks.r, assists, energy])
-	for inst in items:
-		if inst == null:
+	for i in ITEM_SLOTS:
+		if items[i] == null:
 			s.append_array([0, 0, 0, 1])
 		else:
-			s.append_array([Game.item_index.get(inst.id, 0), inst.n, inst.cd, inst.cd_total])
+			var v := item_view(i)
+			s.append_array([Game.item_index.get(items[i].id, 0), v[0], v[1], v[2]])
 	for k in HUD_STATS:
 		var v: float = stats.get(k, 0.0)
 		if k == "hp_regen":
@@ -901,6 +928,30 @@ func net_state() -> PackedFloat32Array:
 			v *= 1.0 + stats.mana_regen_percent
 		s.append(v)
 	return s
+
+
+## What an item slot shows: [count or stacks, cooldown, cooldown total]. Items without an
+## active show their passive's cooldown; items with "display" show that number.
+func item_view(i: int) -> Array:
+	var inst = items[i]
+	if inst == null:
+		return [0, 0.0, 1.0]
+	if puppet:
+		return [inst.n, inst.cd, inst.cd_total]
+	var it = Game.items.get(inst.id)
+	var n = inst.n
+	var cd: float = inst.cd
+	var tot: float = inst.cd_total
+	if it != null:
+		if it.display != null:
+			n = int(Effects.num(it.display, {"caster": self, "target": self, "rank": level}, 0.0))
+		if it.active == null:
+			for k in slot_keys[i]:
+				var r: float = trigger_cds.get(k, 0.0)
+				if r > cd:
+					cd = r
+					tot = maxf(trigger_cd_total.get(k, r), 0.01)
+	return [n, cd, tot]
 
 
 func apply_net_state(s: PackedFloat32Array) -> void:

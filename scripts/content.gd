@@ -58,6 +58,7 @@ const EFFECT_TYPES := [
 	"cooldown", "text", "sound",
 	"mana", "gold", "mark", "remove", "counter", "stasis", "stealth", "spellshield", "grievous",
 	"untargetable", "modify_damage", "transform", "vfx", "attack_reset", "item_cooldown",
+	"shield_break", "fire_event",
 ]
 const NESTED_KEYS := ["effects", "on_hit", "on_end", "on_expire", "on_death", "options"]
 const ITEM_RARITIES := ["basic", "epic", "legendary", "mythic", "boots", "starter", "consumable", "jungle", "transform"]
@@ -198,6 +199,10 @@ static func _item(id: String, raw: Dictionary, holder: Dictionary, errors: Packe
 			it.groups.append(str(x))
 	it.limit = int(raw.get("limit", 1 if it.rarity in ["legendary", "mythic", "boots", "jungle"] else 0))
 	it.stack = maxi(int(raw.get("stack", 1)), 1)
+	it.charges = maxi(int(raw.get("charges", 0)), 0)
+	it.refill = bool(raw.get("refill", it.charges > 0))
+	it.min_level = int(raw.get("min_level", 0))
+	it.display = raw.get("display") if raw.get("display") is String or raw.get("display") is float or raw.get("display") is int else null
 	it.consumable = bool(raw.get("consumable", it.rarity == "consumable"))
 	it.buyable = bool(raw.get("buyable", it.rarity != "transform"))
 	it.transform_into = str(raw.get("transform_into", ""))

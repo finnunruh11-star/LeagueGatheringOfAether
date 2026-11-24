@@ -16,6 +16,7 @@ const VARS := [
 	"t_mr", "t_mana", "t_max_mana", "t_champion", "t_minion", "t_structure", "t_ranged", "t_level", "t_bonus_hp", "t_ms",
 	"dmg", "dtype", "crit_hit", "is_attack", "is_ability", "is_dot", "is_aoe", "slot", "amount",
 	"in_combat", "combat_time", "since_hit", "since_combat", "gold", "kills", "deaths", "assists", "energy", "legendaries", "moving",
+	"cc", "t_self", "at_base", "t_summon",
 ]
 
 
@@ -100,6 +101,21 @@ class Env extends RefCounted:
 	func cd(slot: String) -> float:
 		var c := _u("caster")
 		return float(c.cooldowns.get(slot, 0.0)) if c is Champion else 0.0
+
+	## Full cooldown of the slot's last cast (for "refund X% of the ultimate's cooldown").
+	func cd_total(slot: String) -> float:
+		var c := _u("caster")
+		return float(c.cd_total.get(slot, 0.0)) if c is Champion else 0.0
+
+	## A stat before multipliers (stats_mult / buff multiply) were applied, e.g. Guinsoo's crit conversion.
+	func pre(n: String) -> float:
+		var c := _u("caster")
+		return float(c.pre_mult.get(n, c.stats.get(n, 0.0))) if c != null else 0.0
+
+	## The unit carrying the buff/mark whose trigger is running.
+	func h_stat(n: String) -> float:
+		var h := _u("holder")
+		return float(h.stats.get(n, 0.0)) if h != null else 0.0
 
 	func has_item(id: String) -> bool:
 		var c := _u("caster")
@@ -244,6 +260,11 @@ static func _values(ctx: Dictionary) -> Array:
 	vals[51] = 1.0 if ctx.get("is_aoe", false) else 0.0
 	vals[52] = str(ctx.get("cast_slot", ""))
 	vals[53] = float(ctx.get("amount", 0.0))
+	vals[65] = str(ctx.get("cc", ""))
+	vals[66] = 1.0 if cv and tv and c == t else 0.0
+	if cv and Game.world != null and Game.world.map != null:
+		vals[67] = 1.0 if c.global_position.distance_to(Game.world.map.spawn_point(c.team)) <= Game.world.map.fountain_radius * 1.25 else 0.0
+	vals[68] = 1.0 if tv and t is Summon else 0.0
 	return vals
 
 
@@ -296,7 +317,7 @@ static func _one(e: Dictionary, ctx: Dictionary) -> void:
 					amt *= 1.0 + c.stats.get("heal_power", 0.0)
 				var healed := u.heal(amt, c, bool(e.get("show", true)))
 				if c and u != c and u.is_champion and healed > 0.0:
-					c.trigger("heal_ally", u, null, {"amount": healed})
+					c.trigger("heal_ally", u, null, {"amount": healed, "is_proc": bool(ctx.get("proc", false))})
 		"shield":
 			var u := _unit(e, ctx)
 			if u:
@@ -304,10 +325,28 @@ static func _one(e: Dictionary, ctx: Dictionary) -> void:
 				var amt: float = num(e.get("amount"), ctx, 100.0) * rmult * (1.0 + u.stats.get("heal_received", 0.0))
 				if c:
 					amt *= 1.0 + c.stats.get("heal_power", 0.0)
+				for s in u.statuses:
+					if s.type == "shield_break":
+						amt *= 1.0 - clampf(s.amount, 0.0, 1.0)
 				_add(u, {"type": "shield", "amount": amt, "time": num(e.get("duration"), ctx, 3.0),
 					"dtype": str(e.get("damage_type", "all"))}, e, ctx)
 				if c and u != c and u.is_champion:
-					c.trigger("shield_ally", u, null, {"amount": amt})
+					c.trigger("shield_ally", u, null, {"amount": amt, "is_proc": bool(ctx.get("proc", false))})
+		"shield_break":
+			var u := _unit(e, ctx)
+			if u:
+				var f := clampf(num(e.get("amount"), ctx, 0.5), 0.0, 1.0)
+				for s in u.statuses:
+					if s.type == "shield":
+						s.amount *= 1.0 - f
+				var d := num(e.get("duration"), ctx, 0.0)
+				if d > 0.0:
+					_add(u, {"type": "shield_break", "amount": f, "time": d}, e, ctx)
+		"fire_event":
+			var c := _caster(ctx)
+			if c:
+				var ex := {"crit_hit": false, "onhit": true, "exclude": str(ctx.get("trigger_key", ""))}
+				c.trigger(str(e.get("event", "attack")), ctx.get("target"), null, ex)
 		"stun", "root", "silence":
 			var u := _unit(e, ctx)
 			if u and not _blocked(u, ctx):
@@ -513,7 +552,11 @@ static func _one(e: Dictionary, ctx: Dictionary) -> void:
 
 static func _unit(e: Dictionary, ctx: Dictionary) -> Unit:
 	var who := str(e.get("target", "target"))
-	var u = ctx.get("caster") if who == "self" or who == "caster" else ctx.get("target")
+	var u = ctx.get("target")
+	if who == "self" or who == "caster":
+		u = ctx.get("caster")
+	elif who == "holder":
+		u = ctx.get("holder", ctx.get("caster"))
 	if is_instance_valid(u) and u is Unit and not u.dead:
 		return u
 	return null
@@ -594,6 +637,10 @@ static func _pos(spec, ctx: Dictionary) -> Vector2:
 		var t = ctx.get("target")
 		if is_instance_valid(t):
 			return t.global_position
+	if s == "holder":
+		var h = ctx.get("holder")
+		if is_instance_valid(h):
+			return h.global_position
 	if s == "origin":
 		return ctx.get("origin", Vector2.ZERO)
 	return ctx.get("pos", ctx.get("origin", Vector2.ZERO))
@@ -799,6 +846,7 @@ static func _summon(e: Dictionary, ctx: Dictionary) -> void:
 			"color": _color(e, ctx), "stats": st, "ranged": bool(e.get("ranged", false)),
 			"size": num(e.get("size"), ctx, 0.7), "sprite": str(e.get("sprite", "")),
 			"char": str(ctx.get("char", "")), "stationary": bool(e.get("stationary", false)),
+			"ward": bool(e.get("ward", false)), "reveal": bool(e.get("reveal", false)),
 		})
 		s.init_server(_caster(ctx), num(e.get("duration"), ctx, 10.0), e, sub(ctx))
 		w.fx("spawn", {"p": s.global_position, "c": s.color, "r": s.radius})

@@ -113,14 +113,20 @@ dashes, delays and repeats contain their own effect lists. Any effect may also h
 | `dist`, `ally`, `i`, `time` | distance to target; 1 if target is an ally; repeat index / trigger count; match time |
 | `in_combat`, `combat_time`, `since_hit`, `since_combat` | champion-combat state (seconds) |
 | `gold`, `kills`, `deaths`, `assists`, `energy`, `legendaries` | your score, Energize stacks (0-100), legendary item count |
-| `dmg`, `dtype`, `crit_hit`, `is_attack`, `is_ability`, `is_dot`, `is_aoe` | inside damage triggers: the hit |
+| `dmg`, `dtype`, `crit_hit`, `is_attack`, `is_ability`, `is_dot`, `is_aoe` | inside damage triggers: the hit (`dmg` is after armor/MR) |
 | `slot` | inside `cast`/`rank_up` triggers: which ability ("q"... compare with `slot == 'r'`) |
 | `amount` | inside `heal_ally`/`shield_ally` triggers: how much |
+| `cc` | inside `cc_applied` triggers: "stun", "root", "slow", "silence", "knockback" or "pull" |
+| `t_self` | 1 if the target is you |
+| `at_base` | 1 while you stand in your fountain |
+| `t_summon` | 1 if the target is a summon (turrets, wards, pets...) |
 
 Functions: `has('id')` (you have a status/mark with that id or type), `t_has('id')` (target has it, from
 you - or any status of that type like `'stun'`), `t_has_any('id')`, `stacks('id')`, `t_stacks('id')`,
-`counter('id')`, `stat('name')`, `t_stat('name')`, `base('name')`, `bonus('name')`,
-`near_allies(r)`, `near_enemies(r)` (champions), `near_units(r)`, `cd('q')`, `has_item('id')`, `item_count('legendary')`.
+`counter('id')`, `stat('name')`, `t_stat('name')`, `base('name')`, `bonus('name')`, `pre('name')` (a stat
+before multipliers, e.g. crit chance before Guinsoo's sets it to 0), `h_stat('name')` (stat of the unit
+holding the buff whose trigger runs), `near_allies(r)`, `near_enemies(r)` (champions), `near_units(r)`,
+`cd('q')` (remaining), `cd_total('r')` (full cooldown of the last cast), `has_item('id')`, `item_count('legendary')`.
 Godot math and logic work too: `min`, `max`, `clamp`, `pow`, `sqrt`, `randf()`, `and`, `or`, `not`,
 `a if cond else b`, `[10, 20, 30][rank - 1]`.
 
@@ -139,6 +145,7 @@ Godot math and logic work too: `min`, `max`, `clamp`, `pow`, `sqrt`, `randf()`, 
 | `buff` | `duration` 4, `add` {stat: value}, `multiply` {stat: factor}; stacking: `max_stacks` 5 (+`stacks` per application, `refresh` true) - each stack adds the values again |
 | `mark` | invisible stackable marker for bookkeeping: `id` (required), `duration` 5, `stacks` 1, `max_stacks` |
 | `remove` | removes your status with `id` from the target (`any_source`: from anyone), or `status`: "slow" (a whole type) |
+| `shield_break` | reduces the target's current shields by `amount` (0.5 = half); with `duration`, shields they gain meanwhile are reduced too |
 | `cleanse` | removes stun/root/slow/silence/dot/grievous |
 | `knockback` | `distance` 220, `duration` 0.25, `from` "origin" (center of the blast / projectile) or "self" |
 | `pull` | toward you; `distance` (default: all the way), `duration` 0.25 |
@@ -157,7 +164,8 @@ ability effects (not basic attacks or item effects).
 | `cooldown` | `slot` "q"/"w"/"e"/"r"/"basic" (q+w+e)/"all", `amount` seconds (or fraction of the remaining time with `"percent": true`), or `"reset": true` |
 | `item_cooldown` | `item` id or "all", `amount` / `reset` |
 | `attack_reset` | your next basic attack is ready immediately |
-| `modify_damage` | only inside `deal_damage_pre` / `take_damage_pre` triggers: `mult`, `add` change the incoming hit |
+| `modify_damage` | only inside `deal_damage_pre` / `take_damage_pre` triggers: `mult`, `add` change the hit (after armor/MR) |
+| `fire_event` | runs your triggers for `event` (default "attack") again on the current target, except the trigger doing it - e.g. "apply on-hit effects twice" |
 | `transform` | only in item passives: replace this item with `into` (e.g. Manamune -> Muramana) |
 
 ### Movement (you)
@@ -234,8 +242,9 @@ Inside a trigger, `rank` is your level, so `[..18 values..]` lists scale with le
 | `spawn`, `level_up`, `rank_up`, `buy`, `item_used` | as named |
 
 **Triggers on statuses**: a `buff` or `mark` can carry `"triggers": [...]` that work while it lasts
-(any event except `interval`). They run as whoever applied the status, aimed at the event's target.
-Extra keys: `"consume": true` (status ends after firing) or `"charges": 3`. Example - an ability
+(any event except `interval`). They run as whoever applied the status, aimed at the event's target;
+`"target": "holder"` (and `"at": "holder"`) means the unit carrying the status. Extra keys:
+`"consume": true` (status ends after firing) or `"charges": 3`. Example - an ability
 that makes your next 3 attacks burn:
 ```jsonc
 {"type": "buff", "target": "self", "id": "hot_hands", "duration": 6, "triggers": [
@@ -259,6 +268,9 @@ fountain or while dead (anywhere in Practice / the Training Arena). Keys **1-6**
   "tags": ["Damage", "CriticalStrike", "AttackSpeed"],          // shop categories / bot builds
   "group": "lifeline",             // optional: only one item per group (string or list)
   "stack": 5,                      // optional: how many fit in one slot (potions)
+  "charges": 2,                    // optional: uses per item; refilled in your fountain ("refill": false to disable); kept when empty
+  "min_level": 9,                  // optional: level needed to buy (elixirs)
+  "display": "counter('glory')",   // optional: number shown on the item slot (stacks)
   "limit": 1,                      // optional: max owned (default 1 for legendary/mythic/boots/jungle, else unlimited)
   "buyable": true,                 // false = can only be obtained via "transform"
   "stats": {"attack_damage": 40, "bonus_attack_speed": 0.3, "crit_chance": 0.2},
@@ -288,10 +300,12 @@ per-target ramp), `thornmail.json` (`attacked`), `ludens_tempest.json` (`deal_da
 ## Testing items
 ```
 godot --headless --path . -- --auto=practice --map=arena --itemtest=kraken_slayer,sheen
-    [--char=gizmo] [--enemy=sir_bonk] [--enemy_items=thornmail] [--level=11]
+    [--char=gizmo] [--enemy=sir_bonk] [--ally=mender] [--enemy_items=thornmail] [--level=11]
     [--steps=attack:4,cast:q,item:0,hurt:300,hurtm:300,enemy_attack:3,lowhp,kill,move:400,buy:boots,wait:2,stats]
 ```
-prints every damage/heal/status/proc with the item that caused it. In a Practice match you can
+prints every damage/heal/status/proc with the item that caused it. All steps are listed at the top of
+`scripts/itemtest.gd` (allies, minions, crowd control, assists, levels, HP/mana, fountain...).
+Item slots show passive cooldowns and `display` numbers automatically. In a Practice match you can
 also press **F1** (level up), **F2** (+1000 gold), **F3** (reset cooldowns, refill mana), **F4** (max ranks).
 
 ## Sprites

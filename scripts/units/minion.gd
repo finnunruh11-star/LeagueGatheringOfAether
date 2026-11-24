@@ -63,7 +63,7 @@ func _find_target() -> Unit:
 	var best: Unit = null
 	var best_score := INF
 	for u in world.units:
-		if u.team == team or u.dead or not u.targetable():
+		if u.team == team or u.dead or not u.targetable() or u.is_ward or not u.visible_to(team):
 			continue
 		var d := global_position.distance_to(u.global_position)
 		if d > 480.0 + u.radius:
