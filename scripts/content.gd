@@ -42,7 +42,7 @@ const DEFAULT_STATS := {
 	"heal_to_bond": 0.0,         # fraction of healing received that becomes Bond of Life instead (no HP restored)
 	"tenacity": 0.0,             # shortens stuns/roots/silences/slows
 	"slow_resist": 0.0,
-	"vision": 900.0,             # sight radius (fog of war)
+	"vision": 1350.0,            # sight radius (fog of war)
 	"size": 1.0,
 	"damage_mult": 1.0,
 	"damage_taken_mult": 1.0,
@@ -51,7 +51,7 @@ const DEFAULT_STATS := {
 	"ghost": 0.0,                # > 0: walks through other units (Ghost)
 }
 
-const DEFAULT_PER_LEVEL := {"max_hp": 75.0, "attack_damage": 3.5, "armor": 2.0, "magic_resist": 1.0, "hp_regen": 0.12,
+const DEFAULT_PER_LEVEL := {"max_hp": 100.0, "attack_damage": 3.5, "armor": 2.0, "magic_resist": 1.0, "hp_regen": 0.12,
 	"ability_power": 8.0, "bonus_attack_speed": 0.025}
 
 const EFFECT_TYPES := [

@@ -15,9 +15,10 @@ var lanes: Array = []
 var structures: Array = []
 var dummies: Array = []
 var wave_interval := 30.0
-var first_wave := 10.0
+var first_wave := 65.0
 var wave_melee := 3
-var wave_ranged := 2
+var wave_ranged := 3
+var rift_waves := false
 var fountain_radius := 280.0
 var ground := Color("2e4a2f")
 var lane_color := Color("6e5f45")
@@ -60,7 +61,8 @@ func build(d: Dictionary) -> void:
 			continue
 		var pos := _v(t.get("pos"), Vector2.ZERO)
 		var team := int(t.get("team", 0))
-		var info := {"kind": "tower", "team": team, "lane": int(t.get("lane", 0)), "order": int(t.get("order", 0)), "pos": pos}
+		var info := {"kind": str(t.get("kind", "tower")), "team": team, "lane": int(t.get("lane", 0)),
+			"order": int(t.get("order", 0)), "pos": pos}
 		structures.append(info)
 		if mirror and team == 0:
 			var m := info.duplicate()
@@ -75,6 +77,7 @@ func build(d: Dictionary) -> void:
 		first_wave = float(wv.get("first", first_wave))
 		wave_melee = int(wv.get("melee", wave_melee))
 		wave_ranged = int(wv.get("ranged", wave_ranged))
+		rift_waves = bool(wv.get("rift", false))
 	fountain_radius = float(d.get("fountain_radius", fountain_radius))
 	_build_bodies()
 	_build_grid()

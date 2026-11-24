@@ -23,7 +23,7 @@
     "move_speed": 355,
     "attack_damage": 55,
     "attack_speed": 1.0,
-    "attack_range": 100,
+    "attack_range": 125,
     "armor": 22
   },
   "per_level": {"max_hp": 85, "attack_damage": 4},

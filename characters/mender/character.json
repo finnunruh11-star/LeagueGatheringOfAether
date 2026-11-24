@@ -8,14 +8,14 @@
     "move_speed": 330,
     "attack_damage": 44,
     "attack_speed": 0.7,
-    "attack_range": 450,
-    "armor": 18,
+    "attack_range": 525,
+    "armor": 25,
     "ability_power": 35,
     "max_mana": 400,
     "mana_regen": 2.0
   },
   "per_level": {
-    "max_hp": 80,
+    "max_hp": 90,
     "attack_damage": 2.5,
     "ability_power": 10,
     "max_mana": 30,

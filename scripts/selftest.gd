@@ -15,6 +15,9 @@ func _ready() -> void:
 		print("[selftest] no world")
 		get_tree().quit(1)
 		return
+	if Game.cmdline.get("selftest") == "balance":
+		_test_balance()
+		return
 	for e in world.entities.values():
 		if e is Dummy:
 			world.despawn(e)
@@ -85,3 +88,76 @@ func _ready() -> void:
 		dummy.statuses.clear()
 	print("[selftest] done")
 	get_tree().quit()
+
+
+func _test_balance() -> void:
+	if not world.map.rift_waves:
+		_check(false, "balance test requires --map=two_lanes")
+		get_tree().quit(1)
+		return
+	var ok := true
+	var base: Tower
+	var inhibitor: Tower
+	var guards: Array[Tower] = []
+	var lane_turrets: Array[Tower] = []
+	for s in world.structures:
+		if s.team != 1:
+			continue
+		if s.is_nexus:
+			base = s
+		elif s.is_nexus_turret:
+			guards.append(s)
+		elif s.lane == 0:
+			if s.is_inhibitor:
+				inhibitor = s
+			else:
+				lane_turrets.append(s)
+	if base == null or inhibitor == null or guards.size() != 2 or lane_turrets.size() != 3:
+		_check(false, "missing base structures")
+		get_tree().quit(1)
+		return
+	var lethal := 50000.0
+	ok = _check(is_zero_approx(inhibitor.take_damage(lethal, null, "true")), "lane turrets protect inhibitor") and ok
+	ok = _check(guards[0].is_protected() and base.is_protected(), "intact inhibitors protect base") and ok
+	world.wave_count = 2
+	world._waves(world.wave_timer)
+	world.time += 6.0
+	world._run_scheduled()
+	var cannons := 0
+	var wave_units := 0
+	for u in world.units:
+		if u is Minion:
+			wave_units += 1
+			if u.minion_type == "siege":
+				cannons += 1
+	ok = _check(cannons == 4 and wave_units == 28, "third wave spawns three melee, three casters and one cannon per team per lane") and ok
+	lane_turrets.sort_custom(func(a, b): return a.order < b.order)
+	for s in lane_turrets:
+		s.take_damage(lethal, null, "true")
+	inhibitor.take_damage(lethal, null, "true")
+	ok = _check(inhibitor.dead and not guards[0].is_protected() and base.is_protected(), "inhibitor destruction opens only Nexus turrets") and ok
+	ok = _check("super" in world._wave_types(0, 0) and "siege" not in world._wave_types(0, 0)
+		and "super" not in world._wave_types(0, 1) and "super" not in world._wave_types(1, 0), "supers replace cannons only on the attacking lane") and ok
+	guards[0].take_damage(lethal, null, "true")
+	ok = _check(base.is_protected(), "one surviving Nexus turret still protects Nexus") and ok
+	guards[1].take_damage(lethal, null, "true")
+	ok = _check(not base.is_protected(), "Nexus opens with both Nexus turrets and one inhibitor down") and ok
+	world.time += 299.0
+	world._run_scheduled()
+	ok = _check(inhibitor.dead, "inhibitor remains down before five minutes") and ok
+	world.time += 1.0
+	world._run_scheduled()
+	ok = _check(not inhibitor.dead and is_equal_approx(inhibitor.hp, inhibitor.stats.max_hp)
+		and base.is_protected() and "super" not in world._wave_types(0, 0), "inhibitor respawn restores protection and stops supers") and ok
+	inhibitor.take_damage(lethal, null, "true")
+	base.take_damage(lethal, null, "true")
+	ok = _check(world.ended and world.winner == 0, "destroying the exposed Nexus wins the match") and ok
+	print("[balance] ", "passed" if ok else "failed")
+	await get_tree().create_timer(1.0, true, false, true).timeout
+	get_tree().quit(0 if ok else 1)
+
+
+func _check(condition: bool, label: String) -> bool:
+	if not condition:
+		push_error("[balance] " + label)
+	return condition

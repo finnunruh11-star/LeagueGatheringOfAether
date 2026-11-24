@@ -63,12 +63,14 @@ Percent stats are fractions (`0.3` = 30%). Regen is per second.
 | `heal_to_bond` | 0 | while above 0, healing you receive restores no HP; you gain that fraction of it as Bond of Life instead |
 | `tenacity`, `slow_resist` | 0, 0 | shortens stuns/roots/silences/slows / weakens slows |
 | `size`, `damage_mult`, `damage_taken_mult`, `cooldown_mult` | 1 | fun multipliers (0.5 cooldown_mult = half cooldowns) |
-| `vision` | 900 | sight radius for fog of war (minions 650, towers 900, summons 600) |
+| `vision` | 1350 | sight radius for fog of war (minions 650, turrets 1095, summons 600) |
 | `summoner_haste` | 0 | like ability haste, for summoner spells |
 | `ghost` | 0 | above 0: walk through other units (Ghost; e.g. a buff `"add": {"ghost": 1}`) |
 
-`per_level` stats are added every level (defaults: +75 HP, +3.5 AD, +2 armor, +1 MR, +0.12 regen,
-+8 AP, +2.5% attack speed). Champions level up to **21**; levels 19-21 only give stats.
+`per_level` stats define growth (defaults: +100 HP, +3.5 AD, +2 armor, +1 MR, +0.12 regen,
++8 AP, +2.5% attack speed). Each new level applies `0.65 + 0.035 * new_level` times the
+listed growth, averaging the listed value over levels 2 through **18**. Champions level up to
+**21**; levels 19-21 only give stats (no skill points).
 All stats can be changed temporarily with the `buff` effect.
 
 ### Abilities
