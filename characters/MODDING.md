@@ -124,6 +124,7 @@ dashes, delays and repeats contain their own effect lists. Any effect may also h
 | `t_self` | 1 if the target is you |
 | `at_base` | 1 while you stand in your fountain |
 | `t_summon` | 1 if the target is a summon (turrets, wards, pets...) |
+| `t_ward` | 1 if the target is a ward |
 
 Functions: `has('id')` (you have a status/mark with that id or type), `t_has('id')` (target has it, from
 you - or any status of that type like `'stun'`), `t_has_any('id')`, `stacks('id')`, `t_stacks('id')`,
@@ -187,7 +188,7 @@ ability effects (not basic attacks or item effects).
 | type | keys |
 |---|---|
 | `projectile` | `speed` 900, `range` (ability range), `radius` 12, `color`, `sprite`, `count` 1, `spread` (degrees, 360 = ring), `pierce` false/true/number, `homing`, `returns` (boomerang), `through_walls`, `affects` "enemies"/"allies"/"all", `hits_structures`, `on_hit` [...], `on_end` [... when it stops] |
-| `area` | instant explosion. `at` "pos" (default) / "self" / "target", `radius` 150, `delay` (shows a warning circle first), `scatter` (random offset), `angle` (cone toward the aim, e.g. 70), `affects`, `hits_structures`, `color`, `show` (false = no blast visual, for auras), `filter` "champions"/"minions"/"summons"/"non_champions", `offset` (move the center forward along your aim), `exclude_target`, `exclude_self`, `sort` "nearest"/"farthest"/"lowest_hp"/"lowest_hp_percent"/"champions_first"/"champions_lowest_hp"/"random", `max_targets`, `effects` [... per unit inside] |
+| `area` | instant explosion. `at` "pos" (default) / "self" / "target", `radius` 150, `delay` (shows a warning circle first), `scatter` (random offset), `angle` (cone toward the aim, e.g. 70), `affects`, `hits_structures`, `color`, `show` (false = no blast visual, for auras), `filter` "champions"/"minions"/"summons"/"non_champions", `offset` (move the center forward along your aim), `exclude_target`, `exclude_self`, `sort` "nearest"/"farthest"/"lowest_hp"/"lowest_hp_percent"/"champions_first"/"champions_lowest_hp"/"random", `max_targets`, `wards` (also hit wards - normally abilities ignore them), `effects` [... per unit inside] |
 | `beam` | instant line from you. `length` (ability range), `width` 70, `delay`, `affects`, `effects` [...] |
 | `zone` | lingering circle. `radius` 160, `duration` 4, `interval` 0.5, `follow` (true = aura around you), `affects`, `effects` [... each tick], `on_expire` [...] |
 | `trap` | `radius` 60, `duration` 30, `arm_time` 0.6, `hidden` true, `effects` [... on the unit that steps on it] |

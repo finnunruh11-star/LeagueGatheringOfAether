@@ -5,6 +5,7 @@ extends Node2D
 
 const SNAP_EVERY := 3
 const SNAP_DT := SNAP_EVERY / 60.0
+const SNAP_CHUNK := 300  # floats per snapshot packet (~1.2 KB, under the usual 1392-byte MTU)
 const XP_RANGE := 1300.0
 const KILL_GOLD := 300.0
 const ASSIST_GOLD := 150.0
@@ -286,7 +287,19 @@ func _build_snapshot() -> PackedFloat32Array:
 
 
 func _send_snapshot() -> void:
-	_rpc_snapshot.rpc(_build_snapshot())
+	# Split into packets below the network MTU: each one is applied on its own, so a lost
+	# packet only delays those entities until the next snapshot.
+	var head := PackedFloat32Array([time, kills[0], kills[1]])
+	var buf := head.duplicate()
+	for id in entities:
+		var st: PackedFloat32Array = entities[id].net_state()
+		if buf.size() > 3 and buf.size() + st.size() + 2 > SNAP_CHUNK:
+			_rpc_snapshot.rpc(buf)
+			buf = head.duplicate()
+		buf.append(id)
+		buf.append(st.size())
+		buf.append_array(st)
+	_rpc_snapshot.rpc(buf)
 
 
 @rpc("authority", "call_remote", "unreliable_ordered")
@@ -563,8 +576,16 @@ func can_see(u: Unit, viewer_team: int) -> bool:
 
 ## Whether an effect at this spot should be shown to the local player (fog of war).
 func _fx_visible(kind: String, data: Dictionary) -> bool:
-	if fog == null or not fog.enabled or ended or kind in ["kill", "announce", "notice", "gold", "buy", "rankup"]:
+	if fog == null or not fog.enabled or ended or kind in ["kill", "announce", "notice", "gold", "buy", "rankup", "click"]:
 		return true
+	if data.has("team") and int(data.team) == local_team:
+		return true
+	for k in ["s", "v"]:
+		var id = data.get(k)
+		if (id is int or id is float) and int(id) != 0:
+			var e = entities.get(int(id))
+			if e is Unit and e.team == local_team:
+				return true
 	var any := false
 	for k in ["p", "pos", "from", "to"]:
 		var v = data.get(k)
@@ -717,20 +738,21 @@ static func team_matches(team: int, other: int, affects: String) -> bool:
 	return other != team
 
 
-func query(center: Vector2, r: float, team: int, affects := "enemies", structs := false) -> Array:
+## Units in a circle (abilities). Wards are skipped unless `wards` is true.
+func query(center: Vector2, r: float, team: int, affects := "enemies", structs := false, wards := false) -> Array:
 	var out := []
 	for u in units:
-		if u.dead or not u.targetable() or (u.is_structure and not structs) or not team_matches(team, u.team, affects):
+		if u.dead or not u.targetable() or (u.is_structure and not structs) or (u.is_ward and not wards) or not team_matches(team, u.team, affects):
 			continue
 		if u.global_position.distance_to(center) <= r + u.radius:
 			out.append(u)
 	return out
 
 
-func query_line(a: Vector2, b: Vector2, half_w: float, team: int, affects := "enemies", structs := false) -> Array:
+func query_line(a: Vector2, b: Vector2, half_w: float, team: int, affects := "enemies", structs := false, wards := false) -> Array:
 	var out := []
 	for u in units:
-		if u.dead or not u.targetable() or (u.is_structure and not structs) or not team_matches(team, u.team, affects):
+		if u.dead or not u.targetable() or (u.is_structure and not structs) or (u.is_ward and not wards) or not team_matches(team, u.team, affects):
 			continue
 		if Geometry2D.get_closest_point_to_segment(u.global_position, a, b).distance_to(u.global_position) <= half_w + u.radius:
 			out.append(u)
@@ -900,8 +922,8 @@ func _cast(slot: String) -> void:
 	if int(c.ranks.get(slot, 0)) <= 0:
 		hud.notice("%s isn't learned yet - Ctrl+%s (or the + button) to level it up" % [ab.name, slot.to_upper()])
 		return
-	if c.cooldowns.get(slot, 0.0) <= 0.0 and c.mana < c.ability_cost(ab):
-		hud.notice("Not enough mana")
+	if c.cooldowns.get(slot, 0.0) <= 0.0 and not c.can_pay(ab):
+		hud.notice("Not enough health" if ab.cost_type == "health" else "Not enough mana")
 		return
 	send_command("cast", [slot, m, tid])
 	if c.cooldowns.get(slot, 0.0) <= 0.0:

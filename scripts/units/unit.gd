@@ -855,7 +855,10 @@ func _update_ghost_hp(delta: float) -> void:
 	if _ghost_hold <= 0.0:
 		hp_ghost = move_toward(hp_ghost, hp, stats.max_hp * 0.9 * delta)
 	var shielded := shield > 0.0 and not dead
-	if shielded and not _was_shielded and world != null:
+	var seen := visible and modulate.a > 0.5
+	if not seen:
+		pass
+	elif shielded and not _was_shielded and world != null:
 		Vfx.flash(world.fx_layer, global_position, Color(0.75, 0.88, 1.0, 0.8), radius * 1.9, 0.35, Vfx.ring(), 1.3)
 	elif _was_shielded and not shielded and not dead and world != null:
 		Vfx.particles(world.fx_layer, global_position, Color(0.85, 0.93, 1.0), 14, 220.0, 0.4, 3.0)

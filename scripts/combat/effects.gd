@@ -16,7 +16,7 @@ const VARS := [
 	"t_mr", "t_mana", "t_max_mana", "t_champion", "t_minion", "t_structure", "t_ranged", "t_level", "t_bonus_hp", "t_ms",
 	"dmg", "dtype", "crit_hit", "is_attack", "is_ability", "is_dot", "is_aoe", "slot", "amount",
 	"in_combat", "combat_time", "since_hit", "since_combat", "gold", "kills", "deaths", "assists", "energy", "legendaries", "moving",
-	"cc", "t_self", "at_base", "t_summon", "dmg_raw", "shield", "t_shield",
+	"cc", "t_self", "at_base", "t_summon", "dmg_raw", "shield", "t_shield", "t_ward",
 ]
 
 
@@ -395,6 +395,7 @@ static func _values(ctx: Dictionary) -> Array:
 	vals[69] = float(ctx.get("dmg_raw", ctx.get("dmg", 0.0)))
 	vals[70] = c.shield if cv else 0.0
 	vals[71] = t.shield if tv else 0.0
+	vals[72] = 1.0 if tv and t.is_ward else 0.0
 	return vals
 
 
@@ -704,7 +705,7 @@ static func _one(e: Dictionary, ctx: Dictionary) -> void:
 				u.gain_xp(num(e.get("amount"), ctx, 50.0))
 		"text":
 			w.fx("text", {"pos": _pos(e.get("at", "target"), ctx) + Vector2(0, -50), "text": str(e.get("text", "!")),
-				"color": _color(e, ctx, Color.WHITE), "size": int(num(e.get("size"), ctx, 28.0))})
+				"color": _color(e, ctx, Color.WHITE), "size": int(num(e.get("size"), ctx, 28.0)), "team": int(ctx.get("team", 0))})
 		"sound":
 			w.fx("sound", {"char": str(ctx.get("char", "")), "file": str(e.get("file", "")),
 				"pos": _pos(e.get("at", "self"), ctx), "volume": num(e.get("volume"), ctx, 0.0)})
@@ -842,12 +843,12 @@ static func _vfx(e: Dictionary, ctx: Dictionary) -> void:
 	match kind:
 		"line", "beam":
 			w.fx(kind, {"from": _pos(e.get("from", "caster"), ctx), "to": _pos(e.get("to", "target"), ctx), "color": col,
-				"width": num(e.get("width"), ctx, 14.0), "vfx": str(e.get("vfx", ""))})
+				"width": num(e.get("width"), ctx, 14.0), "vfx": str(e.get("vfx", "")), "team": int(ctx.get("team", 0))})
 		"blast":
 			w.fx("blast", {"pos": _pos(e.get("at", "target"), ctx), "radius": num(e.get("radius"), ctx, 100.0), "color": col,
-				"angle": 360.0, "dir": Vector2.RIGHT, "vfx": str(e.get("vfx", ""))})
+				"angle": 360.0, "dir": Vector2.RIGHT, "vfx": str(e.get("vfx", "")), "team": int(ctx.get("team", 0))})
 		_:
-			w.fx("ring", {"pos": _pos(e.get("at", "target"), ctx), "radius": num(e.get("radius"), ctx, 80.0), "color": col})
+			w.fx("ring", {"pos": _pos(e.get("at", "target"), ctx), "radius": num(e.get("radius"), ctx, 80.0), "color": col, "team": int(ctx.get("team", 0))})
 
 
 static func _area_now(e: Dictionary, ctx: Dictionary, center: Vector2, radius: float, col: Color) -> void:
@@ -857,13 +858,15 @@ static func _area_now(e: Dictionary, ctx: Dictionary, center: Vector2, radius: f
 	var angle := num(e.get("angle"), ctx, 360.0)
 	var dir: Vector2 = ctx.get("dir", Vector2.RIGHT)
 	if bool(e.get("show", true)):
-		w.fx("blast", {"pos": center, "radius": radius, "color": col, "angle": angle, "dir": dir, "vfx": str(e.get("vfx", ""))})
+		w.fx("blast", {"pos": center, "radius": radius, "color": col, "angle": angle, "dir": dir, "vfx": str(e.get("vfx", "")),
+			"team": int(ctx.get("team", 0))})
 	var cone := deg_to_rad(angle) * 0.5
 	var filter := str(e.get("filter", ""))
 	var skip = ctx.get("target") if bool(e.get("exclude_target", false)) else null
 	var caster = ctx.get("caster")
 	var targets := []
-	for u in w.query(center, radius, int(ctx.get("team", 0)), str(e.get("affects", "enemies")), bool(e.get("hits_structures", false))):
+	for u in w.query(center, radius, int(ctx.get("team", 0)), str(e.get("affects", "enemies")), bool(e.get("hits_structures", false)),
+			bool(e.get("wards", false))):
 		if u == skip or (bool(e.get("exclude_self", false)) and u == caster):
 			continue
 		if angle < 359.0:
@@ -910,14 +913,15 @@ static func _beam_now(e: Dictionary, ctx: Dictionary, start: Vector2, end: Vecto
 	var w = Game.world
 	if w == null:
 		return
-	w.fx("beam", {"from": start, "to": end, "width": width, "color": col, "vfx": str(e.get("vfx", ""))})
-	for u in w.query_line(start, end, width * 0.5, int(ctx.get("team", 0)), str(e.get("affects", "enemies")), bool(e.get("hits_structures", false))):
+	w.fx("beam", {"from": start, "to": end, "width": width, "color": col, "vfx": str(e.get("vfx", "")), "team": int(ctx.get("team", 0))})
+	for u in w.query_line(start, end, width * 0.5, int(ctx.get("team", 0)), str(e.get("affects", "enemies")), bool(e.get("hits_structures", false)),
+			bool(e.get("wards", false))):
 		run(e.get("effects"), sub(ctx, {"target": u, "pos": u.global_position, "origin": start, "aoe": true}))
 
 
 static func _knockback(type: String, e: Dictionary, ctx: Dictionary) -> void:
 	var u := _unit(e, ctx)
-	if u == null or u.is_structure or _blocked(u, ctx):
+	if u == null or u.is_structure or u.is_ward or _blocked(u, ctx):
 		return
 	var c := _caster(ctx)
 	var dist := num(e.get("distance"), ctx, 220.0)
@@ -978,7 +982,7 @@ static func _teleport(e: Dictionary, ctx: Dictionary) -> void:
 		"home", "base", "spawn":
 			to = w.map.spawn_point(c.team)
 	to = w.map.nearest_open(to)
-	w.fx("blink", {"from": c.global_position, "to": to, "color": _color(e, ctx)})
+	w.fx("blink", {"from": c.global_position, "to": to, "color": _color(e, ctx), "team": c.team})
 	c.teleport(to)
 	c.trigger("dash", c, to)
 

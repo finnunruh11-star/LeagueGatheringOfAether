@@ -627,8 +627,8 @@ func _draw_slot(c: Control, slot: String) -> void:
 		var ab = ch.def.abilities.get(slot)
 		var cost := ch.ability_cost(ab) if ab != null else 0.0
 		if cost > 0.0:
-			if ch.mana < cost and cd <= 0.0:
-				c.draw_rect(r, Color(0.05, 0.1, 0.45, 0.55))
+			if not ch.can_pay(ab) and cd <= 0.0:
+				c.draw_rect(r, Color(0.05, 0.1, 0.45, 0.55) if ab.cost_type != "health" else Color(0.45, 0.05, 0.08, 0.55))
 			c.draw_string_outline(font, Vector2(0, c.size.y - 4), str(int(cost)), HORIZONTAL_ALIGNMENT_CENTER, c.size.x, 12, 3, Color.BLACK)
 			c.draw_string(font, Vector2(0, c.size.y - 4), str(int(cost)), HORIZONTAL_ALIGNMENT_CENTER, c.size.x, 12, Color(0.55, 0.75, 1.0))
 	var fl: float = _ready_flash.get(slot, 0.0)

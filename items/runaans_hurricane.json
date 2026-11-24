@@ -50,7 +50,7 @@
           "effects": [
             {
               "type": "projectile",
-              "if": "not (t_summon and t_max_hp <= 10)",
+              "if": "not t_ward",
               "homing": true,
               "speed": 1600,
               "radius": 6,

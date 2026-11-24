@@ -206,6 +206,14 @@ func ability_cost(ab: Dictionary, ctx := {}) -> float:
 	return maxf(Effects.num(ab.cost, ctx, 0.0), 0.0)
 
 
+## Whether you can afford an ability's mana (or health) cost right now.
+func can_pay(ab: Dictionary) -> bool:
+	var cost := ability_cost(ab)
+	if cost <= 0.0:
+		return true
+	return hp > cost if ab.cost_type == "health" else mana >= cost
+
+
 func ability_cooldown(ab: Dictionary, ctx := {}) -> float:
 	var r := maxi(int(ranks.get(ab.slot, 1)), 1)
 	if ctx.is_empty():
@@ -588,9 +596,10 @@ func check_buy(id: String) -> String:
 			continue
 		if it.rarity == "mythic" and other.rarity == "mythic":
 			return "You can only own one Mythic item"
-		for g in it.groups:
-			if other.groups.has(g):
-				return "You can only own one %s item" % str(g).replace("_", " ").capitalize()
+		if not (inst.id == id and it.stack > 1):
+			for g in it.groups:
+				if other.groups.has(g):
+					return "You can only own one %s item" % str(g).replace("_", " ").capitalize()
 		if it.rarity == "boots" and other.rarity == "boots":
 			return "You can only own one pair of boots"
 		if inst.id == id and it.limit > 0 and _count_id(id, uses) >= it.limit:
@@ -1172,7 +1181,7 @@ func _bot_cast(foe: Unit) -> void:
 	var d := global_position.distance_to(foe.global_position)
 	for slot in order:
 		var ab = def.abilities.get(slot)
-		if ab == null or cooldowns[slot] > 0.0 or int(ranks[slot]) <= 0 or mana < ability_cost(ab):
+		if ab == null or cooldowns[slot] > 0.0 or int(ranks[slot]) <= 0 or not can_pay(ab):
 			continue
 		var rng := Effects.num(ab.range, {"caster": self, "target": foe, "rank": ranks[slot]}, 700.0)
 		match ab.targeting:

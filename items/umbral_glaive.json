@@ -39,7 +39,7 @@
               "target": "self",
               "id": "umbral_glaive_cd",
               "duration": 50,
-              "if": "t_summon and t_max_hp <= 10 and dist <= t_stat('vision')"
+              "if": "t_ward and dist <= t_stat('vision')"
             },
             {
               "type": "vfx",
@@ -47,7 +47,7 @@
               "at": "target",
               "radius": 45,
               "color": "#8a5cff",
-              "if": "t_summon and t_max_hp <= 10 and dist <= t_stat('vision')"
+              "if": "t_ward and dist <= t_stat('vision')"
             },
             {
               "type": "buff",
@@ -56,16 +56,17 @@
               "multiply": {
                 "vision": 0
               },
-              "if": "t_summon and t_max_hp <= 10 and dist <= t_stat('vision')"
+              "if": "t_ward and dist <= t_stat('vision')"
             }
-          ]
+          ],
+          "wards": true
         }
       ]
     },
     {
       "name": "Blackout",
       "on": "attack",
-      "if": "t_summon and t_max_hp <= 10",
+      "if": "t_ward",
       "effects": [
         {
           "type": "repeat",
