@@ -37,6 +37,16 @@ var respawn_timer := 0.0
 var recall_timer := 0.0
 var casting = null
 var amove = null
+var amove_mode := "cursor"     # attack-move picks the enemy closest to its point ("cursor") or to you ("champion")
+var move_dir := Vector2.ZERO   # WASD steering (host): walk this way while it isn't zero
+var build: Array = []          # autobuy: the player's build (item ids, in order)
+var autobuy := false
+var _built := {}               # build items autobuy already finished (not bought again after selling)
+var _shop_t := 0.0
+var summoners: Array = []      # summoner spell ids (D / F)
+var sum_cd := [0.0, 0.0]
+var sum_cd_total := [1.0, 1.0]
+var sum_recast := [false, false]   # the slot casts its recast right now (replicated)
 var trig_list: Array = []      # [{tr, key, src, slot, name, color}]
 var trig_by_event := {}
 var trigger_counts := {}
@@ -77,6 +87,10 @@ func setup(d: Dictionary) -> void:
 	sprite_info = def.sprite
 	global_position = d.pos
 	gold = float(d.get("gold", 0.0))
+	summoners = []
+	for s in d.get("summoners", []):
+		if Game.summoners.has(str(s)) and summoners.size() < 2:
+			summoners.append(str(s))
 	_rebuild_triggers()
 
 
@@ -132,6 +146,33 @@ func command(cmd: String, args: Array) -> void:
 			if args.size() >= 3 and (args[0] is int or args[0] is float) and args[1] is Vector2 and (args[2] is int or args[2] is float):
 				use_item(int(args[0]), args[1], int(args[2]))
 			return
+		"summoner":
+			if args.size() >= 3 and (args[0] is int or args[0] is float) and args[1] is Vector2 and (args[2] is int or args[2] is float):
+				use_summoner(int(args[0]), args[1], int(args[2]))
+			return
+		"steer":
+			if args.size() > 0 and args[0] is Vector2:
+				var d: Vector2 = args[0]
+				move_dir = d.limit_length(1.0) if d.is_finite() else Vector2.ZERO
+				if move_dir != Vector2.ZERO and not dead:
+					move_goal = null
+					amove = null
+					attack_target = null
+					path = PackedVector2Array()
+					_cancel_recall()
+			return
+		"build":
+			if args.size() > 0 and args[0] is Array:
+				build = []
+				for id in args[0]:
+					if id is String and Game.items.has(id) and build.size() < 12:
+						build.append(id)
+				_shop_t = 0.0
+			return
+		"autobuy":
+			autobuy = args.size() > 0 and bool(args[0])
+			_shop_t = 0.0
+			return
 	if dead:
 		return
 	match cmd:
@@ -151,10 +192,17 @@ func command(cmd: String, args: Array) -> void:
 					_cancel_recall()
 		"amove":
 			if args.size() > 0 and args[0] is Vector2:
-				amove = world.map.clamp_inside(args[0])
+				var p: Vector2 = world.map.clamp_inside(args[0])
+				amove_mode = "champion" if args.size() > 1 and str(args[1]) == "champion" else "cursor"
 				move_goal = null
-				attack_target = null
 				_cancel_recall()
+				var t := amove_pick(p, 40.0)
+				if t != null:
+					attack_target = t
+					amove = p if move_dir == Vector2.ZERO else null
+				elif move_dir == Vector2.ZERO:
+					attack_target = null
+					amove = p
 		"stop":
 			move_goal = null
 			attack_target = null
@@ -194,6 +242,8 @@ func cast(slot: String, aim: Vector2, tid: int) -> bool:
 	_cancel_recall()
 	face(ctx.pos)
 	var ct := Effects.num(ab.cast_time, ctx, 0.0)
+	if ab.get("start_effects") is Array:
+		Effects.run(ab.start_effects, ctx)
 	if ct > 0.0:
 		casting = {"ab": ab, "ctx": ctx, "time": ct}
 		set_anim_lock(ANIM_CAST, ct)
@@ -320,9 +370,10 @@ func _make_ctx(ab: Dictionary, aim: Vector2, tid: int) -> Dictionary:
 			ctx.pos = global_position
 		"unit", "ally":
 			var enemy: bool = ab.targeting == "unit"
+			var structs := bool(ab.get("structures", false))
 			var t = world.entities.get(tid)
-			if not (t is Unit and _unit_ok(t, enemy)):
-				t = world.pick_unit(aim, team, enemy, 100.0, false)
+			if not (t is Unit and (_unit_ok(t, enemy) or (structs and t.is_structure and not t.dead and (t.team != team) == enemy))):
+				t = world.pick_unit(aim, team, enemy, 100.0, structs)
 			if t == null or global_position.distance_to(t.global_position) > rng + t.radius + radius + 40.0:
 				return {}
 			ctx.target = t
@@ -830,6 +881,214 @@ func _extra_stats(st: Dictionary, mult: Dictionary) -> void:
 			st[k] = float(st.get(k, 0.0)) + legendary * (v if v is float else Effects.num(v, {"caster": self, "target": self, "rank": level}, 0.0))
 
 
+# -------------------------------------------------------------- summoners ---
+
+func summoner_def(i: int):
+	return Game.summoners.get(summoners[i]) if i >= 0 and i < summoners.size() else null
+
+
+## The ability a summoner slot casts right now: its recast while you have the recast's status.
+func summoner_ability(i: int):
+	var sp = summoner_def(i)
+	if sp == null:
+		return null
+	return sp.recast if sp.recast != null and sum_recast[i] else sp.active
+
+
+## Cooldown after summoner haste (works like ability haste).
+func summoner_cooldown(i: int, ctx := {}) -> float:
+	var sp = summoner_def(i)
+	if sp == null:
+		return 0.0
+	if ctx.is_empty():
+		ctx = {"caster": self, "target": self, "rank": level}
+	var cd := maxf(Effects.num(sp.active.cooldown, ctx, 300.0), 0.0)
+	return cd * 100.0 / (100.0 + maxf(stats.get("summoner_haste", 0.0), -50.0))
+
+
+## Summoner spells work while silenced or rooted - not while stunned (unless "while_cc", e.g.
+## Cleanse), dead (unless "while_dead"), knocked up or dashing, in stasis or channeling.
+func can_use_summoner(ab: Dictionary) -> bool:
+	if dead:
+		return bool(ab.get("while_dead", false))
+	if has_status("stasis") or forced != null or casting != null:
+		return false
+	return not has_status("stun") or bool(ab.get("while_cc", false))
+
+
+func use_summoner(i: int, aim: Vector2, tid: int) -> bool:
+	var sp = summoner_def(i)
+	if sp == null:
+		return false
+	if casting != null and int(casting.get("summoner", -1)) == i:
+		_refund_channel(i)  # pressing a channeling spell again cancels it
+		casting = null
+		return false
+	var ab = summoner_ability(i)
+	var is_recast: bool = ab != sp.active
+	if not can_use_summoner(ab) or (not is_recast and sum_cd[i] > 0.0):
+		return false
+	var ctx := _make_ctx(ab, aim, tid)
+	if ctx.is_empty():
+		return false
+	ctx.ability = ab.name
+	ctx.src_slot = "summoner"
+	ctx.summoner = sp.id
+	ctx.rank = level
+	ctx.color = sp.color
+	ctx.erase("rank_mult")
+	if ab.has("requires") and Effects.num(ab.requires, ctx, 1.0) == 0.0:
+		world.fx("notice", {"peer": peer, "text": "%s can't be used on that" % ab.name})
+		return false
+	if not is_recast:
+		var cd := summoner_cooldown(i, ctx)
+		sum_cd[i] = cd
+		sum_cd_total[i] = maxf(cd, 0.01)
+	_cancel_recall()
+	if ab.targeting != "self":
+		face(ctx.pos)
+	if ab.get("start_effects") is Array:
+		Effects.run(ab.start_effects, ctx)
+	var ct := Effects.num(ab.cast_time, ctx, 0.0)
+	if ct > 0.0:
+		casting = {"ab": ab, "ctx": ctx, "time": ct, "summoner": i}
+		set_anim_lock(ANIM_CAST, ct)
+	else:
+		_run_summoner(ab, ctx)
+	return true
+
+
+func _run_summoner(ab: Dictionary, ctx: Dictionary) -> void:
+	ctx.origin = global_position
+	world.fx("cast", {"p": global_position, "c": ctx.color, "v": net_id, "d": Vector2(ctx.dir).angle(), "s": "summoner"})
+	Effects.run(ab.effects, ctx)
+	trigger("summoner", self, ctx.pos, {"cast_slot": str(ctx.summoner)})
+
+
+## A channeled spell (Teleport) is done. It fails if its target died meanwhile.
+func _finish_channel(c: Dictionary) -> void:
+	var t = c.ctx.get("target")
+	if t != null and t != self and (not is_instance_valid(t) or (t is Unit and t.dead)):
+		_refund_channel(int(c.summoner))
+		world.fx("notice", {"peer": peer, "text": "%s was cancelled" % c.ab.name})
+		return
+	_run_summoner(c.ab, c.ctx)
+
+
+## An interrupted or cancelled channel gives back half of its cooldown.
+func _refund_channel(i: int) -> void:
+	if i >= 0 and i < 2:
+		sum_cd[i] = minf(sum_cd[i], sum_cd_total[i] * 0.5)
+
+
+func _tick_summoners(delta: float) -> void:
+	for i in 2:
+		if sum_cd[i] > 0.0:
+			sum_cd[i] = maxf(sum_cd[i] - delta, 0.0)
+		var sp = summoner_def(i)
+		sum_recast[i] = sp != null and sp.recast != null and not find_status(sp.recast.status).is_empty()
+
+
+# ---------------------------------------------------------------- autobuy ---
+
+## Buys the player's build (or the recommended one) whenever you can shop. Items it already
+## finished are not bought again (e.g. after selling them, or components used up by a recipe).
+func _autobuy(delta: float) -> void:
+	_shop_t -= delta
+	if _shop_t > 0.0:
+		return
+	_shop_t = 0.5
+	if Game.items.is_empty() or not can_shop():
+		return
+	if build.is_empty() and bot_plan.is_empty():
+		bot_plan = recommended_build(def)
+	var todo := []
+	for id in (build if not build.is_empty() else bot_plan):
+		if has_item(id):
+			_built[id] = true
+		elif not _built.has(id):
+			todo.append(id)
+	shop_toward(todo)
+
+
+## Buys toward the first item of `plan` you don't own (the item, or its most expensive affordable
+## component) while gold allows. Returns the items that can't be bought at all (rules, not gold).
+func shop_toward(plan: Array) -> Array:
+	var skip := []
+	for attempt in 8:
+		var goal := ""
+		for id in plan:
+			if not has_item(id) and Game.items.has(id) and not skip.has(id):
+				goal = id
+				break
+		if goal == "":
+			return skip
+		var step := _bot_step(goal)
+		var err := check_buy(goal) if step == "" else buy(step)
+		if err.begins_with("Not enough gold") or err.begins_with("Your inventory"):
+			return skip
+		if step == "" or err != "":
+			skip.append(goal)
+	return skip
+
+
+## "mage", "marksman" or "bruiser" - for bot builds, the recommended build and default summoners.
+static func role_of(d: Dictionary) -> String:
+	var st = d.get("stats", {})
+	if st is Dictionary and (float(st.get("ability_power", 0.0)) >= 25.0 or float(st.get("max_mana", 0.0)) > 0.0):
+		return "mage"
+	var atk = d.get("attack", {})
+	if atk is Dictionary and bool(atk.get("ranged", false)):
+		return "marksman"
+	return "bruiser"
+
+
+## A simple build for the character's role: boots, a mythic, tier-2 boots, then legendaries.
+## Bots `shuffle` it for variety; otherwise it's always the same (the shop's recommended build).
+static func recommended_build(d: Dictionary, shuffle := false) -> Array:
+	var role := role_of(d)
+	var want: String = {"mage": "SpellDamage", "marksman": "CriticalStrike", "bruiser": "Health"}[role]
+	var also: String = {"mage": "SpellDamage", "marksman": "AttackSpeed", "bruiser": "Damage"}[role]
+	var mythics := []
+	var legend := []
+	for id in Game.items:
+		var it = Game.items[id]
+		if not it.buyable or not it.tags.has(want):
+			continue
+		if it.rarity == "mythic":
+			mythics.append(id)
+		elif it.rarity == "legendary" and (it.tags.has(also) or role == "mage"):
+			legend.append(id)
+	for list in [mythics, legend]:
+		if shuffle:
+			list.shuffle()
+		else:
+			list.sort_custom(func(a, b): return Game.items[a].cost > Game.items[b].cost or (Game.items[a].cost == Game.items[b].cost and a < b))
+	var plan := []
+	var boots: String = {"mage": "sorcerers_shoes", "marksman": "berserkers_greaves", "bruiser": "plated_steelcaps"}[role]
+	if Game.items.has("boots"):
+		plan.append("boots")
+	if not mythics.is_empty():
+		plan.append(mythics[0])
+	if Game.items.has(boots):
+		plan.append(boots)
+	var groups := {}
+	for id in legend:
+		var gs: Array = Game.items[id].groups
+		var clash := false
+		for g in gs:
+			if groups.has(g):
+				clash = true
+		if clash:
+			continue
+		for g in gs:
+			groups[g] = true
+		plan.append(id)
+		if plan.size() >= 7:
+			break
+	return plan
+
+
 # ------------------------------------------------------------------- gold ---
 
 func add_gold(amount: float, at = null) -> void:
@@ -851,6 +1110,7 @@ func cheat(what: String) -> void:
 		"cd":
 			change_cooldown("all", 0.0, true)
 			change_item_cooldown("all", 0.0, true)
+			sum_cd = [0.0, 0.0]
 			mana = stats.max_mana
 		"ranks":
 			max_ranks()
@@ -862,6 +1122,9 @@ func _think(delta: float) -> void:
 	for s in SLOTS:
 		if cooldowns[s] > 0.0:
 			cooldowns[s] = maxf(cooldowns[s] - delta, 0.0)
+	_tick_summoners(delta)
+	if autobuy and not is_bot:
+		_autobuy(delta)
 	if not recasts.is_empty():
 		_update_recasts()
 	_tick_items(delta)
@@ -883,7 +1146,10 @@ func _think(delta: float) -> void:
 		if casting.time <= 0.0:
 			var c = casting
 			casting = null
-			_execute(c.ab, c.ctx)
+			if c.has("summoner"):
+				_finish_channel(c)
+			else:
+				_execute(c.ab, c.ctx)
 	if recall_timer > 0.0:
 		recall_timer -= delta
 		if recall_timer <= 0.0:
@@ -894,7 +1160,7 @@ func _think(delta: float) -> void:
 		_bot_think(delta)
 	if amove != null:
 		if attack_target == null:
-			attack_target = world.nearest_enemy(global_position, team, stats.attack_range + radius + 120.0, false, true)
+			attack_target = amove_pick(amove, 120.0)
 		if attack_target == null:
 			move_goal = amove
 			if global_position.distance_to(amove) < 12.0:
@@ -922,7 +1188,39 @@ func _act(delta: float) -> void:
 	if casting != null or recall_timer > 0.0 or has_status("stasis"):
 		velocity = Vector2.ZERO
 		return
+	if move_dir != Vector2.ZERO and attack_target == null:
+		velocity = Vector2.ZERO
+		if can_move():
+			velocity = move_dir * stats.move_speed
+			face(global_position + move_dir * 10.0)
+		return
 	super._act(delta)
+
+
+## WASD steering: an attack command interrupts it for one attack, then you keep walking.
+func perform_attack(t: Unit) -> void:
+	super.perform_attack(t)
+	if move_dir != Vector2.ZERO:
+		attack_target = null
+		amove = null
+
+
+## Attack-move target: a visible enemy within attack range (+ `pad`), the one closest to `p` (or
+## to you with amove_mode "champion"). Wards are skipped; towers count.
+func amove_pick(p: Vector2, pad: float) -> Unit:
+	var best: Unit = null
+	var bd := INF
+	var from := global_position if amove_mode == "champion" else p
+	for u in world.units:
+		if u.team == team or u.dead or u.is_ward or not u.targetable() or not u.visible_to(team):
+			continue
+		if global_position.distance_to(u.global_position) > attack_reach(u) + pad:
+			continue
+		var d: float = from.distance_to(u.global_position) - u.radius
+		if d < bd:
+			bd = d
+			best = u
+	return best
 
 
 func start_recall() -> void:
@@ -941,6 +1239,8 @@ func _cancel_recall() -> void:
 
 func _interrupted() -> void:
 	recall_timer = 0.0
+	if casting != null and casting.has("summoner"):
+		_refund_channel(int(casting.summoner))
 	casting = null
 
 
@@ -983,6 +1283,9 @@ func _on_death() -> void:
 func _dead_process(delta: float) -> void:
 	for s in SLOTS:
 		cooldowns[s] = maxf(cooldowns[s] - delta, 0.0)
+	_tick_summoners(delta)
+	if autobuy and not is_bot:
+		_autobuy(delta)
 	_tick_items(delta)
 	respawn_timer -= delta
 	if is_bot:
@@ -1041,6 +1344,7 @@ func net_state() -> PackedFloat32Array:
 		s.append(v)
 	for k in SLOTS:
 		s.append_array([recast_left[k], recast_charges[k]])
+	s.append_array([sum_cd[0], sum_cd[1], sum_cd_total[0], sum_cd_total[1], 1.0 if sum_recast[0] else 0.0, 1.0 if sum_recast[1] else 0.0])
 	return s
 
 
@@ -1118,6 +1422,11 @@ func apply_net_state(s: PackedFloat32Array) -> void:
 		for i in 4:
 			recast_left[SLOTS[i]] = s[o + i * 2]
 			recast_charges[SLOTS[i]] = int(s[o + i * 2 + 1])
+	o += 8
+	if o + 6 <= s.size():
+		sum_cd = [s[o], s[o + 1]]
+		sum_cd_total = [s[o + 2], s[o + 3]]
+		sum_recast = [s[o + 4] > 0.5, s[o + 5] > 0.5]
 	if changed:
 		_rebuild_triggers()
 
@@ -1185,7 +1494,9 @@ func _bot_think(delta: float) -> void:
 	if bot_t > 0.0 or casting != null or forced != null:
 		return
 	bot_t = 0.25 + randf() * 0.15
+	move_dir = Vector2.ZERO
 	_bot_level_up()
+	_bot_summoners()
 	var home := world.map.spawn_point(team)
 	var at_home := global_position.distance_to(home) < world.map.fountain_radius
 	if at_home:
@@ -1283,6 +1594,72 @@ func _bot_cast(foe: Unit) -> void:
 			return
 
 
+## Bots use summoner spells following each spell's "bot" hint (see MODDING.md).
+func _bot_summoners() -> void:
+	for i in summoners.size():
+		var sp = summoner_def(i)
+		var ab = summoner_ability(i)
+		if sp == null or ab == null:
+			continue
+		var recast: bool = ab != sp.active
+		if (sum_cd[i] > 0.0 and not recast) or not can_use_summoner(ab):
+			continue
+		var hint := str(ab.get("bot", sp.bot))
+		var rng := Effects.num(ab.range, {"caster": self, "target": self, "rank": level}, 700.0)
+		var foe := world.nearest_enemy(global_position, team, clampf(rng, 600.0, 1200.0) + 100.0, true)
+		var fd := global_position.distance_to(foe.global_position) if foe != null else INF
+		var low: bool = hp < stats.max_hp * 0.3
+		var target: Unit = null
+		var aim := global_position
+		match hint:
+			"escape":
+				if low and fd < 450.0:
+					target = self
+					aim = global_position + (global_position - foe.global_position).normalized() * 400.0
+			"defend":
+				if low and fd < 900.0:
+					target = self
+			"kill":
+				if foe != null and fd <= rng + 40.0 and foe.hp < foe.stats.max_hp * 0.3:
+					target = foe
+			"fight":
+				if foe != null and fd <= rng and (in_combat() or foe.hp < foe.stats.max_hp * 0.5):
+					target = foe
+					aim = foe.global_position + foe.velocity * 0.3
+			"dash":
+				if not low:
+					target = self
+			"cleanse":
+				if fd < 900.0 and (has_status("stun") or has_status("root") or has_status("slow")):
+					target = self
+			"mana":
+				if uses_mana() and mana < stats.max_mana * 0.25:
+					target = self
+			"chase":
+				if foe != null and fd < 900.0 and (low or foe.hp < foe.stats.max_hp * 0.4):
+					target = self
+			"travel":
+				if hp >= stats.max_hp * 0.95 and global_position.distance_to(world.map.spawn_point(team)) < world.map.fountain_radius:
+					var far: Unit = null
+					for s in world.structures:
+						if s.team == team and not s.dead and not s.is_nexus and (far == null or
+								s.global_position.distance_to(global_position) > far.global_position.distance_to(global_position)):
+							far = s
+					if far != null and far.global_position.distance_to(global_position) > 2500.0:
+						target = far
+			"smite":
+				for u in world.units:
+					if u.team != team and not u.dead and not u.is_champion and not u.is_structure and not u.is_ward \
+							and u.hp <= 600.0 and global_position.distance_to(u.global_position) <= rng + u.radius:
+						target = u
+						break
+		if target != null:
+			if aim == global_position and target != self:
+				aim = target.global_position
+			if use_summoner(i, aim, target.net_id):
+				return
+
+
 ## Bots use potions when hurt and fire offensive actives at nearby enemy champions.
 func _bot_items() -> void:
 	var foe := world.nearest_enemy(global_position, team, 600.0, true)
@@ -1314,26 +1691,9 @@ func _bot_shop() -> void:
 	if Game.items.is_empty() or not can_shop():
 		return
 	if bot_plan.is_empty():
-		bot_plan = _bot_make_plan()
-	for attempt in 6:
-		var goal := ""
-		for id in bot_plan:
-			if not has_item(id) and Game.items.has(id):
-				goal = id
-				break
-		if goal == "":
-			return
-		var step := _bot_step(goal)
-		if step == "":
-			if check_buy(goal).begins_with("Not enough gold") or check_buy(goal).begins_with("Your inventory"):
-				return
-			bot_plan.erase(goal)
-			continue
-		var err := buy(step)
-		if err != "":
-			if err.begins_with("Not enough gold") or err.begins_with("Your inventory"):
-				return
-			bot_plan.erase(goal)
+		bot_plan = recommended_build(def, true)
+	for id in shop_toward(bot_plan):
+		bot_plan.erase(id)
 
 
 func _bot_step(id: String) -> String:
@@ -1349,50 +1709,6 @@ func _bot_step(id: String) -> String:
 			best = s
 			best_cost = int(Game.items[s].cost)
 	return best
-
-
-func _bot_make_plan() -> Array:
-	var role := "bruiser"
-	if float(def.stats.get("ability_power", 0.0)) >= 25.0 or float(def.stats.get("max_mana", 0.0)) > 0.0:
-		role = "mage"
-	elif attack_def.ranged:
-		role = "marksman"
-	var want: String = {"mage": "SpellDamage", "marksman": "CriticalStrike", "bruiser": "Health"}[role]
-	var also: String = {"mage": "SpellDamage", "marksman": "AttackSpeed", "bruiser": "Damage"}[role]
-	var mythics := []
-	var legend := []
-	for id in Game.items:
-		var it = Game.items[id]
-		if not it.buyable or not it.tags.has(want):
-			continue
-		if it.rarity == "mythic":
-			mythics.append(id)
-		elif it.rarity == "legendary" and (it.tags.has(also) or role == "mage"):
-			legend.append(id)
-	mythics.shuffle()
-	legend.shuffle()
-	var plan := []
-	var boots: String = {"mage": "sorcerers_shoes", "marksman": "berserkers_greaves", "bruiser": "plated_steelcaps"}[role]
-	if Game.items.has("boots"):
-		plan.append("boots")
-	if not mythics.is_empty():
-		plan.append(mythics[0])
-	plan.append(boots)
-	var groups := {}
-	for id in legend:
-		var gs: Array = Game.items[id].groups
-		var clash := false
-		for g in gs:
-			if groups.has(g):
-				clash = true
-		if clash:
-			continue
-		for g in gs:
-			groups[g] = true
-		plan.append(id)
-		if plan.size() >= 7:
-			break
-	return plan
 
 
 func _under_enemy_tower(p: Vector2) -> bool:

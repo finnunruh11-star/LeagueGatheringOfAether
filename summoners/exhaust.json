@@ -1,0 +1,26 @@
+{
+  "name": "Exhaust",
+  "short": "EX",
+  "color": "#d9a24a",
+  "description": "Exhausts target enemy champion: 30% slower and 35% less damage dealt for 3 seconds.",
+  "cooldown": 210,
+  "targeting": "unit",
+  "range": 650,
+  "requires": "t_champion",
+  "bot": "fight",
+  "effects": [
+    {
+      "type": "slow",
+      "amount": 0.3,
+      "duration": 3
+    },
+    {
+      "type": "buff",
+      "id": "exhaust",
+      "duration": 3,
+      "add": {
+        "damage_mult": -0.35
+      }
+    }
+  ]
+}

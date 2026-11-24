@@ -1,0 +1,17 @@
+{
+  "name": "Barrier",
+  "short": "BA",
+  "color": "#ffd36b",
+  "description": "Shields you from 105-411 damage (by level) for 2 seconds.",
+  "cooldown": 180,
+  "targeting": "self",
+  "bot": "defend",
+  "effects": [
+    {
+      "type": "shield",
+      "target": "self",
+      "amount": "87 + 18 * min(level, 18.0)",
+      "duration": 2
+    }
+  ]
+}

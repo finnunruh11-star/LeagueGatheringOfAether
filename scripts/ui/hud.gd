@@ -15,10 +15,10 @@ class DrawControl extends Control:
 
 
 const SLOT_KEYS := ["p", "q", "w", "e", "r"]
-const HELP := "RMB move/attack   QWER cast (hold to aim)   Ctrl+QWER level up   1-6 items   P shop   A+LMB attack-move   S stop   B recall   Y camera   Tab scores   Esc menu"
-const BAR_W := 860.0
+const BAR_W := 966.0
 const SLOT_X := 262.0
-const ITEM_X := 618.0
+const SUM_X := 614.0    # the two summoner spell slots, right of R
+const ITEM_X := 722.0
 
 var world: World
 var font: Font
@@ -29,6 +29,10 @@ var center_label: Label
 var bar: DrawControl
 var slot_boxes := {}
 var item_boxes: Array = []
+var sum_boxes: Array = []
+var help_label: Label
+var ui_root: Control
+var settings_menu: SettingsMenu = null
 var plus_buttons := {}
 var shop: Shop
 var notice_label: Label
@@ -89,6 +93,7 @@ func _ready() -> void:
 	root.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	root.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	add_child(root)
+	ui_root = root
 	vignette = _vignette(root, Color(0, 0, 0, 0.55), 0.6)
 	hurt_rect = _vignette(root, Color(0.85, 0.05, 0.02, 0.85), 0.45)
 	hurt_rect.modulate.a = 0.0
@@ -111,10 +116,10 @@ func _ready() -> void:
 	_place(feed_label, 1.0, 0.0, -620, 10, 600, 200)
 	center_label = _label(root, 36, HORIZONTAL_ALIGNMENT_CENTER)
 	_place(center_label, 0.5, 0.3, -400, 0, 800, 110)
-	var help := _label(root, 13, HORIZONTAL_ALIGNMENT_LEFT)
-	help.text = HELP
-	help.modulate = Color(1, 1, 1, 0.55)
-	_place(help, 0.0, 1.0, 12, -26, 1200, 20)
+	help_label = _label(root, 13, HORIZONTAL_ALIGNMENT_LEFT)
+	help_label.text = Controls.help_text(Game.prefs.move_mode)
+	help_label.modulate = Color(1, 1, 1, 0.55)
+	_place(help_label, 0.0, 1.0, 12, -26, 1400, 20)
 
 	bar = DrawControl.new()
 	bar.draw_func = _draw_bar
@@ -136,7 +141,7 @@ func _ready() -> void:
 			b.position = Vector2(SLOT_X + i * 70 + 16, -30)
 			b.size = Vector2(32, 26)
 			b.focus_mode = Control.FOCUS_NONE
-			b.tooltip_text = "Level up (Ctrl+%s)" % key.to_upper()
+			b.tooltip_text = "Level up (Ctrl+%s)" % Controls.label("ability_" + key)
 			b.pressed.connect(func(): world.send_command("rank_up", [key]))
 			b.visible = false
 			bar.add_child(b)
@@ -147,13 +152,23 @@ func _ready() -> void:
 		s.draw_func = func(c): _draw_item_slot(c, idx)
 		s.position = Vector2(ITEM_X + (i % 3) * 50, 12 + (i / 3) * 50)
 		s.size = Vector2(44, 44)
-		s.gui_input.connect(func(ev): _item_slot_input(ev, idx))
+		s.gui_input.connect(func(ev): _slot_click(ev, "i%d" % idx))
 		s.tip_func = func():
 			var ch := world.local_champion
 			var it = ch.item_def(idx) if is_instance_valid(ch) else null
 			return ItemUI.tooltip(it) if it != null else null
 		bar.add_child(s)
 		item_boxes.append(s)
+	for i in 2:
+		var s := DrawControl.new()
+		var idx := i
+		s.draw_func = func(c): _draw_summoner(c, idx)
+		s.position = Vector2(SUM_X + i * 50, 14)
+		s.size = Vector2(48, 48)
+		s.clip_contents = true
+		s.gui_input.connect(func(ev): _slot_click(ev, "s%d" % idx))
+		bar.add_child(s)
+		sum_boxes.append(s)
 	var shop_btn := Button.new()
 	shop_btn.text = "Shop (P)"
 	shop_btn.focus_mode = Control.FOCUS_NONE
@@ -220,6 +235,7 @@ func _ready() -> void:
 	var ml := _label(mv, 24, HORIZONTAL_ALIGNMENT_CENTER)
 	ml.text = "Menu (the game keeps running)"
 	_button(mv, "Resume", toggle_menu)
+	_button(mv, "Settings", open_settings)
 	if Game.is_host():
 		_button(mv, "End match - back to lobby", Game.return_to_lobby)
 	_button(mv, "Leave to main menu", _leave)
@@ -315,6 +331,27 @@ func toggle_shop() -> void:
 	shop.toggle()
 
 
+func open_settings() -> void:
+	if is_instance_valid(settings_menu):
+		return
+	settings_menu = SettingsMenu.new()
+	ui_root.add_child(settings_menu)
+	settings_menu.closed.connect(refresh_controls)
+
+
+## True while a menu that takes the keyboard (Settings) is open: the game ignores keys then.
+func modal_open() -> bool:
+	return is_instance_valid(settings_menu) and not settings_menu.is_queued_for_deletion()
+
+
+## Key labels and tooltips after the key bindings changed.
+func refresh_controls() -> void:
+	help_label.text = Controls.help_text(Game.prefs.move_mode)
+	for key in plus_buttons:
+		plus_buttons[key].tooltip_text = "Level up (Ctrl+%s)" % Controls.label("ability_" + key)
+	_tooltip_key = ""
+
+
 func shop_open() -> bool:
 	return shop.is_open()
 
@@ -386,6 +423,9 @@ func _process(_delta: float) -> void:
 		s.queue_redraw()
 	for s in item_boxes:
 		s.queue_redraw()
+	for s in sum_boxes:
+		s.queue_redraw()
+	_place_bar()
 	minimap.queue_redraw()
 	minimap_units.queue_redraw()
 	if scores.visible:
@@ -424,6 +464,13 @@ func _update_effects(delta: float, ch: Champion) -> void:
 	banner.modulate.a = clampf(bt * 6.0, 0.0, 1.0) * clampf((2.2 - bt) * 2.0, 0.0, 1.0)
 	banner.scale = Vector2.ONE * (1.0 + 0.5 * maxf(0.0, 0.15 - bt) / 0.15)
 	if ch != null:
+		for i in 2:
+			var key := "s%d" % i
+			var scd: float = ch.sum_cd[i]
+			if _prev_cd.get(key, 0.0) > 0.0 and scd <= 0.0:
+				_ready_flash[key] = 1.0
+			_prev_cd[key] = scd
+			_ready_flash[key] = maxf(float(_ready_flash.get(key, 0.0)) - delta * 2.5, 0.0)
 		for s in ["q", "w", "e", "r"]:
 			var cd: float = ch.cooldowns.get(s, 0.0)
 			if _prev_cd.get(s, 0.0) > 0.0 and cd <= 0.0:
@@ -455,21 +502,45 @@ func _build_tooltips(ch: Champion) -> void:
 			lines.append("Recast - %s   (cooldown %.1fs)" % [rc.name, ch.ability_cooldown(rc)])
 			lines.append(str(rc.description))
 		if r == 0:
-			lines.append("Not learned yet: press Ctrl+%s or the + button when you have a skill point." % slot.to_upper())
+			lines.append("Not learned yet: press Ctrl+%s or the + button when you have a skill point." % Controls.label("ability_" + slot))
 		elif ab.get("auto_rank", false) and r < int(ab.max_rank):
 			lines.append("Next rank: +%d%% damage/healing, shorter cooldown." % (50 if slot == "r" else 25))
 		slot_boxes[slot].tooltip_text = "\n".join(lines)
+	for i in 2:
+		var sp = ch.summoner_def(i)
+		if sp == null:
+			sum_boxes[i].tooltip_text = "No summoner spell"
+			continue
+		var lines := PackedStringArray()
+		lines.append("%s   (%s)" % [sp.name, Controls.label("summoner_%d" % (i + 1))])
+		lines.append("Cooldown: %ds   Range: %d" % [roundi(ch.summoner_cooldown(i)), int(Effects.num(sp.active.range, {"caster": ch, "rank": ch.level}, 0.0))])
+		lines.append(sp.description)
+		if sp.recast != null:
+			lines.append("Recast - %s: %s" % [sp.recast.name, sp.recast.description])
+		sum_boxes[i].tooltip_text = "\n".join(lines)
 
 
-func _item_slot_input(ev: InputEvent, i: int) -> void:
+## Clicking an item or summoner slot uses it (or starts aiming it).
+func _slot_click(ev: InputEvent, slot: String) -> void:
 	if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
-		var ab = world.aim_ability("i%d" % i)
+		var ab = world.aim_ability(slot)
 		if ab == null:
 			return
 		if ab.targeting == "self":
-			world._cast("i%d" % i)
+			world._cast(slot)
 		else:
-			world.aim_slot = "i%d" % i
+			world.aim_slot = slot
+
+
+## Keeps the ability bar centered, but slides it left when it would cover the minimap.
+func _place_bar() -> void:
+	var vw := ui_root.size.x
+	var left := -BAR_W * 0.5
+	var limit := vw * 0.5 - minimap.size.x - 22.0 - BAR_W
+	left = maxf(minf(left, limit), 8.0 - vw * 0.5)
+	if not is_equal_approx(bar.offset_left, left):
+		bar.offset_left = left
+		bar.offset_right = left + BAR_W
 
 
 # ---------------------------------------------------------------- drawing ---
@@ -522,7 +593,7 @@ func _draw_bar(c: Control) -> void:
 		c.draw_string_outline(font, Vector2(160, 130), "%d skill point%s" % [ch.skill_points, "s" if ch.skill_points > 1 else ""], HORIZONTAL_ALIGNMENT_CENTER, 92, 12, 3, Color.BLACK)
 		c.draw_string(font, Vector2(160, 130), "%d skill point%s" % [ch.skill_points, "s" if ch.skill_points > 1 else ""], HORIZONTAL_ALIGNMENT_CENTER, 92, 12, Color(1, 0.9, 0.4))
 	# Health and mana
-	var bw := 4 * 70.0 + 64.0
+	var bw := SUM_X + 98.0 - SLOT_X
 	for i in 4:
 		var s: String = ["q", "w", "e", "r"][i]
 		var ab = ch.def.abilities.get(s)
@@ -595,8 +666,9 @@ func _draw_item_slot(c: Control, i: int) -> void:
 			c.draw_rect(r, Color(0.45, 0.8, 1.0), false, 3.0)
 		elif it.active != null and cd <= 0.0:
 			c.draw_rect(r, Color(0.9, 0.8, 0.45, 0.8), false, 1.5)
-	c.draw_string_outline(font, Vector2(3, 12), str(i + 1), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, 3, Color.BLACK)
-	c.draw_string(font, Vector2(3, 12), str(i + 1), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1, 0.95, 0.8))
+	var key := Controls.label("item_%d" % (i + 1))
+	c.draw_string_outline(font, Vector2(3, 12), key, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, 3, Color.BLACK)
+	c.draw_string(font, Vector2(3, 12), key, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1, 0.95, 0.8))
 
 
 func _draw_slot(c: Control, slot: String) -> void:
@@ -680,8 +752,64 @@ func _draw_slot(c: Control, slot: String) -> void:
 	elif slot != "p" and cd <= 0.0 and learned and ch.def.abilities.has(slot):
 		border = Color(0.85, 0.75, 0.45).lerp(Color.WHITE, fl)
 	c.draw_rect(r, border, false, 2.0 + 2.0 * fl)
-	c.draw_rect(Rect2(2, 2, 18, 17), Color(0, 0, 0, 0.6))
-	c.draw_string(font, Vector2(2, 15), slot.to_upper(), HORIZONTAL_ALIGNMENT_CENTER, 18, 13, Color(1, 0.95, 0.8))
+	if slot != "p":
+		_draw_key(c, Controls.label("ability_" + slot))
+
+
+## Key label in a slot's top-left corner.
+func _draw_key(c: Control, key: String) -> void:
+	var w := maxf(18.0, font.get_string_size(key, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x + 6.0)
+	c.draw_rect(Rect2(2, 2, w, 17), Color(0, 0, 0, 0.6))
+	c.draw_string(font, Vector2(2, 15), key, HORIZONTAL_ALIGNMENT_CENTER, w, 12, Color(1, 0.95, 0.8))
+
+
+func _draw_summoner(c: Control, i: int) -> void:
+	var r := Rect2(Vector2.ZERO, c.size)
+	c.draw_rect(r, Color(0.07, 0.08, 0.11))
+	var ch := world.local_champion
+	if ch == null:
+		return
+	var sp = ch.summoner_def(i)
+	if sp == null:
+		c.draw_rect(r, Color(0.25, 0.27, 0.32), false, 1.0)
+		return
+	var ab = ch.summoner_ability(i)
+	var recast: bool = ab != sp.active
+	var col: Color = sp.color
+	if sp.icon != null:
+		c.draw_texture_rect(sp.icon, r.grow(-2), false)
+	else:
+		var top := col.darkened(0.05) if not recast else RECAST_COLOR
+		for k in 6:
+			c.draw_rect(Rect2(2, 2 + (c.size.y - 4) * k / 6.0, c.size.x - 4, (c.size.y - 4) / 6.0 + 1.0), top.lerp(col.darkened(0.6), k / 5.0))
+		var txt: String = sp.short if not recast else str(ab.name).substr(0, 4)
+		c.draw_string_outline(font, Vector2(0, 33), txt, HORIZONTAL_ALIGNMENT_CENTER, c.size.x, 17, 4, Color(0, 0, 0, 0.7))
+		c.draw_string(font, Vector2(0, 33), txt, HORIZONTAL_ALIGNMENT_CENTER, c.size.x, 17)
+	var cd: float = 0.0 if recast else ch.sum_cd[i]
+	if cd > 0.0:
+		var frac := clampf(cd / maxf(ch.sum_cd_total[i], 0.01), 0.0, 1.0)
+		var center := c.size * 0.5
+		var pts := PackedVector2Array([center])
+		for k in 33:
+			pts.append(center + Vector2.from_angle(-PI / 2.0 - TAU * frac * k / 32.0) * c.size.x)
+		c.draw_colored_polygon(pts, Color(0, 0, 0, 0.68))
+		var t := ("%.1f" % cd) if cd < 1.0 else str(ceili(cd))
+		c.draw_string_outline(font, Vector2(0, 32), t, HORIZONTAL_ALIGNMENT_CENTER, c.size.x, 17, 4, Color.BLACK)
+		c.draw_string(font, Vector2(0, 32), t, HORIZONTAL_ALIGNMENT_CENTER, c.size.x, 17)
+	elif ch.dead or ch.flags & Unit.F_STASIS or (ch.flags & Unit.F_STUN and not ab.get("while_cc", false)):
+		c.draw_rect(r, Color(0, 0, 0, 0.55))
+	var fl: float = _ready_flash.get("s%d" % i, 0.0)
+	if fl > 0.0:
+		c.draw_rect(r, Color(1, 1, 1, 0.45 * fl))
+	var border := Color(0.35, 0.37, 0.42)
+	if world.aim_slot == "s%d" % i:
+		border = Color(0.45, 0.8, 1.0)
+	elif recast:
+		border = RECAST_COLOR.lerp(Color.WHITE, 0.25 + 0.25 * sin(Time.get_ticks_msec() / 110.0))
+	elif cd <= 0.0:
+		border = Color(0.85, 0.75, 0.45).lerp(Color.WHITE, fl)
+	c.draw_rect(r, border, false, 2.0 + 2.0 * fl)
+	_draw_key(c, Controls.label("summoner_%d" % (i + 1)))
 
 
 func _draw_minimap(c: Control) -> void:

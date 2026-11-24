@@ -1,0 +1,39 @@
+{
+  "name": "Teleport",
+  "short": "TP",
+  "color": "#c27bff",
+  "description": "Channel for 4 seconds, then appear next to target allied tower. From 10:00 it is Unleashed: you can also teleport to allied minions and wards, and the cooldown is shorter. A stun interrupts it (half the cooldown comes back); cast it again to cancel.",
+  "cooldown": "360 if time < 600 else 330",
+  "targeting": "ally",
+  "structures": true,
+  "range": 100000,
+  "cast_time": 4,
+  "bot": "travel",
+  "requires": "t_structure or (time >= 600 and (t_minion or t_ward))",
+  "start_effects": [
+    {
+      "type": "zone",
+      "at": "pos",
+      "radius": 80,
+      "duration": 4,
+      "affects": "allies",
+      "color": "#c27bff",
+      "effects": []
+    },
+    {
+      "type": "zone",
+      "at": "self",
+      "radius": 55,
+      "duration": 4,
+      "affects": "allies",
+      "color": "#c27bff",
+      "effects": []
+    }
+  ],
+  "effects": [
+    {
+      "type": "teleport",
+      "to": "target"
+    }
+  ]
+}

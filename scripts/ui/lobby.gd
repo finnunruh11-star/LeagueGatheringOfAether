@@ -12,6 +12,7 @@ var status: Label
 var problems: RichTextLabel
 var editing := 0
 var _map_ids: Array = []
+var sum_pick: Array = []   # the two summoner spell OptionButtons
 
 
 func _ready() -> void:
@@ -46,6 +47,14 @@ func _ready() -> void:
 	UiKit.button(bots, "+ Blue bot", func(): Game.add_bot(0)).size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	UiKit.button(bots, "+ Red bot", func(): Game.add_bot(1)).size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	bots.visible = Game.is_host()
+	var srow := UiKit.row(left)
+	UiKit.label(srow, "Spells", 60)
+	for i in 2:
+		var o := OptionButton.new()
+		o.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+		o.item_selected.connect(_pick_summoner.bind(i))
+		srow.add_child(o)
+		sum_pick.append(o)
 	var mrow := UiKit.row(left)
 	UiKit.label(mrow, "Map", 50)
 	map_select = OptionButton.new()
@@ -63,6 +72,7 @@ func _ready() -> void:
 	start_btn.add_theme_font_size_override("font_size", 26)
 	start_btn.custom_minimum_size = Vector2(0, 56)
 	start_btn.visible = Game.is_host()
+	UiKit.button(left, "Settings (keys, WASD, camera, autobuy)", func(): add_child(SettingsMenu.new()))
 	UiKit.button(left, "Leave", _leave)
 
 	var mid := VBoxContainer.new()
@@ -183,6 +193,39 @@ func _refresh() -> void:
 	var mine = Game.players.get(editing if editing != 0 else me)
 	if mine != null:
 		_show_details(mine.character)
+	_refresh_summoners(mine, mine != null and (editing == 0 or (Game.is_host() and bool(mine.bot))))
+
+
+## Fills the two summoner spell pickers for you (or the bot the host is editing).
+func _refresh_summoners(p, can_edit: bool) -> void:
+	var cur: Array = p.get("summoners", []) if p is Dictionary else []
+	for i in 2:
+		var o: OptionButton = sum_pick[i]
+		o.clear()
+		for k in Game.summoner_ids.size():
+			var sp: Dictionary = Game.summoners[Game.summoner_ids[k]]
+			o.add_item(sp.name)
+			o.set_item_tooltip(k, sp.description)
+			if i < cur.size() and cur[i] == Game.summoner_ids[k]:
+				o.select(k)
+		o.disabled = not can_edit or Game.summoner_ids.is_empty()
+		o.tooltip_text = "Summoner spell %d (%s in a match)" % [i + 1, Controls.label("summoner_%d" % (i + 1))]
+
+
+func _pick_summoner(idx: int, slot_i: int) -> void:
+	var me := multiplayer.get_unique_id()
+	var target := editing if editing != 0 and Game.players.has(editing) else me
+	var cur: Array = Game.players.get(target, {}).get("summoners", []).duplicate()
+	while cur.size() < 2:
+		cur.append("")
+	var id: String = Game.summoner_ids[idx]
+	if cur[1 - slot_i] == id:
+		cur[1 - slot_i] = cur[slot_i]  # picking the other slot's spell swaps them
+	cur[slot_i] = id
+	if target == me:
+		Game.prefs.summoners = cur
+		Game.save_settings()
+	Game.request_change("summoners", cur, target if target != me else 0)
 
 
 func _set_editing(pid: int) -> void:

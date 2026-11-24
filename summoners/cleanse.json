@@ -1,0 +1,38 @@
+{
+  "name": "Cleanse",
+  "short": "CL",
+  "color": "#8ae6ff",
+  "description": "Removes all stuns, roots, slows and silences and the summoner debuffs Ignite and Exhaust from you, and shortens new crowd control by 65% for 3 seconds. Usable while stunned.",
+  "cooldown": 210,
+  "targeting": "self",
+  "while_cc": true,
+  "bot": "cleanse",
+  "effects": [
+    {
+      "type": "cleanse",
+      "target": "self",
+      "cc_only": true
+    },
+    {
+      "type": "remove",
+      "target": "self",
+      "id": "ignite",
+      "any_source": true
+    },
+    {
+      "type": "remove",
+      "target": "self",
+      "id": "exhaust",
+      "any_source": true
+    },
+    {
+      "type": "buff",
+      "target": "self",
+      "id": "cleanse",
+      "duration": 3,
+      "add": {
+        "tenacity": 0.65
+      }
+    }
+  ]
+}

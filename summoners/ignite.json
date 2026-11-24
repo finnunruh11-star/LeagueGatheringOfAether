@@ -1,0 +1,31 @@
+{
+  "name": "Ignite",
+  "short": "IG",
+  "color": "#ff7a33",
+  "description": "Ignites target enemy champion: 70-410 true damage over 5 seconds (by level). Reveals them and cuts their healing by 40% meanwhile.",
+  "cooldown": 180,
+  "targeting": "unit",
+  "range": 600,
+  "requires": "t_champion",
+  "bot": "kill",
+  "effects": [
+    {
+      "type": "dot",
+      "id": "ignite",
+      "amount": "(50 + 20 * min(level, 18.0)) / 5",
+      "duration": 5,
+      "damage_type": "true",
+      "color": "#ff7a33"
+    },
+    {
+      "type": "grievous",
+      "id": "ignite",
+      "amount": 0.4,
+      "duration": 5
+    },
+    {
+      "type": "reveal",
+      "duration": 5
+    }
+  ]
+}

@@ -62,6 +62,7 @@ func _ready() -> void:
 	row = UiKit.row(v)
 	UiKit.button(row, "Open characters folder", func(): OS.shell_open(Content.characters_dir())).size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	UiKit.button(row, "Reload content", _reload).size_flags_horizontal = Control.SIZE_EXPAND_FILL
+	UiKit.button(v, "Settings (keys, WASD, attack-move, camera, autobuy)", func(): add_child(SettingsMenu.new()))
 	UiKit.button(v, "Quit", func(): get_tree().quit())
 
 	status = Label.new()

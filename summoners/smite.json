@@ -1,0 +1,20 @@
+{
+  "name": "Smite",
+  "short": "SM",
+  "color": "#ffb347",
+  "description": "Deals 600 true damage to target enemy minion or summon (not champions or wards). There are no jungle camps, so it's for cannon minions and enemy pets/turrets.",
+  "cooldown": 60,
+  "targeting": "unit",
+  "range": 500,
+  "requires": "not t_champion and not t_ward",
+  "bot": "smite",
+  "effects": [
+    {
+      "type": "damage",
+      "amount": 600,
+      "damage_type": "true",
+      "vfx": "burst",
+      "color": "#ffb347"
+    }
+  ]
+}

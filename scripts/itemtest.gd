@@ -25,6 +25,11 @@ extends Node
 ##   far:D          put the enemy D units away    move:D   A walks D units right    wait:S    stats
 ##   buy:id         A buys id with infinite gold  sell:N   A sells slot N  combat_reset   A leaves combat
 ##   home           teleport A to its fountain     back     teleport A back to the test spot
+##   sum:N          A uses summoner spell N (0/1) on the enemy (cooldown reset first); sum_self:N, sum_ally:N,
+##                  sum_tower:N (A's farthest allied tower), sum_try:N (no cooldown reset)   [--summoners=flash,ignite]
+##   steer:DEG      A steers (WASD) toward DEG degrees (0 = right, 90 = down); steer:off stops
+##   amove:D        A attack-moves to a point D units past the enemy (closest to that point)
+##   cmd:NAME       A runs a champion command without arguments (e.g. cmd:stop)
 
 var world: World
 var a: Champion
@@ -56,6 +61,9 @@ func _ready() -> void:
 			c.cheat("level")
 		c.max_ranks()
 	_give(a, str(Game.cmdline.get("itemtest", "")))
+	if Game.cmdline.has("summoners"):
+		a.summoners = Array(str(Game.cmdline.summoners).split(",", false)).filter(func(s): return Game.summoners.has(s))
+		print("[itemtest] A summoners: ", a.summoners)
 	_give(b, str(Game.cmdline.get("enemy_items", "")))
 	await get_tree().create_timer(0.3).timeout
 	a.hp = a.stats.max_hp
@@ -203,6 +211,34 @@ func _ready() -> void:
 				a.mana = a.stats.max_mana * v
 			"far":
 				b.teleport(a.global_position + Vector2(v, 0))
+			"sum", "sum_self", "sum_ally", "sum_tower", "sum_try":
+				var si := int(v)
+				if what != "sum_try":
+					a.sum_cd[si] = 0.0
+				var st: Unit = b
+				if what == "sum_self":
+					st = a
+				elif what == "sum_ally" and ally != null:
+					st = ally
+				elif what == "sum_tower":
+					for s in world.structures:
+						if s.team == a.team and not s.dead and not s.is_nexus and (st == b or s.global_position.distance_to(a.global_position) > st.global_position.distance_to(a.global_position)):
+							st = s
+				var sab = a.summoner_ability(si)
+				print("[itemtest] summoner %d (%s) on %s -> %s  cd=%.1f" % [si, sab.name if sab != null else "-", st.display_name,
+					str(a.use_summoner(si, st.global_position, st.net_id)), a.sum_cd[si]])
+				await _wait(1.0)
+			"steer":
+				var dir := Vector2.ZERO if arg == "off" else Vector2.from_angle(deg_to_rad(v))
+				a.command("steer", [dir])
+				print("[itemtest] steer %s from %s" % [str(dir.snapped(Vector2(0.01, 0.01))), str(a.global_position.round())])
+			"amove":
+				var to := b.global_position + (b.global_position - a.global_position).normalized() * v
+				a.command("amove", [to, "cursor"])
+				await _wait(0.1)
+				print("[itemtest] amove -> target %s amove %s" % [a.attack_target.display_name if is_instance_valid(a.attack_target) else "none", str(a.amove)])
+			"cmd":
+				a.command(arg, [])
 			"move":
 				a.move_goal = a.global_position + Vector2(v, 0)
 				await _wait(absf(v) / maxf(a.stats.move_speed, 1.0) + 0.2)

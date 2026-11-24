@@ -47,6 +47,8 @@ const DEFAULT_STATS := {
 	"damage_mult": 1.0,
 	"damage_taken_mult": 1.0,
 	"cooldown_mult": 1.0,
+	"summoner_haste": 0.0,       # shortens summoner spell cooldowns like ability haste
+	"ghost": 0.0,                # > 0: walks through other units (Ghost)
 }
 
 const DEFAULT_PER_LEVEL := {"max_hp": 75.0, "attack_damage": 3.5, "armor": 2.0, "magic_resist": 1.0, "hp_regen": 0.12,
@@ -83,6 +85,10 @@ static func maps_dir() -> String:
 
 static func items_dir() -> String:
 	return root_dir() + "items"
+
+
+static func summoners_dir() -> String:
+	return root_dir() + "summoners"
 
 
 # ---------------------------------------------------------------- reading ---
@@ -246,6 +252,52 @@ static func _item(id: String, raw: Dictionary, holder: Dictionary, errors: Packe
 		it.active = ab
 	it.icon = texture(holder, raw.icon) if raw.has("icon") else null
 	return it
+
+
+## All files of the summoners/ folder, sent to clients like the items.
+static func read_summoner_pack(errors: PackedStringArray) -> Dictionary:
+	var files := {}
+	if DirAccess.dir_exists_absolute(summoners_dir()):
+		_collect(summoners_dir(), "", files, errors, "summoners")
+	return {"id": "summoners", "files": files}
+
+
+## Summoner spells: one json per spell. The spell itself is an ability (targeting, range,
+## cooldown, effects...), plus an optional `recast` ability usable while you have its `status`.
+static func build_summoners(pack: Dictionary, errors: PackedStringArray) -> Dictionary:
+	var out := {}
+	var holder := {"id": "summoners", "pack": pack, "textures": {}}
+	for f in pack.files:
+		if f.get_extension().to_lower() != "json" or f.get_file().begins_with("_"):
+			continue
+		var raw = parse_json(pack.files[f], "summoners/" + f, errors)
+		if not (raw is Dictionary):
+			continue
+		var id := str(f.get_file().get_basename())
+		var where := "summoners/%s.json" % id
+		var a: Dictionary = raw.duplicate(true)
+		a.erase("recast")
+		var sp := {"id": id}
+		sp.name = str(raw.get("name", id.capitalize()))
+		sp.description = str(raw.get("description", ""))
+		sp.color = parse_color(raw.get("color"), hash_color(id))
+		sp.short = str(raw.get("short", _abbrev(sp.name)))
+		sp.icon = texture(holder, raw.icon) if raw.has("icon") else null
+		sp.bot = str(raw.get("bot", ""))
+		sp.active = _ability(a, "summoner", {"id": "summoners/" + id, "pack": pack, "textures": holder.textures}, errors)
+		sp.active.cooldown = raw.get("cooldown", 300.0)
+		sp.recast = null
+		if raw.get("recast") is Dictionary:
+			var rc := _ability(raw.recast, "summoner", {"id": "summoners/" + id, "pack": pack, "textures": holder.textures}, errors)
+			rc.cooldown = raw.recast.get("cooldown", 0.0)
+			rc.status = str(raw.recast.get("status", ""))
+			if rc.status == "":
+				errors.append("%s: the recast needs a \"status\" (it can be cast while you have that status)" % where)
+			sp.recast = rc
+		elif raw.has("recast"):
+			errors.append("%s: \"recast\" must be an ability { ... }" % where)
+		out[id] = sp
+	return out
 
 
 static func _item_color(it: Dictionary) -> Color:
@@ -434,6 +486,10 @@ static func _ability(a: Dictionary, slot: String, def: Dictionary, errors: Packe
 	if not ab.targeting in ["direction", "point", "self", "unit", "ally"]:
 		errors.append("%s %s: unknown targeting '%s' (use direction, point, self, unit or ally)" % [def.id, slot, ab.targeting])
 	_validate(effects, "%s %s (%s)" % [def.id, slot.to_upper(), ab.name], errors)
+	if a.has("start_effects"):
+		var se = a.start_effects
+		ab.start_effects = se if se is Array else [se]
+		_validate(ab.start_effects, "%s %s (%s) start_effects" % [def.id, slot.to_upper(), ab.name], errors)
 	# Indicator hint: radius of the first area/zone effect, if any.
 	ab.indicator_radius = _find_radius(effects)
 	ab.indicator = _indicator(effects)

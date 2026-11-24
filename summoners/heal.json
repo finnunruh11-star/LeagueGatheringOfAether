@@ -1,0 +1,62 @@
+{
+  "name": "Heal",
+  "short": "HL",
+  "color": "#7dff8a",
+  "description": "Restores 80-318 health (by level) to you and the most wounded allied champion within 850, and gives you both 30% move speed for 1 second. Halved for champions healed by Heal in the last 35 seconds.",
+  "cooldown": 240,
+  "targeting": "self",
+  "range": 850,
+  "bot": "defend",
+  "effects": [
+    {
+      "type": "heal",
+      "target": "self",
+      "amount": "(80 + 14 * (min(level, 18.0) - 1)) * (0.5 if t_has_any('summoner_heal') else 1.0)"
+    },
+    {
+      "type": "mark",
+      "target": "self",
+      "id": "summoner_heal",
+      "duration": 35
+    },
+    {
+      "type": "buff",
+      "target": "self",
+      "id": "heal_speed",
+      "duration": 1,
+      "add": {
+        "move_speed_bonus": 0.3
+      }
+    },
+    {
+      "type": "area",
+      "at": "self",
+      "radius": 850,
+      "affects": "allies",
+      "filter": "champions",
+      "exclude_self": true,
+      "sort": "lowest_hp_percent",
+      "max_targets": 1,
+      "show": false,
+      "effects": [
+        {
+          "type": "heal",
+          "amount": "(80 + 14 * (min(level, 18.0) - 1)) * (0.5 if t_has_any('summoner_heal') else 1.0)"
+        },
+        {
+          "type": "mark",
+          "id": "summoner_heal",
+          "duration": 35
+        },
+        {
+          "type": "buff",
+          "id": "heal_speed",
+          "duration": 1,
+          "add": {
+            "move_speed_bonus": 0.3
+          }
+        }
+      ]
+    }
+  ]
+}

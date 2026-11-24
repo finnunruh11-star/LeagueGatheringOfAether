@@ -1,0 +1,38 @@
+{
+  "name": "Clarity",
+  "short": "CY",
+  "color": "#5aa8ff",
+  "description": "ARAM: restores 50% of your maximum mana, and 25% of theirs to allied champions within 600.",
+  "cooldown": 240,
+  "targeting": "self",
+  "bot": "mana",
+  "effects": [
+    {
+      "type": "mana",
+      "target": "self",
+      "amount": "0.5 * max_mana"
+    },
+    {
+      "type": "area",
+      "at": "self",
+      "radius": 600,
+      "affects": "allies",
+      "filter": "champions",
+      "exclude_self": true,
+      "show": false,
+      "effects": [
+        {
+          "type": "mana",
+          "amount": "0.25 * t_max_mana"
+        }
+      ]
+    },
+    {
+      "type": "vfx",
+      "kind": "ring",
+      "at": "self",
+      "radius": 600,
+      "color": "#5aa8ff"
+    }
+  ]
+}

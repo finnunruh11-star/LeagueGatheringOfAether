@@ -61,6 +61,9 @@ var hover_unit: Unit = null
 var test_aim = null  # Vector2 override for automated indicator screenshots
 var _shake := 0.0
 var _cursor_attack := false
+var _cam_hold := false             # camera_center key held
+var _amove_ring := 0.0             # attack-range ring flash after an instant attack-move
+var _steer_sent := Vector2.ZERO    # last WASD direction sent to the host
 
 
 func start(cfg: Dictionary) -> void:
@@ -98,6 +101,7 @@ func start(cfg: Dictionary) -> void:
 	camera.make_current()
 	camera.global_position = map.spawn_point(local_team)
 	camera.reset_smoothing()
+	cam_locked = bool(Game.prefs.camera_locked)
 	hud = Hud.new()
 	hud.world = self
 	add_child(hud)
@@ -218,6 +222,7 @@ func _create(kind: String, id: int, data: Dictionary) -> Node:
 			champions[e.peer] = e
 			if e.peer == local_peer:
 				local_champion = e
+				send_build.call_deferred()
 	return e
 
 
@@ -793,77 +798,41 @@ func pick_unit(pos: Vector2, team: int, enemy: bool, tolerance: float, structs :
 # ------------------------------------------------------- input & camera ---
 
 func _unhandled_input(event: InputEvent) -> void:
+	if hud != null and hud.modal_open():
+		return
 	if event is InputEventMouseButton:
 		var mb := event as InputEventMouseButton
-		if mb.pressed and mb.button_index == MOUSE_BUTTON_WHEEL_UP:
-			cam_zoom = clampf(cam_zoom * 1.1, 0.45, 1.8)
-		elif mb.pressed and mb.button_index == MOUSE_BUTTON_WHEEL_DOWN:
-			cam_zoom = clampf(cam_zoom / 1.1, 0.45, 1.8)
-		elif mb.button_index == MOUSE_BUTTON_RIGHT:
-			rmb_held = mb.pressed
-			if mb.pressed:
-				if aim_slot != "":
-					aim_slot = ""
-					return
-				amove_armed = false
-				_right_click(true)
-		elif mb.button_index == MOUSE_BUTTON_LEFT and mb.pressed:
-			if aim_slot != "":
-				_cast(aim_slot)
-				aim_slot = ""
-			elif amove_armed:
-				amove_armed = false
-				send_command("amove", [get_global_mouse_position()])
-				_play_fx("click", {"pos": get_global_mouse_position(), "color": Color(1, 0.3, 0.3)})
-	elif event is InputEventKey:
-		var k := event as InputEventKey
-		if k.echo:
-			return
-		var slot := ""
-		match k.keycode:
-			KEY_Q: slot = "q"
-			KEY_W: slot = "w"
-			KEY_E: slot = "e"
-			KEY_R: slot = "r"
-			KEY_1, KEY_2, KEY_3, KEY_4, KEY_5, KEY_6: slot = "i%d" % (k.keycode - KEY_1)
-		if slot != "":
-			if k.pressed and (k.ctrl_pressed or k.alt_pressed) and not slot.begins_with("i"):
-				send_command("rank_up", [slot])
+		match mb.button_index:
+			MOUSE_BUTTON_WHEEL_UP:
+				if mb.pressed:
+					cam_zoom = clampf(cam_zoom * 1.1, 0.45, 1.8)
 				return
-			if k.pressed:
-				var ab = aim_ability(slot)
-				if slot.begins_with("i") and (ab == null or ab.targeting == "self"):
-					_cast(slot)
-					return
-				aim_slot = slot
-				amove_armed = false
-			elif aim_slot == slot:
-				_cast(slot)
-				aim_slot = ""
-			return
-		if k.keycode == KEY_TAB:
-			hud.show_scores(k.pressed)
-			return
-		if not k.pressed:
-			return
-		match k.keycode:
-			KEY_A:
-				amove_armed = true
-			KEY_S:
-				send_command("stop")
-			KEY_B:
-				send_command("recall")
-			KEY_P:
-				hud.toggle_shop()
-			KEY_Y, KEY_Z:
-				cam_locked = not cam_locked
-			KEY_SPACE:
-				if local_champion != null:
-					camera.global_position = local_champion.global_position
-			KEY_F1, KEY_F2, KEY_F3, KEY_F4:
-				if cheats_allowed():
-					send_command("cheat", [["level", "gold", "cd", "ranks"][k.keycode - KEY_F1]])
-			KEY_ESCAPE:
+			MOUSE_BUTTON_WHEEL_DOWN:
+				if mb.pressed:
+					cam_zoom = clampf(cam_zoom / 1.1, 0.45, 1.8)
+				return
+			MOUSE_BUTTON_RIGHT:
+				rmb_held = mb.pressed
+				if mb.pressed:
+					if aim_slot != "":
+						aim_slot = ""
+						return
+					amove_armed = false
+					_right_click(true)
+				return
+			MOUSE_BUTTON_LEFT:
+				if mb.pressed:
+					if aim_slot != "":
+						_cast(aim_slot)
+						aim_slot = ""
+					elif amove_armed or Game.prefs.move_mode == "wasd":
+						amove_armed = false
+						attack_move()
+				return
+	if event is InputEventKey:
+		var k := event as InputEventKey
+		if k.keycode == KEY_ESCAPE:
+			if k.pressed and not k.echo:
 				if aim_slot != "" or amove_armed:
 					aim_slot = ""
 					amove_armed = false
@@ -871,15 +840,108 @@ func _unhandled_input(event: InputEvent) -> void:
 					hud.toggle_shop()
 				else:
 					hud.toggle_menu()
+			return
+		if k.pressed and not k.echo and k.keycode in [KEY_F1, KEY_F2, KEY_F3, KEY_F4]:
+			if cheats_allowed():
+				send_command("cheat", [["level", "gold", "cd", "ranks"][k.keycode - KEY_F1]])
+			return
+		if k.echo:
+			return
+	var act := Controls.action_of(event, Game.prefs.move_mode)
+	if act == "" or act in Controls.MOVE_ACTIONS:
+		return
+	var pressed := event.is_pressed()
+	var slot := ""
+	if act.begins_with("ability_"):
+		slot = act.substr(8)
+	elif act.begins_with("item_"):
+		slot = "i%d" % (int(act.substr(5)) - 1)
+	elif act.begins_with("summoner_"):
+		slot = "s%d" % (int(act.substr(9)) - 1)
+	if slot != "":
+		var wm := event as InputEventWithModifiers
+		var mods: bool = wm != null and (wm.ctrl_pressed or wm.alt_pressed)
+		if pressed and mods and slot in Champion.SLOTS:
+			send_command("rank_up", [slot])
+			return
+		if pressed:
+			var ab = aim_ability(slot)
+			if not slot in Champion.SLOTS and (ab == null or ab.targeting == "self"):
+				_cast(slot)
+				return
+			aim_slot = slot
+			amove_armed = false
+		elif aim_slot == slot:
+			_cast(slot)
+			aim_slot = ""
+		return
+	match act:
+		"scoreboard":
+			hud.show_scores(pressed)
+		"camera_center":
+			_cam_hold = pressed
+	if not pressed:
+		return
+	match act:
+		"attack_move":
+			if Game.prefs.amove_click:
+				amove_armed = true
+			else:
+				attack_move()
+		"stop":
+			send_command("stop")
+		"recall":
+			send_command("recall")
+		"shop":
+			hud.toggle_shop()
+		"camera_lock":
+			cam_locked = not cam_locked
 
 
-## The ability (or item active) bound to an aim slot: q/w/e/r or i0..i5.
+## Attack-move at the cursor: the host attacks the enemy in range closest to the cursor (or to
+## you - see Settings), otherwise walks there attacking whatever comes into range.
+func attack_move() -> void:
+	if local_champion == null or local_champion.dead or ended:
+		return
+	var m := get_global_mouse_position()
+	send_command("amove", [m, str(Game.prefs.amove_target)])
+	_play_fx("click", {"pos": m, "color": Color(1, 0.3, 0.3)})
+	_amove_ring = 0.35
+
+
+## Sends this player's autobuy setting and build (for the current character) to the host.
+func send_build() -> void:
+	if local_champion == null or ended:
+		return
+	var b = Game.prefs.builds.get(local_champion.char_id, [])
+	send_command("build", [b if b is Array else []])
+	send_command("autobuy", [bool(Game.prefs.autobuy)])
+
+
+## True while keyboard keys should control the game (not typing in a text box or in a menu).
+func keys_free() -> bool:
+	return get_window().has_focus() and not (get_viewport().gui_get_focus_owner() is LineEdit) and not hud.modal_open()
+
+
+## WASD mode: sends the movement direction to the host whenever it changes.
+func _steer() -> void:
+	var dir := Vector2.ZERO
+	if Game.prefs.move_mode == "wasd" and local_champion != null and not ended and keys_free():
+		dir = Input.get_vector("move_left", "move_right", "move_up", "move_down")
+	if not dir.is_equal_approx(_steer_sent):
+		_steer_sent = dir
+		send_command("steer", [dir])
+
+
+## The ability (or item active / summoner spell) bound to an aim slot: q/w/e/r, i0..i5 or s0/s1.
 func aim_ability(slot: String):
 	if local_champion == null:
 		return null
 	if slot.begins_with("i"):
 		var it = local_champion.item_def(int(slot.substr(1)))
 		return it.active if it != null else null
+	if slot.begins_with("s"):
+		return local_champion.summoner_ability(int(slot.substr(1)))
 	return local_champion.active_ability(slot)
 
 
@@ -905,12 +967,12 @@ func _cast(slot: String) -> void:
 	if c == null or ended:
 		return
 	var ab = aim_ability(slot)
-	if ab == null or (c.dead and not (slot.begins_with("i") and ab.get("while_dead", false))):
+	if ab == null or (c.dead and not (not slot in Champion.SLOTS and ab.get("while_dead", false))):
 		return
 	var m := get_global_mouse_position()
 	var tid := 0
 	if ab.targeting == "unit" or ab.targeting == "ally":
-		var t := pick_unit(m, local_team, ab.targeting == "unit", 70.0, false)
+		var t := pick_unit(m, local_team, ab.targeting == "unit", 70.0, bool(ab.get("structures", false)))
 		if t != null:
 			tid = t.net_id
 	if slot.begins_with("i"):
@@ -919,8 +981,17 @@ func _cast(slot: String) -> void:
 			send_command("item", [i, m, tid])
 			_sfx("cast", c.global_position, -14.0)
 		return
+	if slot.begins_with("s"):
+		var si := int(slot.substr(1))
+		var sp = c.summoner_def(si)
+		if sp != null and (c.sum_cd[si] <= 0.0 or ab != sp.active):
+			send_command("summoner", [si, m, tid])
+			_sfx("cast", c.global_position, -14.0)
+		elif sp != null:
+			hud.notice("%s is on cooldown (%ds)" % [sp.name, ceili(c.sum_cd[si])])
+		return
 	if int(c.ranks.get(slot, 0)) <= 0:
-		hud.notice("%s isn't learned yet - Ctrl+%s (or the + button) to level it up" % [ab.name, slot.to_upper()])
+		hud.notice("%s isn't learned yet - Ctrl+%s (or the + button) to level it up" % [ab.name, Controls.label("ability_" + slot)])
 		return
 	if c.cooldowns.get(slot, 0.0) <= 0.0 and not c.can_pay(ab):
 		hud.notice("Not enough health" if ab.cost_type == "health" else "Not enough mana")
@@ -932,13 +1003,15 @@ func _cast(slot: String) -> void:
 
 func _process(delta: float) -> void:
 	camera.zoom = camera.zoom.lerp(Vector2.ONE * cam_zoom, minf(10.0 * delta, 1.0))
-	if cam_locked and local_champion != null:
+	_steer()
+	_amove_ring = maxf(_amove_ring - delta, 0.0)
+	if (cam_locked or _cam_hold) and local_champion != null:
 		camera.global_position = local_champion.global_position
 	elif not cam_locked:
 		var vp := get_viewport().get_visible_rect().size
 		var mp := get_viewport().get_mouse_position()
-		var edge := edge_pan and get_window().has_focus() and Rect2(Vector2.ZERO, vp).has_point(mp)
-		var keys := not (get_viewport().gui_get_focus_owner() is LineEdit)  # not while typing in the shop search
+		var edge := edge_pan and bool(Game.prefs.edge_pan) and get_window().has_focus() and Rect2(Vector2.ZERO, vp).has_point(mp)
+		var keys := keys_free()
 		var pan := Vector2.ZERO
 		if (edge and mp.x < 10) or (keys and Input.is_key_pressed(KEY_LEFT)):
 			pan.x -= 1
@@ -948,7 +1021,7 @@ func _process(delta: float) -> void:
 			pan.y -= 1
 		if (edge and mp.y > vp.y - 10) or (keys and Input.is_key_pressed(KEY_DOWN)):
 			pan.y += 1
-		camera.global_position += pan * 1400.0 * delta / cam_zoom
+		camera.global_position += pan * 1400.0 * clampf(float(Game.prefs.camera_speed), 0.1, 5.0) * delta / cam_zoom
 		var half := get_viewport_rect().size * 0.5 / camera.zoom
 		var lo := Vector2(camera.limit_left, camera.limit_top) + half
 		var hi := Vector2(camera.limit_right, camera.limit_bottom) - half
@@ -979,8 +1052,9 @@ func _draw_indicator(n: Node2D) -> void:
 	if c == null or c.dead or ended:
 		return
 	var p := c.global_position
-	if amove_armed:
-		n.draw_arc(p, c.stats.attack_range + c.radius, 0, TAU, 64, Color(1, 0.35, 0.3, 0.7), 2.0, true)
+	if amove_armed or _amove_ring > 0.0:
+		var a := 0.7 if amove_armed else 0.7 * _amove_ring / 0.35
+		n.draw_arc(p, c.stats.attack_range + c.radius, 0, TAU, 64, Color(1, 0.35, 0.3, a), 2.0, true)
 	if aim_slot == "":
 		return
 	var ab = aim_ability(aim_slot)
@@ -988,7 +1062,12 @@ func _draw_indicator(n: Node2D) -> void:
 		return
 	var ind: Dictionary = ab.get("indicator", {})
 	var rng := Effects.num(ab.range, {"caster": c, "rank": maxi(int(c.ranks.get(aim_slot, 1)), 1)}, 700.0)
-	var on_cd: bool = c.cooldowns.get(aim_slot, 0.0) > 0.0 if not aim_slot.begins_with("i") else c.items[int(aim_slot.substr(1))] != null and c.items[int(aim_slot.substr(1))].cd > 0.0
+	var on_cd: bool = c.cooldowns.get(aim_slot, 0.0) > 0.0
+	if aim_slot.begins_with("i"):
+		on_cd = c.items[int(aim_slot.substr(1))] != null and c.items[int(aim_slot.substr(1))].cd > 0.0
+	elif aim_slot.begins_with("s"):
+		var spd = c.summoner_def(int(aim_slot.substr(1)))
+		on_cd = spd != null and c.sum_cd[int(aim_slot.substr(1))] > 0.0 and ab == spd.active
 	var col := Color(0.6, 0.6, 0.6) if on_cd else Color(0.45, 0.82, 1.0)
 	var m: Vector2 = test_aim if test_aim != null else get_global_mouse_position()
 	var to := m - p
@@ -997,7 +1076,7 @@ func _draw_indicator(n: Node2D) -> void:
 	if ab.targeting != "self":
 		n.draw_arc(p, rng, 0, TAU, 96, Color(col, 0.35), 2.0, true)
 	if ab.targeting == "unit" or ab.targeting == "ally":
-		var t := pick_unit(m, local_team, ab.targeting == "unit", 70.0, false)
+		var t := pick_unit(m, local_team, ab.targeting == "unit", 70.0, bool(ab.get("structures", false)))
 		if t != null:
 			n.draw_arc(t.global_position, t.radius + 8.0, 0, TAU, 32, col, 4.0, true)
 		return

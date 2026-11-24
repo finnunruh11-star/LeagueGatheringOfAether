@@ -11,7 +11,7 @@ signal match_started(config: Dictionary)
 signal back_to_lobby
 signal left_game(reason: String)
 
-const PROTOCOL := 2
+const PROTOCOL := 3
 const DEFAULT_PORT := 7777
 const TEAM_NAMES := ["Blue", "Red", "Neutral"]
 const TEAM_COLORS := [Color("4d8dff"), Color("ff5a4d"), Color("bbbbbb")]
@@ -28,6 +28,9 @@ var items := {}            # id -> item definition
 var item_pack := {}        # raw items/ folder, sent to clients
 var item_ids: Array = []   # sorted ids; snapshots send items as index + 1
 var item_index := {}       # id -> index + 1
+var summoners := {}        # id -> summoner spell definition
+var summoner_pack := {}    # raw summoners/ folder, sent to clients
+var summoner_ids: Array = []   # sorted by name
 var content_errors := PackedStringArray()
 var using_host_content := false
 
@@ -39,6 +42,18 @@ var world: Node = null
 var match_count := 0
 var cmdline := {}
 var debug_log := false  # --itemtest prints every damage/heal/proc
+## Player preferences, saved in user://settings.cfg (see the Settings menu). Key bindings live in Controls.
+var prefs := {
+	"move_mode": "click",       # "click" (right-click to move) or "wasd"
+	"amove_target": "cursor",   # attack-move attacks the enemy closest to the "cursor" or to your "champion"
+	"amove_click": false,       # true: the attack-move key arms it and a left click fires it
+	"edge_pan": true,
+	"camera_speed": 1.0,
+	"camera_locked": true,      # the camera follows your champion when a match starts
+	"autobuy": false,
+	"summoners": ["flash", "ignite"],
+	"builds": {},               # character id -> [item ids]: what autobuy buys, in order
+}
 var _ready_peers := {}
 var _next_bot := -1
 
@@ -48,6 +63,9 @@ func _ready() -> void:
 		var kv := str(a).trim_prefix("--").split("=", true, 1)
 		cmdline[kv[0]] = kv[1] if kv.size() > 1 else "true"
 	load_settings()
+	if cmdline.has("wasd"):
+		prefs.move_mode = "wasd"
+	Controls.setup(_saved_keys, prefs.move_mode)
 	multiplayer.peer_connected.connect(_on_peer_connected)
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
 	multiplayer.connected_to_server.connect(_on_connected_to_server)
@@ -73,6 +91,8 @@ func reload_content() -> void:
 	maps = Content.read_maps(content_errors)
 	item_pack = Content.read_item_pack(content_errors)
 	_build_items()
+	summoner_pack = Content.read_summoner_pack(content_errors)
+	_build_summoners()
 	using_host_content = false
 	if not maps.has(settings.map) and not maps.is_empty():
 		settings.map = "two_lanes" if maps.has("two_lanes") else maps.keys()[0]
@@ -88,6 +108,34 @@ func _build_items() -> void:
 	item_index.clear()
 	for i in item_ids.size():
 		item_index[item_ids[i]] = i + 1
+
+
+func _build_summoners() -> void:
+	summoners = Content.build_summoners(summoner_pack, content_errors)
+	summoner_ids = summoners.keys()
+	summoner_ids.sort_custom(func(a, b): return str(summoners[a].name).naturalnocasecmp_to(str(summoners[b].name)) < 0)
+
+
+## Two different, existing summoner spell ids: `list` with unknown ids replaced.
+func valid_summoners(list) -> Array:
+	var out := []
+	if list is Array:
+		for s in list:
+			if summoners.has(str(s)) and not out.has(str(s)) and out.size() < 2:
+				out.append(str(s))
+	for s in ["flash", "ignite", "heal"] + summoner_ids:
+		if out.size() >= 2:
+			break
+		if summoners.has(s) and not out.has(s):
+			out.append(s)
+	return out
+
+
+## Flash plus a spell that suits the character's role (used for bots and new players).
+func default_summoners(cid: String) -> Array:
+	var def = characters.get(cid)
+	var role := Champion.role_of(def) if def is Dictionary else "bruiser"
+	return valid_summoners(["flash", {"mage": "ignite", "marksman": "heal"}.get(role, "ghost")])
 
 
 func sorted_character_ids() -> Array:
@@ -152,7 +200,8 @@ func leave(reload := true) -> void:
 
 func _init_lobby() -> void:
 	players.clear()
-	players[1] = {"name": player_name, "team": 0, "character": default_character(), "bot": false}
+	players[1] = {"name": player_name, "team": 0, "character": default_character(), "bot": false,
+		"summoners": valid_summoners(prefs.summoners)}
 	lobby_changed.emit()
 
 
@@ -206,11 +255,13 @@ func _rpc_register(pname: String, protocol: int) -> void:
 	if in_match:
 		_rpc_kicked.rpc_id(id, "A match is in progress. Try again when it ends.")
 		return
-	players[id] = {"name": pname.substr(0, 20), "team": _smaller_team(), "character": default_character(), "bot": false}
+	players[id] = {"name": pname.substr(0, 20), "team": _smaller_team(), "character": default_character(), "bot": false,
+		"summoners": valid_summoners([])}
 	_rpc_content_begin.rpc_id(id)
 	for cid in character_packs:
 		_rpc_character_pack.rpc_id(id, cid, character_packs[cid])
 	_rpc_item_pack.rpc_id(id, item_pack)
+	_rpc_summoner_pack.rpc_id(id, summoner_pack)
 	_rpc_content_end.rpc_id(id)
 	_broadcast_lobby()
 
@@ -244,6 +295,12 @@ func _rpc_item_pack(pack: Dictionary) -> void:
 
 
 @rpc("authority", "call_remote", "reliable")
+func _rpc_summoner_pack(pack: Dictionary) -> void:
+	summoner_pack = pack
+	_build_summoners()
+
+
+@rpc("authority", "call_remote", "reliable")
 func _rpc_content_end() -> void:
 	content_changed.emit()
 	net_status.emit("")
@@ -264,6 +321,7 @@ func _rpc_lobby(p: Dictionary, s: Dictionary) -> void:
 	settings = s
 	if first:
 		lobby_joined.emit()
+		request_change("summoners", prefs.summoners)
 	lobby_changed.emit()
 
 
@@ -289,6 +347,9 @@ func _apply_change(pid: int, key: String, value) -> void:
 		"character":
 			if characters.has(str(value)):
 				players[pid].character = str(value)
+		"summoners":
+			if value is Array and value.size() == 2 and str(value[0]) != str(value[1]):
+				players[pid].summoners = valid_summoners(value)
 	_broadcast_lobby()
 
 
@@ -310,7 +371,8 @@ func add_bot(team: int) -> void:
 		return
 	var ids := characters.keys()
 	var cid: String = ids[randi() % ids.size()]
-	players[_next_bot] = {"name": "Bot %d" % -_next_bot, "team": team, "character": cid, "bot": true}
+	players[_next_bot] = {"name": "Bot %d" % -_next_bot, "team": team, "character": cid, "bot": true,
+		"summoners": default_summoners(cid)}
 	_next_bot -= 1
 	_broadcast_lobby()
 
@@ -330,6 +392,7 @@ func start_match() -> void:
 	for pid in players:
 		if not characters.has(players[pid].character):
 			players[pid].character = default_character()
+		players[pid].summoners = valid_summoners(players[pid].get("summoners", []))
 	match_count += 1
 	var config := {
 		"id": match_count,
@@ -388,6 +451,9 @@ func _rpc_return_to_lobby() -> void:
 
 # --------------------------------------------------------------- settings ---
 
+var _saved_keys := {}
+
+
 func load_settings() -> void:
 	var cfg := ConfigFile.new()
 	if cfg.load(SETTINGS_PATH) == OK:
@@ -395,6 +461,15 @@ func load_settings() -> void:
 		last_ip = str(cfg.get_value("net", "ip", last_ip))
 		port = int(cfg.get_value("net", "port", port))
 		settings.map = str(cfg.get_value("lobby", "map", settings.map))
+		for k in prefs:
+			var v = cfg.get_value("prefs", k, prefs[k])
+			if typeof(v) == typeof(prefs[k]) or (prefs[k] is float and v is int):
+				prefs[k] = v
+		if cfg.has_section("keys"):
+			for k in cfg.get_section_keys("keys"):
+				_saved_keys[k] = str(cfg.get_value("keys", k, ""))
+	if cmdline.has("auto"):
+		prefs.camera_locked = true
 
 
 func save_settings() -> void:
@@ -405,4 +480,9 @@ func save_settings() -> void:
 	cfg.set_value("net", "ip", last_ip)
 	cfg.set_value("net", "port", port)
 	cfg.set_value("lobby", "map", settings.map)
+	for k in prefs:
+		cfg.set_value("prefs", k, prefs[k])
+	var keys := Controls.bindings()
+	for k in keys:
+		cfg.set_value("keys", k, keys[k])
 	cfg.save(SETTINGS_PATH)

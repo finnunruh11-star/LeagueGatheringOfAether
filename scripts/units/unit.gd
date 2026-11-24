@@ -215,9 +215,11 @@ func _move_toward(goal: Vector2, delta: float, chasing: bool) -> bool:
 
 
 func _separate() -> void:
+	if stats.get("ghost", 0.0) > 0.0:
+		return
 	var push := Vector2.ZERO
 	for u in world.units:
-		if u == self or u.dead or not u.separate:
+		if u == self or u.dead or not u.separate or u.stats.get("ghost", 0.0) > 0.0:
 			continue
 		var d: Vector2 = global_position - u.global_position
 		var min_d: float = radius + u.radius

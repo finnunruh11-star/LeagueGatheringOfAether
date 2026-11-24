@@ -1,0 +1,15 @@
+{
+  "name": "Flash",
+  "short": "FL",
+  "color": "#f5e663",
+  "description": "Teleports you a short distance (400) toward the cursor. Works while rooted or silenced.",
+  "cooldown": 300,
+  "targeting": "point",
+  "range": 400,
+  "bot": "escape",
+  "effects": [
+    {
+      "type": "teleport"
+    }
+  ]
+}

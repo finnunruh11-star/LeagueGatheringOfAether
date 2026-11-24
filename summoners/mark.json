@@ -1,0 +1,74 @@
+{
+  "name": "Mark",
+  "short": "MK",
+  "color": "#dff3ff",
+  "description": "ARAM snowball: throw it in a line (1600 range). If it hits an enemy, they take 15-100 true damage (by level), are revealed and marked for 3 seconds - recast to Dash to them.",
+  "cooldown": 80,
+  "targeting": "direction",
+  "range": 1600,
+  "bot": "fight",
+  "effects": [
+    {
+      "type": "projectile",
+      "speed": 1500,
+      "radius": 22,
+      "color": "#e8f6ff",
+      "on_hit": [
+        {
+          "type": "damage",
+          "amount": "10 + 5 * min(level, 18.0)",
+          "damage_type": "true"
+        },
+        {
+          "type": "reveal",
+          "duration": 3
+        },
+        {
+          "type": "mark",
+          "id": "snowball",
+          "duration": 3
+        },
+        {
+          "type": "buff",
+          "target": "self",
+          "id": "snowball_dash",
+          "duration": 3,
+          "hidden": true
+        }
+      ]
+    }
+  ],
+  "recast": {
+    "name": "Dash",
+    "status": "snowball_dash",
+    "targeting": "self",
+    "bot": "dash",
+    "description": "Dash to the enemy your snowball marked.",
+    "effects": [
+      {
+        "type": "remove",
+        "target": "self",
+        "id": "snowball_dash"
+      },
+      {
+        "type": "area",
+        "at": "self",
+        "radius": 2500,
+        "show": false,
+        "effects": [
+          {
+            "type": "dash",
+            "to": "target",
+            "speed": 1700,
+            "if": "t_has('snowball')"
+          },
+          {
+            "type": "remove",
+            "id": "snowball",
+            "if": "t_has('snowball')"
+          }
+        ]
+      }
+    ]
+  }
+}

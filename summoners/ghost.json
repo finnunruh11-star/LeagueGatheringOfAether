@@ -1,0 +1,21 @@
+{
+  "name": "Ghost",
+  "short": "GH",
+  "color": "#a6e4ff",
+  "description": "For 15 seconds you move through units and gain 24-48% move speed (by level).",
+  "cooldown": 210,
+  "targeting": "self",
+  "bot": "chase",
+  "effects": [
+    {
+      "type": "buff",
+      "target": "self",
+      "id": "ghost",
+      "duration": 15,
+      "add": {
+        "move_speed_bonus": "0.24 + 0.24 * (min(level, 18.0) - 1) / 17",
+        "ghost": 1
+      }
+    }
+  ]
+}
