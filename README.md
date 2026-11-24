@@ -105,13 +105,14 @@ Health and damage use direct values (no hidden multiplier). One world coordinate
 distance unit for attack range, spell geometry and pathing; movement speed is in units per second.
 Champion art is nominally 100 units tall, separate from the gameplay hitbox. A 500-unit range is
 five champion art heights before adding the hitbox radii for basic attacks. Unbuffed champions
-move at 330-345 units per second, compared with lane minions at 310.
+walk at about 248-259 world units per second, compared with lane minions at about 233.
+The default camera zoom is 0.8x. Walking pace, camera zoom, and map dimensions are independent
+of spell ranges, dash speeds, and projectile speeds.
 
 Basic attacks show a windup before damage or projectile launch. Moving out of reach before release
 cancels the attack. Spells with a cast time show a startup cue with an arrow for aimed casts.
-The custom maps use
-their own layouts: Two Lanes is 12,000 by 6,500 units, Bridge is 6,300 by 1,950, and Training Arena
-keeps its compact layout.
+The custom maps keep their own layouts: Two Lanes is 14,400 by 7,800 units,
+Bridge is 7,560 by 2,340, and Training Arena is 2,880 by 1,800.
 
 Benchmarks include 465 HP melee minions, 284 HP casters, 750-range turrets, 4,000 HP inhibitors,
 and a 5,500 HP Nexus. Two Lanes uses the classic 1:05 first wave, a 30-second wave interval, and

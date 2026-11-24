@@ -32,6 +32,7 @@ const NET_BASE := 14
 const HARD_CC := ["stun", "root", "slow", "silence", "dot", "grievous"]
 const CC_TYPES := ["stun", "root", "slow", "silence"]
 const COMBAT_TIME := 3.0
+const WALK_SPEED_SCALE := 0.75
 const BOND_CAP := 2.0       # Bond of Life can't grow past this many times max HP (unless an effect sets "max")
 const BOND_COLOR := Color(0.9, 0.18, 0.38)
 
@@ -777,7 +778,7 @@ func recompute_stats() -> void:
 		ms = 475.0 + (ms - 490.0) * 0.5
 	elif ms > 415.0:
 		ms = 415.0 + (ms - 415.0) * 0.8
-	st.move_speed = maxf(ms, 0.0)
+	st.move_speed = maxf(ms, 0.0) * WALK_SPEED_SCALE
 	st.max_hp = maxf(st.max_hp, 1.0)
 	st.size = clampf(st.size, 0.2, 6.0)
 	stats = st

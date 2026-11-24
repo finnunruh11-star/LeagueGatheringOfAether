@@ -52,7 +52,7 @@ Percent stats are fractions (`0.3` = 30%). Regen is per second.
 | `attack_damage`, `ability_power` | 60, 0 | |
 | `attack_speed` | 0.8 | base attacks/second. `bonus_attack_speed` (items, 0.3 = +30%) multiplies it; capped at `attack_speed_cap` 2.5 |
 | `attack_range` | 125 | melee ~70-125, ranged ~450-550 |
-| `move_speed` / `move_speed_bonus` | 330 / 0 | flat / percent (soft-capped above 415) |
+| `move_speed` / `move_speed_bonus` | 330 / 0 | flat / percent (soft-capped above 415; final walking speed is 75% of the result, in world units/second) |
 | `armor`, `magic_resist` | 20, 30 | reduce physical / magic damage (100 = half). True damage ignores both |
 | `crit_chance`, `crit_damage` | 0, 1.75 | basic attacks crit for 175% damage |
 | `ability_haste` | 0 | cooldown = base × 100 / (100 + haste) |

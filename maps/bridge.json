@@ -1,23 +1,23 @@
 {
   "name": "Bridge (one lane)",
   "description": "A single long lane - constant fighting, ARAM style. 2 towers per side + Nexus.",
-  "size": [6300, 1950],
+  "size": [7560, 2340],
   "mirror": true,
-  "spawn": [255, 975],
-  "nexus": [630, 975],
+  "spawn": [306, 1170],
+  "nexus": [756, 1170],
   "fountain_radius": 345,
   "waves": {"interval": 25, "first": 6, "melee": 3, "ranged": 3},
   "lanes": [
-    [[840, 975], [5460, 975]]
+    [[1008, 1170], [6552, 1170]]
   ],
   "towers": [
-    {"lane": 0, "order": 0, "pos": [2175, 810]},
-    {"lane": 0, "order": 1, "pos": [1425, 1140]}
+    {"lane": 0, "order": 0, "pos": [2610, 972]},
+    {"lane": 0, "order": 1, "pos": [1710, 1368]}
   ],
   "walls": [
-    [0, 0, 6300, 345],
-    [0, 1605, 6300, 345],
-    [2700, 345, 240, 285],
-    [2700, 1320, 240, 285]
+    [0, 0, 7560, 414],
+    [0, 1926, 7560, 414],
+    [3240, 414, 288, 342],
+    [3240, 1584, 288, 342]
   ]
 }

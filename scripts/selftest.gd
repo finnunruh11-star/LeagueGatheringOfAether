@@ -24,12 +24,15 @@ func _ready() -> void:
 	for e in world.entities.values():
 		if e is Dummy:
 			world.despawn(e)
-	var dummy: Dummy = world.spawn("dummy", {"pos": Vector2(1300, 750), "hp": 1000000.0})
-	var ally: Dummy = world.spawn("dummy", {"pos": Vector2(800, 600), "hp": 1000000.0})
+	var center := world.map.size * 0.5
+	var dummy_pos := center + Vector2(100, 0)
+	var cast_pos := center - Vector2(350, 0)
+	var dummy: Dummy = world.spawn("dummy", {"pos": dummy_pos, "hp": 1000000.0})
+	var ally: Dummy = world.spawn("dummy", {"pos": center - Vector2(400, 150), "hp": 1000000.0})
 	ally.team = 0
 	world.cam_locked = false
 	world.edge_pan = false
-	world.camera.global_position = Vector2(1075, 700)
+	world.camera.global_position = center - Vector2(125, 50)
 	var only := str(Game.cmdline.get("only", ""))
 	var ids := Game.sorted_character_ids()
 	print("[selftest] testing %d characters" % ids.size())
@@ -40,7 +43,7 @@ func _ready() -> void:
 		if only != "" and id != only:
 			continue
 		pid += 1
-		var c: Champion = world.spawn("champion", {"peer": pid, "team": 0, "character": id, "name": "Test", "pos": Vector2(850, 750)})
+		var c: Champion = world.spawn("champion", {"peer": pid, "team": 0, "character": id, "name": "Test", "pos": cast_pos})
 		c.max_ranks()
 		var real_local := world.local_champion
 		world.local_champion = c
@@ -55,7 +58,7 @@ func _ready() -> void:
 			if ab == null:
 				print("[selftest] %-12s %s        (none)" % [id, slot])
 				continue
-			var start := Vector2(850, 750)
+			var start := cast_pos
 			if ab.targeting == "self":
 				start = dummy.global_position - Vector2(150, 0)
 			c.teleport(start)
@@ -87,7 +90,7 @@ func _ready() -> void:
 		for e in world.entities.values():
 			if e is Summon or e is Zone or e is Projectile:
 				world.despawn(e)
-		dummy.teleport(Vector2(1300, 750))
+		dummy.teleport(dummy_pos)
 		dummy.statuses.clear()
 	print("[selftest] done")
 	get_tree().quit()
@@ -209,6 +212,13 @@ func _test_windup() -> void:
 		fireball._physics_process((fireball.max_dist + 10.0) / fireball.speed)
 		ok = _check(fireball.done and is_equal_approx(origin.distance_to(fireball.global_position), 900.0),
 			"fireball ends at its authored range instead of overshooting") and ok
+	var walk_start := at - Vector2(800, 0)
+	ember.teleport(walk_start)
+	ember.move_goal = walk_start + Vector2(500, 0)
+	for i in 61:
+		await get_tree().physics_frame
+	var distance := ember.global_position.distance_to(walk_start)
+	ok = _check(absf(distance - 247.5) <= 2.0, "Ember walks about 248 world units in one second (got %.1f)" % distance) and ok
 	print("[windup] ", "passed" if ok else "failed")
 	await get_tree().create_timer(1.0, true, false, true).timeout
 	get_tree().quit(0 if ok else 1)

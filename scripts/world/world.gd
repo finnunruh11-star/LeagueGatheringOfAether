@@ -52,7 +52,7 @@ var hud: Hud
 
 var cam_locked := true
 var edge_pan := true
-var cam_zoom := 1.0
+var cam_zoom := 0.8
 var aim_slot := ""
 var amove_armed := false
 var rmb_held := false
@@ -88,6 +88,7 @@ func start(cfg: Dictionary) -> void:
 	indicator.draw_func = _draw_indicator
 	add_child(indicator)
 	camera = Camera2D.new()
+	camera.zoom = Vector2.ONE * cam_zoom
 	camera.position_smoothing_enabled = true
 	camera.position_smoothing_speed = 10.0
 	camera.limit_left = -300
@@ -985,7 +986,7 @@ func _process(delta: float) -> void:
 			pan.y -= 1
 		if (edge and mp.y > vp.y - 10) or (keys and Input.is_key_pressed(KEY_DOWN)):
 			pan.y += 1
-		camera.global_position += pan * 1400.0 * delta / cam_zoom
+		camera.global_position += pan * 1000.0 * delta / cam_zoom
 		var half := get_viewport_rect().size * 0.5 / camera.zoom
 		var lo := Vector2(camera.limit_left, camera.limit_top) + half
 		var hi := Vector2(camera.limit_right, camera.limit_bottom) - half
