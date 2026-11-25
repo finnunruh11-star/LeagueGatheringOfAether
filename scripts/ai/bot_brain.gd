@@ -739,7 +739,7 @@ func _dive_ok(t: Unit) -> bool:
 
 func _decide() -> void:
 	var prev := mode
-	if _at_fountain() and _foes_near(me.global_position, 1300.0) == 0 \
+	if not world.aram and _at_fountain() and _foes_near(me.global_position, 1300.0) == 0 \
 			and (me.hp < me.stats.max_hp * 0.9 or (me.uses_mana() and me.mana < me.stats.max_mana * 0.7)):
 		mode = "heal"
 		return
@@ -874,7 +874,7 @@ func _fight_eval(t: Champion, committed: bool, trading: bool) -> String:
 
 
 func _should_recall() -> bool:
-	if world.map.lane_count() == 0 or _at_fountain():
+	if world.aram or world.map.lane_count() == 0 or _at_fountain():
 		return false
 	var frac: float = me.hp / me.stats.max_hp
 	if difficulty == "brick":
@@ -1251,7 +1251,7 @@ func _do_retreat() -> void:
 		if cfg.kite and me.attack_def.ranged and d <= me.attack_reach(chaser) and cfg.fight != "naive":
 			atk = chaser
 	stand = home if cfg.fight != "naive" else world.map.spawn_point(me.team)
-	if world.map.lane_count() > 0 and _foes_near(me.global_position, 1300.0) == 0 and _taken(1.5) <= 0.0 \
+	if not world.aram and world.map.lane_count() > 0 and _foes_near(me.global_position, 1300.0) == 0 and _taken(1.5) <= 0.0 \
 			and _danger_here() <= 0.0 and not _at_fountain():
 		mode = "recall"
 		_do_recall()

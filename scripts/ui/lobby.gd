@@ -12,6 +12,9 @@ var status: Label
 var problems: RichTextLabel
 var editing := 0
 var _map_ids: Array = []
+var _champion_hint: Label
+var _aram_cards: HBoxContainer
+var _champion_scroll: ScrollContainer
 var sum_pick: Array = []   # the two summoner spell OptionButtons
 var rune_button: Button
 var _preview_id := ""
@@ -91,8 +94,10 @@ func _ready() -> void:
 	var mid := VBoxContainer.new()
 	mid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	cols.add_child(mid)
-	UiKit.label(mid, "Choose your champion (host can click a bot's name first to pick for it)")
+	_champion_hint = UiKit.label(mid, "")
+	_aram_cards = UiKit.row(mid)
 	var scroll := ScrollContainer.new()
+	_champion_scroll = scroll
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	mid.add_child(scroll)
 	grid = GridContainer.new()
@@ -226,8 +231,12 @@ func _refresh() -> void:
 	if not is_inside_tree():
 		return
 	for c in players_box.get_children():
+		players_box.remove_child(c)
 		c.queue_free()
 	var me := multiplayer.get_unique_id()
+	var aram := Game.Mayhem.is_aram(Game.settings.map)
+	if editing != 0 and not Game.players.has(editing):
+		editing = 0
 	var ids := Game.players.keys()
 	ids.sort()
 	for pid in ids:
@@ -237,7 +246,8 @@ func _refresh() -> void:
 		sw.color = Game.TEAM_COLORS[clampi(int(p.team), 0, 1)]
 		sw.custom_minimum_size = Vector2(10, 30)
 		row.add_child(sw)
-		var cname: String = Game.characters[p.character].name if Game.characters.has(p.character) else "?"
+		var cid: String = p.get("aram_character", "") if aram else p.character
+		var cname: String = Game.characters[cid].name if Game.characters.has(cid) else "?"
 		var can_edit: bool = pid == me or (Game.is_host() and p.bot)
 		var name_btn := Button.new()
 		name_btn.text = "%s  -  %s%s" % [p.name, cname, "  (you)" if pid == me else ""]
@@ -261,8 +271,8 @@ func _refresh() -> void:
 		if _map_ids[i] == Game.settings.map:
 			map_select.select(i)
 	map_select.disabled = not Game.is_host()
-	fog_check.set_pressed_no_signal(bool(Game.settings.get("fog", true)))
-	fog_check.disabled = not Game.is_host()
+	fog_check.set_pressed_no_signal(not aram and bool(Game.settings.get("fog", true)))
+	fog_check.disabled = aram or not Game.is_host()
 	var md = Game.maps.get(Game.settings.map, {})
 	fog_check.tooltip_text = "This map has fog of war turned off." if md is Dictionary and not bool(md.get("fog", true)) else ""
 	if not Game.online:
@@ -276,13 +286,30 @@ func _refresh() -> void:
 	else:
 		status.text = "Connected. Waiting for the host to start..."
 	var mine = Game.players.get(editing if editing != 0 else me)
-	if mine != null:
-		_show_details(mine.character)
+	var picked: String = mine.get("aram_character", "") if aram and mine != null else (mine.character if mine != null else "")
+	_champion_hint.text = "%s: choose one of your random champion cards." % md.name if aram \
+		else "Choose your champion (host can click a bot's name first to pick for it)"
+	_champion_scroll.visible = not aram
+	_aram_cards.visible = aram
+	for c in _aram_cards.get_children():
+		_aram_cards.remove_child(c)
+		c.queue_free()
+	if aram and mine != null:
+		for cid in mine.get("aram_cards", []):
+			var b := UiKit.button(_aram_cards, str(Game.characters[cid].name),
+				func(): Game.request_change("aram_character", cid, editing))
+			b.icon = UiKit.placeholder(Game.characters[cid])
+			b.expand_icon = true
+			b.custom_minimum_size = Vector2(225, 68)
+			b.modulate = Color("ffd16e") if cid == picked else Color.WHITE
+			b.mouse_entered.connect(_show_details.bind(cid))
+	if not picked.is_empty():
+		_show_details(picked)
 	_refresh_summoners(mine, mine != null and (editing == 0 or (Game.is_host() and bool(mine.bot))))
 	rune_button.disabled = mine == null or (editing != 0 and not (Game.is_host() and bool(mine.bot)))
 	if mine != null:
 		var page: Dictionary = mine.get("runes", {})
-		rune_button.text = "Runes: " + Runes.keystone(page if Runes.valid(page) else Game.default_runes(mine.character))
+		rune_button.text = "Runes: " + Runes.keystone(page if Runes.valid(page) else Game.default_runes(picked))
 
 
 func _edit_runes() -> void:
@@ -294,7 +321,8 @@ func _edit_runes() -> void:
 	var page: Dictionary = player.get("runes", {})
 	var editor := RunePageEditor.new()
 	add_child(editor)
-	editor.open(player.name, page if Runes.valid(page) else Game.default_runes(player.character), func(chosen):
+	var cid: String = player.get("aram_character", player.character) if Game.Mayhem.is_aram(Game.settings.map) else player.character
+	editor.open(player.name, page if Runes.valid(page) else Game.default_runes(cid), func(chosen):
 		if not Game.players.has(pid):
 			return
 		if pid == me:
@@ -324,13 +352,14 @@ func _difficulty_picker(row: Control, pid: int, p: Dictionary) -> void:
 
 ## Fills the two summoner spell pickers for you (or the bot the host is editing).
 func _refresh_summoners(p, can_edit: bool) -> void:
-	var cur: Array = p.get("summoners", []) if p is Dictionary else []
+	var cur := _lobby_summoners(p)
 	for i in 2:
 		var o: OptionButton = sum_pick[i]
 		o.clear()
 		for k in Game.summoner_ids.size():
 			var sp: Dictionary = Game.summoners[Game.summoner_ids[k]]
 			o.add_item(sp.name)
+			o.set_item_disabled(k, Game.Mayhem.is_aram(Game.settings.map) and Game.summoner_ids[k] in Game.Mayhem.DISALLOWED_SPELLS)
 			o.set_item_tooltip(k, sp.description)
 			if i < cur.size() and cur[i] == Game.summoner_ids[k]:
 				o.select(k)
@@ -341,7 +370,7 @@ func _refresh_summoners(p, can_edit: bool) -> void:
 func _pick_summoner(idx: int, slot_i: int) -> void:
 	var me := multiplayer.get_unique_id()
 	var target := editing if editing != 0 and Game.players.has(editing) else me
-	var cur: Array = Game.players.get(target, {}).get("summoners", []).duplicate()
+	var cur := _lobby_summoners(Game.players.get(target))
 	while cur.size() < 2:
 		cur.append("")
 	var id: String = Game.summoner_ids[idx]
@@ -352,6 +381,13 @@ func _pick_summoner(idx: int, slot_i: int) -> void:
 		Game.prefs.summoners = cur
 		Game.save_settings()
 	Game.request_change("summoners", cur, target if target != me else 0)
+
+
+func _lobby_summoners(p) -> Array:
+	var cur: Array = p.get("summoners", []) if p is Dictionary else []
+	if Game.Mayhem.is_aram(Game.settings.map):
+		return Game.aram_summoners(cur)
+	return cur.duplicate()
 
 
 func _set_editing(pid: int) -> void:

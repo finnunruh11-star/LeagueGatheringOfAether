@@ -21,12 +21,17 @@ const ACTIONS := [
 	["item_5", "Item 5", "5", "5"],
 	["item_6", "Item 6", "6", "6"],
 	["attack_move", "Attack move", "A", "X"],
+	["attack_move_click", "Attack move click (instant)", "", ""],
+	["target_champions", "Target champions only (hold)", "QuoteLeft", "QuoteLeft"],
 	["stop", "Stop", "S", ""],
 	["recall", "Recall", "B", "B"],
 	["shop", "Shop", "P", "P"],
 	["camera_lock", "Lock / unlock camera", "Y|Z", "Y|Z"],
 	["camera_center", "Center camera (hold)", "Space", ""],
 	["scoreboard", "Scoreboard (hold)", "Tab", "Tab"],
+	["ping", "Team ping wheel", "G", "G"],
+	["ping_retreat", "Retreat ping", "V", "V"],
+	["ping_vision", "Vision ping wheel", "H", "H"],
 	["move_up", "Move up (WASD mode)", "W", "W"],
 	["move_left", "Move left (WASD mode)", "A", "A"],
 	["move_down", "Move down (WASD mode)", "S", "S"],
@@ -183,7 +188,8 @@ static func help_text(mode: String) -> String:
 		parts.append("%s%s%s%s move   LMB attack   RMB move/attack" % [label("move_up"), label("move_left"), label("move_down"), label("move_right")])
 	else:
 		parts.append("RMB move/attack")
-	parts.append("%s cast (hold to aim)" % abil)
+	var cast_hint: String = {"quick": "cast", "indicator": "aim/release", "normal": "aim/click"}.get(Game.prefs.cast_mode, "cast")
+	parts.append("%s %s" % [abil, cast_hint])
 	parts.append("Ctrl+%s level up" % abil.replace(" ", ""))
 	parts.append("%s/%s summoners" % [label("summoner_1"), label("summoner_2")])
 	parts.append("%s-%s items" % [label("item_1"), label("item_6")])
@@ -195,5 +201,7 @@ static func help_text(mode: String) -> String:
 	parts.append("%s shop" % label("shop"))
 	parts.append("%s camera" % label("camera_lock"))
 	parts.append("%s scores" % label("scoreboard"))
+	if code_of("ping") != "":
+		parts.append("%s pings" % label("ping"))
 	parts.append("Esc menu")
 	return "   ".join(parts)

@@ -66,6 +66,7 @@ var _dynamic_stats := false
 var _dyn_t := 0.0
 var _energy_pos := Vector2.INF
 var zeri_charge := 0.0
+var sion: SionKit
 var bot_lane := 0
 var bot_plan: Array = []
 var bot_difficulty := "normal"  # brick / normal / scripting (see BotBrain)
@@ -73,6 +74,12 @@ var brain: BotBrain = null     # host: the bot AI while is_bot
 var cs := 0                    # minions and summons killed (host)
 var jungle_times := PackedFloat32Array([0.0, 0.0, 0.0, 0.0])  # clients: replicated JUNGLE_BUFFS timers
 var target_id := 0
+var aram_shop_locked := false
+var augments: Array = []
+var augment_offers: Array = []
+var augment_seen: Array = []
+var augment_rerolled: Array = []
+var augment_tier := -1
 
 
 func setup(d: Dictionary) -> void:
@@ -91,6 +98,8 @@ func setup(d: Dictionary) -> void:
 			"per_level": {}, "attack": attack_def, "passive": {"name": "", "description": "", "triggers": [], "icon": null},
 			"abilities": {}, "sprite": null, "portrait": null}
 	display_name = def.name
+	if char_id == "sion" and def.abilities.has("q"):
+		sion = SionKit.new(self)
 	color = def.color
 	base_stats = def.stats.duplicate()
 	base_radius = def.get("gameplay_radius", Content.CHAMPION_GAMEPLAY_RADIUS)
@@ -131,6 +140,14 @@ func uses_mana() -> bool:
 
 func command(cmd: String, args: Array) -> void:
 	match cmd:
+		"sion_release":
+			if sion != null and not dead:
+				sion.release_smash()
+			return
+		"sion_steer":
+			if sion != null and not args.is_empty() and args[0] is Vector2:
+				sion.steer_to(args[0])
+			return
 		"rune":
 			if rune_state == null or args.is_empty() or not args[0] is String or not rune_state.action(args[0], args.slice(1)):
 				world.fx("notice", {"peer": peer, "text": "Rune action unavailable for this target or at this time"})
@@ -254,10 +271,32 @@ func command(cmd: String, args: Array) -> void:
 			if args.size() >= 3 and args[0] is String and args[1] is Vector2 and (args[2] is int or args[2] is float):
 				cast(args[0], args[1], int(args[2]))
 		"recall":
-			start_recall()
+			if world.aram:
+				world.fx("notice", {"peer": peer, "text": "Recall is disabled in ARAM."})
+			else:
+				start_recall()
 
 
 func cast(slot: String, aim: Vector2, tid: int) -> bool:
+	if sion != null:
+		if dead or not aim.is_finite() or not slot in SLOTS:
+			return false
+		if sion.form == SionKit.ZOMBIE:
+			return can_cast(true) and sion.death_surge()
+		if sion.action == SionKit.CHARGE and slot == "r":
+			if sion.elapsed < 0.5:
+				return false
+			sion.end_rush()
+			return true
+		if sion.action != SionKit.IDLE and slot != "w":
+			return false
+		if slot == "r" and has_status("root"):
+			return false
+		if slot == "w" and recasts.has(slot):
+			var furnace := sion.shield()
+			if furnace.is_empty() or furnace.amount <= 0.0:
+				_close_recast(slot)
+				return false
 	var ab = active_ability(slot)
 	if ab == null or int(ranks.get(slot, 0)) <= 0 or dead or cooldowns.get(slot, 0.0) > 0.0 or casting != null:
 		return false
@@ -292,7 +331,8 @@ func cast(slot: String, aim: Vector2, tid: int) -> bool:
 	cancel_attack_windup(over_attacks)
 	if over_attacks:
 		recovery_lock = 0.0
-	face(ctx.pos)
+	if sion == null or sion.action == SionKit.IDLE:
+		face(ctx.pos)
 	var ct := Effects.num(ab.cast_time, ctx, 0.0)
 	var variant := (ACT_RECAST if is_recast else 1) + SLOTS.find(slot)
 	world.note_cast(self, slot, is_recast, "", ctx, ct)
@@ -332,6 +372,8 @@ func can_pay(ab: Dictionary) -> bool:
 
 
 func ability_cooldown(ab: Dictionary, ctx := {}) -> float:
+	if sion != null and ab.slot == "w" and is_same(ab, def.abilities.w.get("recast")):
+		return 3.0
 	var r := maxi(int(ranks.get(ab.slot, 1)), 1)
 	if ctx.is_empty():
 		ctx = {"caster": self, "rank": r}
@@ -368,11 +410,20 @@ func _execute(ab: Dictionary, ctx: Dictionary) -> void:
 			rune_state.state["guard_%d" % ally.net_id] = world.time + 2.5
 	if char_id == "zeri":
 		ZeriKit.cast(self, ab, ctx)
+	elif sion != null:
+		match ab.slot:
+			"q", "r": sion.start_action(ab.slot, ctx)
+			"e": sion.roar(ab, ctx)
+			"w":
+				if is_same(ab, def.abilities.w):
+					Effects.run(ab.effects, ctx)
+				else:
+					sion.detonate(ab, ctx)
 	else:
 		Effects.run(ab.effects, ctx)
 	trigger("cast", self, ctx.pos, {"cast_slot": ab.slot, "amount": float(ctx.get("cost_paid", 0.0)),
 		"exclude_unique": "spellblade_charge" if char_id == "zeri" and ab.slot == "q" else ""})
-	if ab.get("recast") is Dictionary and not dead:
+	if ab.get("recast") is Dictionary and not dead and not (sion != null and ab.slot == "r"):
 		_open_recast(ab, ctx)
 
 
@@ -381,6 +432,11 @@ func _execute(ab: Dictionary, ctx: Dictionary) -> void:
 ## The ability a slot casts right now: its "recast" while that is available.
 func active_ability(slot: String):
 	var ab = def.abilities.get(slot)
+	if sion != null and ab != null:
+		if sion.form == SionKit.ZOMBIE:
+			return SionKit.SURGE_ABILITY
+		if slot == "r" and sion.action == SionKit.CHARGE:
+			return ab.recast
 	if ab != null and ab.get("recast") is Dictionary and float(recast_left.get(slot, 0.0)) > 0.0:
 		return ab.recast
 	return ab
@@ -547,6 +603,11 @@ func _rebuild_triggers() -> void:
 	var ptr: Array = def.passive.triggers
 	for i in ptr.size():
 		trig_list.append({"tr": ptr[i], "key": "p%d" % i, "src": "passive", "slot": -1, "name": str(def.passive.name), "color": color})
+	for id in augments:
+		var a: Dictionary = Game.Mayhem.AUGMENTS[id]
+		if a.has("trigger"):
+			trig_list.append({"tr": a.trigger, "key": "augment:" + id, "src": "passive", "slot": -1,
+				"name": a.name, "color": Game.Mayhem.TIER_COLORS[a.tier]})
 	for slot in ITEM_SLOTS:
 		var inst = items[slot]
 		if inst == null:
@@ -693,6 +754,8 @@ func on_damaged(_amount: float, src) -> void:
 
 
 func on_kill(victim) -> void:
+	if sion != null and victim is Unit:
+		sion.gain_health(victim)
 	if rune_state != null:
 		rune_state.on_kill(victim)
 	var p: Vector2 = victim.global_position if is_instance_valid(victim) else global_position
@@ -708,10 +771,14 @@ func on_takedown(victim, assist: bool) -> void:
 		rune_state.takedown(victim)
 	if assist:
 		assists += 1
+		if sion != null and victim is Champion:
+			sion.gain_health(victim)
 	trigger("takedown", victim, victim.global_position if is_instance_valid(victim) else global_position, {"amount": 0.0 if assist else 1.0})
 
 
 func _cheat_death() -> bool:
+	if sion != null and sion.form == SionKit.ZOMBIE:
+		return false
 	if trigger("lethal", self):
 		hp = maxf(hp, 1.0)
 		return true
@@ -758,9 +825,21 @@ func count_items(rarity: String) -> int:
 
 
 func can_shop() -> bool:
+	if sion != null and sion.form == SionKit.ZOMBIE:
+		return false
+	if world.aram:
+		return dead or (not aram_shop_locked and in_base_shop_range())
 	if dead or world.map.data.get("shop_anywhere", false) or world.cheats_allowed():
 		return true
+	return in_base_shop_range()
+
+
+func in_base_shop_range() -> bool:
 	return global_position.distance_to(world.map.spawn_point(team)) <= world.map.fountain_radius * 1.25
+
+
+func shop_closed_reason() -> String:
+	return "Shop before leaving base or while dead" if world.aram else "You can only shop in your base (or while dead)"
 
 
 ## What buying `id` would cost right now, after the value of owned components
@@ -799,7 +878,7 @@ func check_buy(id: String) -> String:
 	if it == null or not it.buyable:
 		return "That item can't be bought"
 	if not can_shop():
-		return "You can only shop in your base (or while dead)"
+		return shop_closed_reason()
 	if level < int(it.min_level):
 		return "Requires level %d" % int(it.min_level)
 	var p := price_for(id)
@@ -896,7 +975,7 @@ func sell(slot: int) -> String:
 	if it == null:
 		return ""
 	if not can_shop():
-		return "You can only sell in your base (or while dead)"
+		return shop_closed_reason()
 	gold += sell_value(it)
 	items[slot].n -= 1
 	if items[slot].n <= 0 or it.charges > 0:
@@ -926,6 +1005,8 @@ func _items_changed() -> void:
 
 
 func use_item(slot: int, aim: Vector2, tid: int) -> bool:
+	if sion != null and sion.action != SionKit.IDLE:
+		return false
 	if attack_action_locked():
 		return false
 	var it = item_def(slot)
@@ -995,6 +1076,20 @@ func _extra_stats(st: Dictionary, mult: Dictionary) -> void:
 			st[k] = float(st.get(k, 0.0)) + legendary * (v if v is float else Effects.num(v, {"caster": self, "target": self, "rank": level}, 0.0))
 	if rune_state != null:
 		rune_state.stats(st, mult)
+	for id in augments:
+		var a: Dictionary = Game.Mayhem.AUGMENTS[id]
+		var bonus: Dictionary = a.get("stats", {})
+		for k in bonus:
+			if k != "mana_regen" or base_stats.max_mana > 0.0:
+				st[k] = float(st.get(k, 0.0)) + bonus[k]
+		var multiplier: Dictionary = a.get("mult", {})
+		for k in multiplier:
+			mult[k] = float(mult.get(k, 1.0)) * multiplier[k]
+	if sion != null:
+		st.max_hp += sion.bonus_health
+		if sion.form == SionKit.ZOMBIE:
+			st.lifesteal += 1.0
+			st.hp_regen = 0.0
 
 
 # -------------------------------------------------------------- summoners ---
@@ -1043,6 +1138,8 @@ func can_use_summoner(ab: Dictionary) -> bool:
 
 
 func use_summoner(i: int, aim: Vector2, tid: int) -> bool:
+	if sion != null and (sion.form != SionKit.ALIVE or sion.action != SionKit.IDLE):
+		return false
 	var sp = summoner_def(i)
 	if sp == null:
 		return false
@@ -1205,6 +1302,8 @@ func shop_toward(plan: Array, done: Array) -> Array:
 
 ## "mage", "marksman" or "bruiser" - for bot builds, the recommended build and default summoners.
 static func role_of(d: Dictionary) -> String:
+	if d.get("id") == "sion":
+		return "bruiser"
 	var st = d.get("stats", {})
 	if st is Dictionary and (float(st.get("ability_power", 0.0)) >= 25.0 or float(st.get("max_mana", 0.0)) > 0.0):
 		return "mage"
@@ -1290,6 +1389,14 @@ func cheat(what: String) -> void:
 # ------------------------------------------------------------------ think ---
 
 func _think(delta: float) -> void:
+	if sion != null and sion.form == SionKit.ZOMBIE:
+		sion.decay(delta)
+		if dead:
+			return
+		var surge := find_status(SionKit.SURGE)
+		if not surge.is_empty():
+			surge.add.move_speed_bonus = 0.5 * float(surge.time) / 2.5
+			stats_dirty = true
 	if rune_state != null:
 		rune_state.tick(delta)
 	for s in SLOTS:
@@ -1336,7 +1443,15 @@ func _think(delta: float) -> void:
 			var from := global_position
 			teleport(world.map.spawn_point(team))
 			world.fx("blink", {"from": from, "to": global_position, "color": Color(0.5, 0.7, 1.0), "noline": true})
-	if is_bot:
+	if sion != null:
+		sion.tick_action(delta)
+	if is_bot and sion != null and sion.form == SionKit.ZOMBIE:
+		var t := world.nearest_enemy(global_position, team, 1300.0, false, true)
+		if t != null:
+			attack_target = t
+			if global_position.distance_to(t.global_position) > attack_reach(t):
+				sion.death_surge()
+	elif is_bot and (sion == null or sion.action == SionKit.IDLE):
 		_bot().tick(delta)
 	if amove != null:
 		if attack_target == null:
@@ -1365,6 +1480,11 @@ func _tick_items(delta: float) -> void:
 
 
 func _act(delta: float) -> void:
+	if sion != null and sion.action != SionKit.IDLE:
+		velocity = Vector2.ZERO
+		if sion.action == SionKit.CHARGE:
+			sion.rush(delta)
+		return
 	if (casting != null and not _zeri_nova_casting()) or recall_timer > 0.0 or has_status("stasis"):
 		velocity = Vector2.ZERO
 		return
@@ -1393,7 +1513,18 @@ func _zeri_nova_casting() -> bool:
 
 
 func can_attack() -> bool:
-	return not _zeri_nova_casting() and super.can_attack()
+	return (sion == null or sion.action == SionKit.IDLE) and not _zeri_nova_casting() and super.can_attack()
+
+
+func crowd_control_immune() -> bool:
+	return sion != null and sion.action == SionKit.CHARGE
+
+
+func land_attack(t, dmg: float, crit := false, a = null, pierce := false, shot_dir := Vector2.ZERO) -> void:
+	if sion != null and sion.form == SionKit.ZOMBIE and is_instance_valid(t) and not t.is_ward and not t.is_structure:
+		var bonus: float = t.stats.max_hp * 0.10
+		dmg += bonus if t.is_champion else minf(bonus, 75.0)
+	super.land_attack(t, dmg, crit, a, pierce, shot_dir)
 
 
 func attack_reach(t) -> float:
@@ -1407,6 +1538,9 @@ func attack_windup_ratio() -> float:
 
 
 func _finish_attack_speed(st: Dictionary) -> void:
+	if sion != null and sion.form == SionKit.ZOMBIE:
+		st.attack_speed = 1.75
+		return
 	if char_id == "zeri":
 		ZeriKit.finish_attack_speed(st)
 	else:
@@ -1445,7 +1579,9 @@ func amove_pick(p: Vector2, pad: float) -> Unit:
 
 
 func start_recall() -> void:
-	if dead or recall_timer > 0.0 or casting != null or attack_action_locked():
+	if sion != null and (sion.form != SionKit.ALIVE or sion.action != SionKit.IDLE):
+		return
+	if world.aram or dead or recall_timer > 0.0 or casting != null or attack_action_locked():
 		return
 	cancel_attack_windup()
 	recall_timer = 4.0 if not find_status("hand_of_baron").is_empty() else 8.0
@@ -1461,6 +1597,8 @@ func _cancel_recall() -> void:
 
 func _interrupted() -> void:
 	super._interrupted()
+	if sion != null:
+		sion.interrupt_smash()
 	recall_timer = 0.0
 	if casting != null:
 		if casting.has("summoner"):
@@ -1487,12 +1625,48 @@ func _level_up() -> void:
 	if level <= SKILL_POINT_LEVELS:
 		skill_points += 1
 	var growth := 0.65 + 0.035 * level
-	if char_id != "zeri" or level <= 18:
+	if char_id not in ["zeri", "sion"] or level <= 18:
 		for k in def.per_level:
 			base_stats[k] = float(base_stats.get(k, 0.0)) + def.per_level[k] * growth
 	recompute_stats()
 	world.fx("levelup", {"p": global_position, "l": level, "v": net_id})
 	trigger("level_up", self)
+
+
+func die(killer = null) -> void:
+	if sion != null and sion.form == SionKit.ZOMBIE and not dead:
+		# The original death already awarded kill credit and started the respawn timer.
+		dead = true
+		flags = F_DEAD
+		anim = ANIM_DEAD
+		hp = 0.0
+		shield = 0.0
+		velocity = Vector2.ZERO
+		forced = null
+		attack_target = null
+		move_goal = null
+		amove = null
+		path = PackedVector2Array()
+		cancel_attack_windup(true)
+		statuses = statuses.filter(func(s): return s.get("persist", false))
+		damagers.clear()
+		last_champion_hit = null
+		sion.form = SionKit.ALIVE
+		world.fx("death", {"p": global_position, "r": radius, "c": color, "k": kind, "v": net_id})
+		return
+	super.die(killer)
+
+
+func _update_statuses(delta: float) -> void:
+	var furnace := sion.shield() if sion != null and recasts.has("w") else {}
+	var expiring: bool = not furnace.is_empty() and furnace.amount > 0.0 and furnace.time <= delta
+	super._update_statuses(delta)
+	if expiring and not dead and furnace.amount > 0.0 and recasts.has("w"):
+		var ab: Dictionary = def.abilities.w.recast
+		sion.detonate(ab, _make_ctx(ab, global_position, 0))
+		_close_recast("w")
+	elif not furnace.is_empty() and furnace.amount <= 0.0 and recasts.has("w"):
+		_close_recast("w")
 
 
 func _on_death() -> void:
@@ -1506,6 +1680,8 @@ func _on_death() -> void:
 		_close_recast(slot)
 	respawn_timer = world.respawn_time(level)
 	trigger("death", self)
+	if sion != null:
+		sion.begin_death()
 
 
 func _dead_process(delta: float) -> void:
@@ -1516,6 +1692,11 @@ func _dead_process(delta: float) -> void:
 		_autobuy(delta)
 	_tick_items(delta)
 	respawn_timer -= delta
+	if sion != null and sion.form == SionKit.RISING:
+		sion.rise_left -= delta
+		if sion.rise_left <= 0.0:
+			sion.rise()
+		return
 	if is_bot:
 		_bot().dead_tick(delta)
 	if respawn_timer <= 0.0:
@@ -1524,6 +1705,11 @@ func _dead_process(delta: float) -> void:
 
 func respawn() -> void:
 	dead = false
+	if sion != null:
+		sion.form = SionKit.ALIVE
+		sion.surge_used = false
+		recovery_lock = 0.0
+	aram_shop_locked = false
 	statuses = statuses.filter(func(s): return s.get("persist", false))
 	teleport(world.map.spawn_point(team) + Vector2(randf_range(-40, 40), randf_range(-40, 40)))
 	if char_id == "zeri":
@@ -1549,7 +1735,7 @@ func net_state() -> PackedFloat32Array:
 	var f := flags
 	if recall_timer > 0.0:
 		f |= F_RECALL
-	if casting != null:
+	if casting != null or (sion != null and sion.action == SionKit.SMASH):
 		f |= F_CAST
 	if energy >= 100.0 and trig_by_event.has("energized"):
 		f |= F_ENERGIZED
@@ -1580,6 +1766,8 @@ func net_state() -> PackedFloat32Array:
 	s.append_array(jungle_buff_times())
 	if char_id == "zeri":
 		s.append(zeri_charge)
+	if sion != null:
+		s.append_array([sion.form, sion.action, float(sion.surge_used), sion.bonus_health, sion.rise_left, sion.elapsed])
 	var spell_codes := Game.summoners.keys()
 	spell_codes.sort()
 	for i in 2:
@@ -1588,6 +1776,8 @@ func net_state() -> PackedFloat32Array:
 	s.append(1.0 if rune_hexflash else 0.0)
 	s.append(rune_state.rotation[rune_state.rotation_index] if rune_state != null and rune_state.keystone == 8358 else 0)
 	s.append(1.0 if rune_state != null and rune_state.state.get("shoes", false) else 0.0)
+	if world.aram:
+		s.append(1.0 if aram_shop_locked else 0.0)
 	return s
 
 
@@ -1686,6 +1876,14 @@ func apply_net_state(s: PackedFloat32Array) -> void:
 	if char_id == "zeri" and o + JUNGLE_BUFFS.size() < s.size():
 		zeri_charge = s[o + JUNGLE_BUFFS.size()]
 	o += JUNGLE_BUFFS.size() + (1 if char_id == "zeri" else 0)
+	if sion != null and o + 6 <= s.size():
+		sion.form = int(s[o])
+		sion.action = int(s[o + 1])
+		sion.surge_used = s[o + 2] > 0.5
+		sion.bonus_health = s[o + 3]
+		sion.rise_left = s[o + 4]
+		sion.elapsed = s[o + 5]
+		o += 6
 	if o + 6 <= s.size():
 		var spell_codes := Game.summoners.keys()
 		spell_codes.sort()
@@ -1698,6 +1896,8 @@ func apply_net_state(s: PackedFloat32Array) -> void:
 		rune_hexflash = s[o + 3] > 0.5
 		rune_keystone = int(s[o + 4])
 		rune_shoes = s[o + 5] > 0.5
+		if world.aram and o + 6 < s.size():
+			aram_shop_locked = s[o + 6] > 0.5
 	if changed:
 		_rebuild_triggers()
 
@@ -1715,6 +1915,9 @@ func _physics_process(delta: float) -> void:
 # ---------------------------------------------------------------- drawing ---
 
 func _draw_body() -> void:
+	if sion != null:
+		sion.draw_body()
+		return
 	var c := body_color()
 	var r := Content.CHAMPION_ART_HEIGHT * 0.5 * float(stats.size)
 	draw_circle(Vector2.ZERO, r, c.darkened(0.45))
@@ -1725,6 +1928,13 @@ func _draw_body() -> void:
 	draw_colored_polygon(PackedVector2Array([tip, Vector2(facing * r * 0.85, -r * 0.28), Vector2(facing * r * 0.85, r * 0.28)]), team_color().lightened(0.2))
 	var initials := display_name.substr(0, 2)
 	draw_string(ThemeDB.fallback_font, Vector2(-r, 6.0 * stats.size), initials, HORIZONTAL_ALIGNMENT_CENTER, r * 2.0, int(16 * stats.size), Color(0, 0, 0, 0.7))
+
+
+func _draw_windup() -> void:
+	if sion != null and not dead and sion.action != SionKit.IDLE:
+		sion.draw_action()
+	else:
+		super._draw_windup()
 
 
 func bar_width() -> float:

@@ -5,6 +5,12 @@ drop a folder with a JSON file (and optional sprites) into `characters/` and it'
 
 Godot 4.7 (tested with 4.7.1), GDScript, Compatibility renderer.
 
+## Beginner guides
+
+1. [Add your first character](docs/add-a-character.md)
+2. [Get a Blender character model with copy-and-paste prompts](docs/blender-character-prompts.md)
+3. [Host or join a game](docs/host-or-join.md)
+
 ## Run it
 - Open the folder in Godot 4.7 and press **F5**, or
 - `godot --path C:\Users\FinnU\Desktop\CusOba`
@@ -38,24 +44,26 @@ units are gray. The HUD health bar and ground rings use the same palette.
 | | |
 |---|---|
 | Right mouse | move / attack (hold to keep moving) |
-| Q W E R | hold to aim (shows range), release to cast. Left click also casts, right click cancels |
+| Q W E R | quick cast on press by default. Settings also offers quick cast with an indicator on release and normal cast with left-click confirmation. Right-click cancels an armed cast. |
 | Ctrl + Q W E R | spend a skill point (or click the **+** above an ability) |
 | Shift | show detailed ability numbers and scaling in champion select or while hovering the ability bar |
 | D / F | summoner spells (Flash, Ignite... picked in the lobby) |
 | 1 - 6 | use item actives (aimed ones work like abilities) |
 | P | shop (in your fountain or while dead; anywhere in Practice). Click for details; right-click or double-click to buy, including from the build row. Shift+right-click removes a build entry. |
-| A | attack-move: attacks the enemy in range closest to the cursor, otherwise walks there attacking whatever comes in range (Settings: closest to you instead, or the classic "A, then left click") |
+| A | arm attack-move, then left-click to issue it. Settings can choose the nearest enemy to you instead of the cursor and bind a separate instant Attack Move Click key. |
+| Backtick | hold to target only champions with direct clicks and targeted spells; does not filter attack-move |
 | S | stop |
 | B | recall to base (8s, cancelled by damage or moving) |
 | Y or Z | lock/unlock camera (edge-pan or arrow keys when unlocked; speed in Settings), hold Space = center on your champion |
 | Mouse wheel | zoom |
 | Tab | hold to show the scoreboard; hover an item to inspect it |
+| G / V / H | hold G for the tactical ping wheel, V for an immediate retreat ping, hold H for the vision wheel. Flick toward an option and release, or tap for Attention / Enemy Vision. Aim at the battlefield or minimap; only teammates see the markers. Artwork is temporary. |
 | Esc | menu (Resume / **Settings** / leave) |
 | F1 / F2 / F3 / F4 | Practice only: level up / +1000 gold / reset cooldowns & mana / max ability ranks |
-| Minimap | left click = look there, right click = move there |
+| Minimap | left-click and drag to look around without changing camera lock; right-click to move there |
 
-**WASD mode** (Settings > Movement): W A S D walk, **left click attacks** the enemy closest to the
-cursor (one attack, then you keep walking while you hold a direction), right click still moves/attacks.
+**WASD mode** (Settings > Movement): W A S D walk, **left-click directly targets an enemy**
+(one attack, then you keep walking while you hold a direction), right-click still moves/attacks.
 Abilities move to Q E R F, summoner spells to Space / Shift, attack-move to X - all changeable.
 
 Destroy the enemy **Nexus** to win. On **Two Lanes**, destroy a lane's turrets and inhibitor to
@@ -63,6 +71,21 @@ open up the two Nexus turrets. The Nexus is vulnerable only while at least one i
 Nexus turrets are down. A destroyed inhibitor gives the opposing team super minions in that lane
 until it respawns five minutes later. On **Bridge**, clear the lane turrets to expose the Nexus.
 Your fountain heals and refills mana; the enemy fountain deals damage.
+
+### ARAM (Standard) and ARAM Mayhem
+In Practice or an online lobby, open **Map** and choose **ARAM (Standard)** for a match
+without augments or **ARAM Mayhem** to play with augments. In both modes, pick one of two
+random champion cards; if you don't pick, you get the first card. Both use a one-lane Bridge
+variant with brush, an inhibitor and two Nexus turrets per team. Regular Bridge is unchanged.
+
+- Start at level 3 with 1,400 gold and earn passive gold and XP. There is no Recall or allied
+  fountain healing. Shop before leaving base or while dead. Mark and Clarity are available;
+  Teleport and Smite are not.
+- In **Mayhem only**, at levels **3, 7, 11 and 15**, pick one of three **Silver, Gold or Prismatic** augments in
+  the HUD. Each card can be rerolled once. Picks survive death, and bots choose their own.
+  The 22 augments are original CusOba effects, not a copy of League's augment roster.
+- Green health relics restore health and mana on pickup, then pulse to heal and restore mana
+  to nearby champions on either team. The minimap shows which relics are active.
 
 ### Aether Rift (Summoner's Rift-style)
 A 14,800 x 14,800 map laid out like Summoner's Rift: blue base bottom-left, red base top-right
@@ -167,6 +190,12 @@ traps, knockbacks, beams, zones...), passives and sprites. The bundled character
 - **Zeri** - Summoner's Rift patch 16.23 recreation, with a separate right-click zap and aimed Q,
   terrain-powered W and E, and R chain lightning. Read the green battery bar below mana.
   Stat growth stops at 18 even on maps that allow levels 19-21.
+- **Sion** - Summoner's Rift patch 12.8 recreation. Unlike the default aim-and-release controls,
+  pressing Q immediately starts charging the axe in the cursor's direction; release to swing.
+  W stacks permanent health and can detonate its shield, and E hurls minions through enemies.
+  Steer R with the cursor and press the R binding again to end the charge early. After death,
+  Sion rises briefly; any ability key activates his one-use Death Surge. Uses original
+  procedural art and CusOba's terrain, items, runes, and match rules.
 
 Zeri's numbers are based on the [16.23 client data](https://raw.communitydragon.org/16.23/game/data/characters/zeri/zeri.bin.json).
 She uses CusOba's built-in visuals, older item pool, and collision rules. Wall abilities do not
@@ -245,6 +274,8 @@ Run the lane and base siege integration test, and the Aether Rift test (layout, 
 godot --headless --path . -- --auto=practice --map=two_lanes --selftest=balance
 godot --headless --path . -- --auto=practice --map=arena --char=ember --selftest=windup
 godot --headless --path . -- --auto=practice --map=rift --char=ember --selftest=rift
+godot --headless --path . -- --auto=practice --map=aram --bots_red=1 --selftest=aram
+godot --headless --path . -- --auto=practice --map=aram_mayhem --bots_red=1 --selftest=mayhem
 ```
 
 ## Visual effects

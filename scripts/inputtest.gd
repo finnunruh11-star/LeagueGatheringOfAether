@@ -106,18 +106,71 @@ func _ready() -> void:
 		get_tree().quit(1 if fails > 0 else 0)
 		return
 
-	# Back to classic: A attack-moves at the cursor right away.
+	var foe: Unit = world.spawn("dummy", {"pos": c.global_position + Vector2(120, 0), "hp": 100000.0})
+	foe.team = 1 - c.team
+	await _frames(2)
+	var click := InputEventMouseButton.new()
+	click.button_index = MOUSE_BUTTON_LEFT
+	click.pressed = true
+	click.position = world.get_canvas_transform() * foe.global_position
+	world._unhandled_input(click)
+	_check("WASD direct left-click attacks the enemy", c.attack_target == foe)
+	world.send_command("stop")
+
 	Game.prefs.move_mode = "click"
 	var d := Controls.defaults("click")
 	for k in d:
 		Controls.bind(k, d[k])
-	var foe: Unit = world.spawn("dummy", {"pos": c.global_position + Vector2(120, 0), "hp": 100000.0})
-	foe.team = 1
-	await _frames(2)
 	_key(KEY_A, true)
 	_key(KEY_A, false)
-	await get_tree().create_timer(0.2).timeout
-	_check("A attack-moves (target picked)", c.attack_target == foe)
+	await _frames(2)
+	_check("classic A arms attack-move without attacking", world.amove_armed and c.attack_target == null)
+	world._unhandled_input(click)
+	await _frames(2)
+	_check("left-click confirms attack-move", not world.amove_armed and c.attack_target == foe)
+
+	Game.prefs.cast_mode = "normal"
+	_key(KEY_Q, true)
+	_key(KEY_Q, false)
+	await _frames(2)
+	_check("normal casting remains armed after release", world.aim_slot == "q")
+	_key(KEY_ESCAPE, true)
+	_key(KEY_ESCAPE, false)
+	await _frames(2)
+	_check("Escape cancels the normal cast", world.aim_slot == "")
+	Game.prefs.cast_mode = "indicator"
+	_key(KEY_Q, true)
+	await _frames(2)
+	_check("indicator casting arms on press", world.aim_slot == "q")
+	_key(KEY_Q, false)
+	await _frames(2)
+	_check("indicator casting commits on release", world.aim_slot == "")
+
+	var ping_key := InputEventKey.new()
+	ping_key.keycode = KEY_G
+	ping_key.pressed = true
+	var minimap_center := world.hud.minimap.get_global_rect().get_center()
+	world.cam_locked = true
+	click.position = world.hud.minimap.size * 0.5
+	world.hud._minimap_input(click)
+	_check("minimap peek does not unlock the camera", world.cam_locked and world.hud.minimap_dragging
+		and world.camera.global_position.is_equal_approx(world.map.size * 0.5))
+	click.pressed = false
+	world.hud._minimap_input(click)
+	_check("releasing minimap peek stops dragging", not world.hud.minimap_dragging)
+	_check("G opens the tactical ping wheel", world._handle_ping_input(ping_key, minimap_center) and world.pings.open_action == "ping")
+	ping_key.pressed = false
+	world._handle_ping_input(ping_key, minimap_center)
+	_check("G tap pings the selected minimap location", world.pings.open_action == "" and world.pings.markers.size() == 1
+		and world.pings.markers[0].kind == "area" and world.pings.markers[0].at.is_equal_approx(world.map.size * 0.5))
+	world.send_command("ping", ["invalid_kind", c.global_position])
+	world.send_command("ping", ["area", Vector2.INF])
+	_check("host rejects invalid ping type and position", world.pings.markers.size() == 1)
+	for i in 3:
+		world.send_command("ping", ["retreat", c.global_position])
+	_check("host limits rapid pings", world.pings.markers.size() == 3)
+	world.pings.tick(World.PINGS.LIFETIME)
+	_check("pings expire", world.pings.markers.is_empty())
 	print("[inputtest] done, %d failed" % fails)
 	get_tree().quit(1 if fails > 0 else 0)
 

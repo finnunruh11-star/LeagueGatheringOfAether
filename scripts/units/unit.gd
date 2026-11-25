@@ -358,6 +358,10 @@ func has_status(t: String) -> bool:
 	return false
 
 
+func crowd_control_immune() -> bool:
+	return false
+
+
 ## A status applied by an effect with this "id" (optionally only from `src`).
 func find_status(id: String, src = null) -> Dictionary:
 	for s in statuses:
@@ -828,7 +832,7 @@ func add_status(s: Dictionary, source = null, key := "") -> void:
 		return
 	if is_structure and not s.type in ["shield", "buff", "hot", "mark"]:
 		return
-	if s.type in CC_TYPES and (has_status("stasis") or has_status("invulnerable")) and source != self:
+	if s.type in CC_TYPES and (crowd_control_immune() or has_status("stasis") or has_status("invulnerable")) and source != self:
 		if is_instance_valid(source) and source.team != team:
 			trigger("blocked", source, null, {"cc": s.type})
 		return
@@ -1049,7 +1053,7 @@ func _compute_flags() -> int:
 # -------------------------------------------------------- forced movement ---
 
 func knockback(vec: Vector2, dur: float) -> void:
-	if dead or puppet or is_structure:
+	if dead or puppet or is_structure or crowd_control_immune():
 		return
 	forced = {"vel": vec / dur, "time": dur, "dash": false}
 	path = PackedVector2Array()

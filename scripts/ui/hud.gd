@@ -53,6 +53,8 @@ var notice_label: Label
 var _notice_t := 9.0
 var minimap: DrawControl
 var minimap_units: DrawControl
+var ping_overlay: DrawControl
+var minimap_dragging := false
 var scores: Scoreboard
 var rune_actions: Button
 var inspected_unit: Unit
@@ -253,6 +255,11 @@ func _ready() -> void:
 	minimap_units.mouse_filter = Control.MOUSE_FILTER_IGNORE
 	minimap_units.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	minimap.add_child(minimap_units)
+	ping_overlay = DrawControl.new()
+	ping_overlay.draw_func = _draw_pings
+	ping_overlay.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	ping_overlay.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
+	root.add_child(ping_overlay)
 
 	scores = Scoreboard.new()
 	scores.draw_func = _draw_scores
@@ -290,6 +297,96 @@ func _ready() -> void:
 	if Game.is_host():
 		_button(mv, "End match - back to lobby", Game.return_to_lobby)
 	_button(mv, "Leave to main menu", _leave)
+
+	if world.mayhem:
+		_setup_augments(root)
+
+
+var augment_button: Button
+var augment_panel: PanelContainer
+var augment_rows: VBoxContainer
+var _augment_key := ""
+
+
+func _setup_augments(root: Control) -> void:
+	augment_button = UiKit.button(root, "Augments", func(): augment_panel.visible = not augment_panel.visible)
+	augment_button.focus_mode = Control.FOCUS_NONE
+	_place(augment_button, 1.0, 0.0, -184, 142, 164, 34)
+	augment_panel = PanelContainer.new()
+	augment_panel.theme = UiKit.theme()
+	augment_panel.custom_minimum_size.x = 355
+	root.add_child(augment_panel)
+	_place(augment_panel, 1.0, 0.0, -375, 181, 355, 0)
+	var margin := MarginContainer.new()
+	for side in ["top", "bottom", "left", "right"]:
+		margin.add_theme_constant_override("margin_" + side, 12)
+	augment_panel.add_child(margin)
+	augment_rows = VBoxContainer.new()
+	augment_rows.add_theme_constant_override("separation", 6)
+	margin.add_child(augment_rows)
+	augment_button.hide()
+	augment_panel.hide()
+
+
+func _update_augments(ch: Champion) -> void:
+	if augment_button == null:
+		return
+	var available := ch != null and world.started and not world.ended and not ch.is_bot
+	augment_button.visible = available and not shop_open() and not modal_open() and not scores.visible and not menu_panel.visible
+	if not available:
+		augment_panel.hide()
+		return
+	var key := str([ch.augment_offers, ch.augments, ch.augment_rerolled])
+	if key != _augment_key:
+		_augment_key = key
+		_rebuild_augment_panel(ch)
+	if not augment_button.visible:
+		augment_panel.hide()
+
+
+func _rebuild_augment_panel(ch: Champion) -> void:
+	for child in augment_rows.get_children():
+		augment_rows.remove_child(child)
+		child.queue_free()
+	var round_index := ch.augments.size()
+	var choosing := not ch.augment_offers.is_empty()
+	augment_button.text = "Choose augment!" if choosing else "Augments (%d/4)" % round_index
+	if choosing:
+		var title := UiKit.label(augment_rows, "%s augment (%d/4)" % [Game.Mayhem.TIERS[ch.augment_tier], round_index + 1])
+		title.modulate = Game.Mayhem.TIER_COLORS[ch.augment_tier]
+		for slot in ch.augment_offers.size():
+			var id: String = ch.augment_offers[slot]
+			var card: Dictionary = Game.Mayhem.AUGMENTS[id]
+			var row := UiKit.row(augment_rows)
+			var pick := UiKit.button(row, card.name, func(): world.send_command("augment_pick", [round_index, slot, id]))
+			pick.size_flags_horizontal = Control.SIZE_EXPAND_FILL
+			pick.focus_mode = Control.FOCUS_NONE
+			var reroll := UiKit.button(row, "Reroll", func(): world.send_command("augment_reroll", [round_index, slot, id]))
+			reroll.disabled = ch.augment_rerolled[slot]
+			reroll.focus_mode = Control.FOCUS_NONE
+			_augment_description(card.desc)
+	else:
+		UiKit.label(augment_rows, "Your augments")
+		if round_index < Game.Mayhem.LEVELS.size():
+			_augment_description("Next choice at level %d." % Game.Mayhem.LEVELS[round_index])
+	if not ch.augments.is_empty():
+		var owned := PackedStringArray()
+		var tooltips := PackedStringArray()
+		for id in ch.augments:
+			var card: Dictionary = Game.Mayhem.AUGMENTS[id]
+			owned.append(card.name)
+			tooltips.append("%s: %s" % [card.name, card.desc])
+		var label := _augment_description("Picked: " + ", ".join(owned))
+		label.tooltip_text = "\n".join(tooltips)
+	augment_panel.reset_size()
+	augment_panel.visible = choosing
+
+
+func _augment_description(text: String) -> Label:
+	var label := UiKit.label(augment_rows, text)
+	label.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	label.add_theme_font_size_override("font_size", 15)
+	return label
 
 
 func _place(c: Control, ax: float, ay: float, x: float, y: float, w: float, h: float) -> void:
@@ -472,7 +569,7 @@ func _open_rune_actions() -> void:
 			picker.add_item("Replace " + str(Game.summoners[ch.summoners[i]].name))
 			var available := []
 			for id in Game.summoner_ids:
-				if not ch.summoners.has(id):
+				if not ch.summoners.has(id) and (not world.aram or id not in Game.Mayhem.DISALLOWED_SPELLS):
 					picker.add_item(Game.summoners[id].name)
 					available.append(id)
 			picker.disabled = world.time < 360.0
@@ -523,6 +620,8 @@ func _process(_delta: float) -> void:
 	center_label.text = ""
 	if not world.started:
 		center_label.text = "Waiting for players..."
+	elif ch != null and ch.sion != null and ch.sion.form == SionKit.RISING and not world.ended:
+		center_label.text = "GLORY IN DEATH\nRising in %.1f" % maxf(ch.sion.rise_left, 0.0)
 	elif ch != null and ch.dead and not world.ended:
 		center_label.text = "YOU DIED\nRespawning in %d" % ceili(ch.respawn_timer)
 	elif ch != null and ch.recall_timer > 0.0:
@@ -532,6 +631,7 @@ func _process(_delta: float) -> void:
 		_build_tooltips(ch)
 	if ch != null:
 		_update_rank_ui(ch)
+	_update_augments(ch)
 	_update_effects(_delta, ch)
 	_notice_t += _delta
 	notice_label.modulate.a = clampf(2.5 - _notice_t, 0.0, 1.0)
@@ -546,6 +646,7 @@ func _process(_delta: float) -> void:
 	_update_ability_tip(ch, _delta)
 	minimap.queue_redraw()
 	minimap_units.queue_redraw()
+	ping_overlay.queue_redraw()
 	if scores.visible:
 		scores.queue_redraw()
 
@@ -642,6 +743,8 @@ func _ability_tip_content(ch: Champion, slot: String, expanded: bool) -> String:
 	if base == null:
 		return "(no ability)"
 	var ab: Dictionary = ch.active_ability(slot)
+	if ch.sion != null and ch.sion.form == SionKit.ZOMBIE:
+		return "%s\n%s" % [ab.name, _ability_description(ab, expanded)]
 	var rank := int(ch.ranks.get(slot, 0))
 	var lines := PackedStringArray(["%s - %s%s" % [slot.to_upper(), ab.name,
 		" (rank %d/%d)" % [rank, base.max_rank] if expanded else ""]])
@@ -716,6 +819,46 @@ func _place_bar() -> void:
 
 
 # ---------------------------------------------------------------- drawing ---
+
+func _draw_minimap_pings(c: Control, sc: float) -> void:
+	for ping in world.pings.markers:
+		var at: Vector2 = ping.at * sc
+		var tint := Color(World.PINGS.color(ping.kind), minf(1.0, ping.left * 2.0))
+		c.draw_circle(at, 4.0, tint)
+		c.draw_arc(at, 8.0 + fmod((World.PINGS.LIFETIME - ping.left) * 15.0, 7.0), 0.0, TAU, 20, tint, 2.0, true)
+
+
+func _draw_pings(c: Control) -> void:
+	var pings := world.pings
+	for ping in pings.markers:
+		var at: Vector2 = world.get_canvas_transform() * ping.at
+		if not Rect2(Vector2.ZERO, c.size).has_point(at):
+			continue
+		var tint := Color(World.PINGS.color(ping.kind), minf(1.0, ping.left * 2.0))
+		c.draw_arc(at, 14.0 + fmod((World.PINGS.LIFETIME - ping.left) * 25.0, 12.0), 0.0, TAU, 32, tint, 2.0, true)
+		_ping_text(c, at - Vector2(0, 24), World.PINGS.LABELS[ping.kind], tint)
+	if pings.open_action == "":
+		return
+	var origin := pings.origin
+	var rect := Rect2(Vector2.ZERO, c.size).grow(-75.0)
+	var center := origin.clamp(rect.position, rect.end) if rect.has_area() else c.size * 0.5
+	var selected := pings.selection(get_viewport().get_mouse_position())
+	var choices := pings.wheel()
+	c.draw_circle(center, 75.0, Color(0.04, 0.06, 0.09, 0.91))
+	for i in choices.size():
+		var kind: String = choices[i]
+		var at := center + Vector2.UP.rotated(TAU * i / choices.size()) * 58.0
+		var tint := World.PINGS.color(kind)
+		c.draw_circle(at, 10.0, tint if selected == kind else tint.darkened(0.65))
+		_ping_text(c, at + Vector2(0, -13), World.PINGS.LABELS[kind], tint)
+	_ping_text(c, center + Vector2(0, 4), World.PINGS.LABELS[selected], Color.WHITE)
+
+
+func _ping_text(c: Control, at: Vector2, text: String, tint: Color) -> void:
+	var p := at - Vector2(60.0, 0.0)
+	c.draw_string_outline(font, p, text, HORIZONTAL_ALIGNMENT_CENTER, 120.0, 12, 4, Color.BLACK)
+	c.draw_string(font, p, text, HORIZONTAL_ALIGNMENT_CENTER, 120.0, 12, tint)
+
 
 func _draw_bar(c: Control) -> void:
 	c.draw_rect(Rect2(Vector2.ZERO, c.size), Color(0.05, 0.06, 0.08, 0.92))
@@ -901,6 +1044,16 @@ func _draw_slot(c: Control, slot: String) -> void:
 			nm = ab.name
 	var cd: float = ch.cooldowns.get(slot, 0.0) if slot != "p" else 0.0
 	var learned: bool = slot == "p" or int(ch.ranks.get(slot, 0)) > 0
+	var surge_spent := false
+	if ch.sion != null and slot != "p":
+		if ch.sion.form == SionKit.ZOMBIE:
+			learned = true
+			cd = 0.0
+			recast_t = 1.0 if not ch.sion.surge_used else 0.0
+			surge_spent = ch.sion.surge_used
+		elif slot == "r" and ch.sion.action == SionKit.CHARGE:
+			cd = maxf(0.5 - ch.sion.elapsed, 0.0)
+			recast_t = 1.0
 	if icon != null:
 		c.draw_texture_rect(icon, r.grow(-3), false)
 	elif nm != "":
@@ -926,7 +1079,7 @@ func _draw_slot(c: Control, slot: String) -> void:
 		var txt := ("%.1f" % cd) if cd < 1.0 else str(ceili(cd))
 		c.draw_string_outline(font, Vector2(0, 42), txt, HORIZONTAL_ALIGNMENT_CENTER, c.size.x, 22, 5, Color.BLACK)
 		c.draw_string(font, Vector2(0, 42), txt, HORIZONTAL_ALIGNMENT_CENTER, c.size.x, 22)
-	elif slot != "p" and (ch.dead or ch.flags & (Unit.F_STUN | Unit.F_SILENCE | Unit.F_STASIS)):
+	elif slot != "p" and (surge_spent or ch.dead or ch.flags & (Unit.F_STUN | Unit.F_SILENCE | Unit.F_STASIS)):
 		c.draw_rect(r, Color(0, 0, 0, 0.55))
 	if not learned:
 		c.draw_rect(r, Color(0.02, 0.02, 0.04, 0.72))
@@ -1054,6 +1207,9 @@ func _draw_minimap_units(c: Control) -> void:
 	var lt := world.local_team
 	if world.jungle != null:
 		_draw_minimap_camps(c, sc)
+	for i in world.relic_positions.size():
+		if world.time >= world.relic_ready[i]:
+			c.draw_circle(world.relic_positions[i] * sc, 4.0, World.RELIC_COLOR)
 	for u in world.units:
 		if u.dead and not u.is_structure:
 			continue
@@ -1075,6 +1231,7 @@ func _draw_minimap_units(c: Control) -> void:
 	var vs := get_viewport().get_visible_rect().size / world.camera.zoom
 	c.draw_rect(Rect2((world.camera.get_screen_center_position() - vs * 0.5) * sc, vs * sc), Color(1, 1, 1, 0.7), false, 1.0)
 	c.draw_rect(Rect2(Vector2.ZERO, c.size), Color(0.3, 0.32, 0.38), false, 2.0)
+	_draw_minimap_pings(c, sc)
 
 
 const CAMP_COLORS := {"blue": Color(0.3, 0.55, 1.0), "red": Color(1.0, 0.4, 0.25), "scuttle": Color(0.45, 0.85, 0.9),
@@ -1106,13 +1263,21 @@ func _draw_minimap_camps(c: Control, sc: float) -> void:
 
 
 func _minimap_input(event: InputEvent) -> void:
-	if event is InputEventMouseButton and event.pressed:
-		var wp: Vector2 = event.position / minimap.size * world.map.size
-		if event.button_index == MOUSE_BUTTON_RIGHT:
-			world.send_command("move", [wp])
+	if event is InputEventMouseButton:
+		if event.button_index == MOUSE_BUTTON_RIGHT and event.pressed:
+			world.send_command("move", [_minimap_to_world(event.position)])
 		elif event.button_index == MOUSE_BUTTON_LEFT:
-			world.cam_locked = false
-			world.camera.global_position = wp
+			minimap_dragging = event.pressed
+			if minimap_dragging:
+				world.camera.global_position = _minimap_to_world(event.position)
+				world.camera.reset_smoothing()
+	elif event is InputEventMouseMotion and minimap_dragging:
+		world.camera.global_position = _minimap_to_world(event.position)
+		world.camera.reset_smoothing()
+
+
+func _minimap_to_world(point: Vector2) -> Vector2:
+	return (point / minimap.size).clamp(Vector2.ZERO, Vector2.ONE) * world.map.size
 
 
 func _draw_scores(c: Scoreboard) -> void:

@@ -13,10 +13,20 @@ const KILL_GOLD := 300.0
 const ASSIST_GOLD := 150.0
 const TOWER_GOLD := 50.0
 const BRUSH_REVEAL := 2.0       # seconds a champion stays revealed after damaging a champion from brush
+const RELIC_FIRST := 75.0
+const RELIC_RESPAWN := 90.0
+const RELIC_COLOR := Color("78f5a8")
+const PINGS := preload("res://scripts/ui/team_pings.gd")
 
 var config := {}
 var online := false
 var is_server := true
+var aram := false
+var mayhem := false
+var mayhem_tiers := [0, 1, 1, 2]
+var relic_positions := PackedVector2Array()
+var relic_ready := PackedFloat32Array()
+var relic_art: DrawNode
 var map: GameMap
 var jungle: Jungle = null
 var entities := {}
@@ -77,10 +87,15 @@ var _cursor_attack := false
 var _cam_hold := false             # camera_center key held
 var _amove_ring := 0.0             # attack-range ring flash after an instant attack-move
 var _steer_sent := Vector2.ZERO    # last WASD direction sent to the host
+var _sion_q_held := false
+var _sion_steer_timer := 0.0
+var pings := PINGS.new()
 
 
 func start(cfg: Dictionary) -> void:
 	config = cfg
+	aram = Game.Mayhem.is_aram(cfg.map)
+	mayhem = cfg.get("map") == Game.Mayhem.MAP_ID
 	Game.world = self
 	online = bool(cfg.get("online", false))
 	is_server = multiplayer.is_server()
@@ -95,6 +110,13 @@ func start(cfg: Dictionary) -> void:
 		jungle = Jungle.new(self)
 	zone_layer = _layer(-5, false)
 	under_layer = _layer(-4, false)
+	if aram:
+		for x in [0.24, 0.41, 0.59, 0.76]:
+			relic_positions.append(map.nearest_open(map.size * Vector2(x, 0.62 if x < 0.5 else 0.38)))
+			relic_ready.append(RELIC_FIRST)
+		relic_art = DrawNode.new()
+		relic_art.draw_func = _draw_relics
+		under_layer.add_child(relic_art)
 	unit_layer = _layer(0, true)
 	proj_layer = _layer(5, false)
 	fog = FogOfWar.new()
@@ -162,6 +184,8 @@ func begin() -> void:
 	if started:
 		return
 	started = true
+	if mayhem:
+		mayhem_tiers.shuffle()
 	if online:
 		_rpc_begin.rpc()
 	for s in map.structures:
@@ -177,11 +201,13 @@ func begin() -> void:
 		var sums: Array = p.get("summoners", Game.default_summoners(p.character)).duplicate()
 		if role < 0 and bool(p.get("bot", false)) and jungle != null and Game.summoners.has("smite") and not "smite" in sums and sums.size() == 2:
 			sums[1 if sums[0] == "flash" else 0] = "smite"  # bot junglers take Smite
-		var c = spawn("champion", {"peer": pid, "team": t, "character": p.character, "name": p.name, "gold": start_gold,
+		var c: Champion = spawn("champion", {"peer": pid, "team": t, "character": p.character, "name": p.name, "gold": start_gold,
 			"bot": bool(p.get("bot", false)) or gone, "difficulty": str(p.get("difficulty", "normal")),
 			"pos": map.spawn_point(t) + off, "lane": role, "summoners": sums, "runes": p.get("runes", {})})
 		for k in int(map.data.get("start_level", 1)) - 1:
 			c.cheat("level")
+		if mayhem:
+			_offer_augment(c)
 		per_team[t] += 1
 	for dpos in map.dummies:
 		spawn("dummy", {"pos": dpos})
@@ -348,7 +374,7 @@ func _rpc_snapshot(buf: PackedFloat32Array) -> void:
 
 
 func fx(kind: String, data: Dictionary) -> void:
-	if is_server and (kind == "telegraph" or kind == "beam_warn"):
+	if is_server and not data.get("cosmetic", false) and (kind == "telegraph" or kind == "beam_warn"):
 		_note_warn(kind, data)
 	_play_fx(kind, data)
 	if online and is_server:
@@ -521,9 +547,78 @@ func _rpc_command(cmd: String, args: Array) -> void:
 
 
 func apply_command(pid: int, cmd: String, args: Array) -> void:
-	var c = champions.get(pid)
+	var c: Champion = champions.get(pid)
 	if c != null and started and not ended:
-		c.command(cmd, args)
+		if cmd == "ping":
+			_send_team_ping(pid, c.team, args)
+		elif cmd in ["augment_pick", "augment_reroll"]:
+			if not _augment_command(c, cmd, args):
+				fx("notice", {"peer": pid, "text": "That augment choice is no longer available."})
+		else:
+			c.command(cmd, args)
+
+
+func _send_team_ping(pid: int, team: int, args: Array) -> void:
+	if not pings.accept(pid, args, map.size, Time.get_ticks_msec()):
+		return
+	var kind: String = args[0]
+	var at: Vector2 = args[1]
+	if team == local_team:
+		_receive_team_ping(kind, at)
+	if online:
+		for peer in multiplayer.get_peers():
+			var recipient: Champion = champions.get(peer)
+			if recipient != null and recipient.team == team:
+				_receive_team_ping.rpc_id(peer, kind, at)
+
+
+@rpc("authority", "call_remote", "reliable")
+func _receive_team_ping(kind: String, at: Vector2) -> void:
+	if not ended and not closing:
+		pings.show_ping(kind, at)
+
+
+func _input(event: InputEvent) -> void:
+	if _handle_ping_input(event, get_viewport().get_mouse_position()):
+		get_viewport().set_input_as_handled()
+
+
+func _handle_ping_input(event: InputEvent, mouse: Vector2) -> bool:
+	if not started or ended or closing:
+		return false
+	if not keys_free() or hud.shop_open():
+		pings.cancel()
+		return false
+	if event.is_echo():
+		return false
+	var action := Controls.action_of(event, Game.prefs.move_mode)
+	if pings.open_action != "":
+		if action == pings.open_action and not event.is_pressed():
+			send_command("ping", [pings.selection(mouse), pings.anchor])
+			pings.cancel()
+		elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_RIGHT:
+			pings.cancel()
+			rmb_held = false
+		elif event is InputEventKey and event.pressed and event.keycode == KEY_ESCAPE:
+			pings.cancel()
+		elif event is InputEventMouseButton and event.pressed and event.button_index == MOUSE_BUTTON_LEFT:
+			pass
+		else:
+			return false
+	elif event.is_pressed() and action in ["ping", "ping_retreat", "ping_vision"]:
+		var mm := hud.minimap.get_global_rect()
+		var at := (mouse - mm.position) / mm.size * map.size if mm.has_point(mouse) else get_canvas_transform().affine_inverse() * mouse
+		if not Rect2(Vector2.ZERO, map.size).has_point(at):
+			return false
+		if action == "ping_retreat":
+			send_command("ping", ["retreat", at])
+		else:
+			pings.open_action = action
+			pings.origin = mouse
+			pings.anchor = at
+	else:
+		return false
+	return true
 
 
 func on_peer_left(id: int, pname: String) -> void:
@@ -534,6 +629,67 @@ func on_peer_left(id: int, pname: String) -> void:
 	if c != null:
 		c.is_bot = true
 	fx("announce", {"text": "%s left the game - a bot takes over" % pname, "color": Color(1, 0.8, 0.4)})
+
+
+func _offer_augment(c: Champion) -> void:
+	var round_index := c.augments.size()
+	if not is_server or not mayhem or not c.augment_offers.is_empty() \
+			or round_index >= Game.Mayhem.LEVELS.size() or c.level < Game.Mayhem.LEVELS[round_index]:
+		return
+	c.augment_tier = mayhem_tiers[round_index]
+	c.augment_offers = Game.Mayhem.draw_augments(c.augment_tier, 3, c.augments)
+	c.augment_seen = c.augment_offers.duplicate()
+	c.augment_rerolled = [false, false, false]
+	if not c.is_bot:
+		_sync_augments(c)
+
+
+func _augment_command(c: Champion, cmd: String, args: Array) -> bool:
+	if not mayhem or c.is_bot or args.size() != 3 or not args[0] is int \
+			or not args[1] is int or not args[2] is String or args[0] != c.augments.size():
+		return false
+	var slot: int = args[1]
+	if slot < 0 or slot >= c.augment_offers.size() or args[2] != c.augment_offers[slot]:
+		return false
+	if cmd == "augment_pick":
+		_pick_augment(c, c.augment_offers[slot])
+		return true
+	if c.augment_rerolled[slot]:
+		return false
+	var draw: Array = Game.Mayhem.draw_augments(c.augment_tier, 1, c.augments + c.augment_seen)
+	if draw.is_empty():
+		return false
+	c.augment_offers[slot] = draw[0]
+	c.augment_seen.append(draw[0])
+	c.augment_rerolled[slot] = true
+	_sync_augments(c)
+	return true
+
+
+func _pick_augment(c: Champion, id: String) -> void:
+	c.augments.append(id)
+	c.augment_offers.clear()
+	c.augment_rerolled.clear()
+	c.augment_tier = -1
+	c._rebuild_triggers()
+	c.recompute_stats()
+	_sync_augments(c)
+	_offer_augment(c)
+
+
+func _sync_augments(c: Champion) -> void:
+	if online and c.peer > 1 and Game.players.has(c.peer):
+		_rpc_augments.rpc_id(c.peer, c.augments, c.augment_offers, c.augment_rerolled, c.augment_tier)
+
+
+@rpc("authority", "call_remote", "reliable")
+func _rpc_augments(chosen: Array, offers: Array, rerolled: Array, tier: int) -> void:
+	if mayhem and not closing and local_champion != null:
+		local_champion.augments = chosen
+		local_champion.augment_offers = offers
+		local_champion.augment_rerolled = rerolled
+		local_champion.augment_tier = tier
+
 
 # ------------------------------------------------------------ game rules ---
 
@@ -552,6 +708,8 @@ func _physics_process(delta: float) -> void:
 	_waves(delta)
 	_fountain(delta)
 	_trickle(delta)
+	if aram:
+		_tick_aram()
 	if jungle != null:
 		jungle.tick(delta)
 	_frame += 1
@@ -582,7 +740,7 @@ func _wave_types(team: int, lane: int) -> Array[String]:
 	var types: Array[String] = []
 	for k in map.wave_melee:
 		types.append("melee")
-	if map.rift_waves:
+	if aram or map.rift_waves:
 		var down := 0
 		var total := 0
 		var lane_down := false
@@ -592,7 +750,7 @@ func _wave_types(team: int, lane: int) -> Array[String]:
 				if s.dead:
 					down += 1
 					lane_down = lane_down or s.lane == lane
-		var siege_every := 3 if time < 900.0 else (2 if time < 1500.0 else 1)
+		var siege_every := (3 if time < 480.0 else 2) if aram else (3 if time < 900.0 else (2 if time < 1500.0 else 1))
 		if lane_down:
 			types.append("super")
 			if total > 1 and down == total:
@@ -621,8 +779,9 @@ func _fountain(delta: float) -> void:
 			if c.global_position.distance_to(map.spawn_point(t)) > map.fountain_radius:
 				continue
 			if c.team == t:
-				c.heal(c.stats.max_hp * 0.07, null, false)
-				c.restore_mana(c.stats.max_mana * 0.07)
+				if not aram and (c.sion == null or c.sion.form != SionKit.ZOMBIE):
+					c.heal(c.stats.max_hp * 0.07, null, false)
+					c.restore_mana(c.stats.max_mana * 0.07)
 			elif map.lane_count() > 0:
 				c.take_damage(300.0, null, "true", {"vfx": "star", "col": Game.TEAM_COLORS[t]})
 				fx("beam", {"from": map.spawn_point(t), "to": c.global_position, "color": Game.TEAM_COLORS[t], "width": 18.0})
@@ -635,11 +794,66 @@ func _trickle(delta: float) -> void:
 		var g := float(map.data.get("gold_per_second", 2.04 if time >= 110.0 else 0.0))
 		for c in champions.values():
 			c.gold += g
+			if aram:
+				c.gain_xp(24.0)
 
 
-## Practice matches (and maps with "cheats": true) allow F1-F4 cheats and shopping anywhere.
+func _tick_aram() -> void:
+	for c: Champion in champions.values():
+		if not c.dead and not c.aram_shop_locked and not c.in_base_shop_range():
+			c.aram_shop_locked = true
+		if mayhem:
+			_offer_augment(c)
+			if c.is_bot and not c.augment_offers.is_empty():
+				_pick_augment(c, Game.Mayhem.bot_pick(c.augment_offers, Champion.role_of(c.def)))
+	for i in relic_positions.size():
+		if time < relic_ready[i]:
+			continue
+		var pos := relic_positions[i]
+		for c: Champion in champions.values():
+			if c.dead or c.global_position.distance_to(pos) > 85.0:
+				continue
+			if c.hp >= c.stats.max_hp and c.mana >= c.stats.max_mana:
+				continue
+			c.heal(c.stats.max_hp * 0.08)
+			c.restore_mana(c.stats.max_mana * 0.08)
+			relic_ready[i] = time + RELIC_RESPAWN
+			if online:
+				_rpc_relic_ready.rpc(i, relic_ready[i])
+			fx("telegraph", {"pos": pos, "radius": 460.0, "dur": 2.0, "color": RELIC_COLOR, "cosmetic": true})
+			schedule(2.0, _heal_relic.bind(pos))
+			break
+
+
+func _heal_relic(pos: Vector2) -> void:
+	for c: Champion in champions.values():
+		if not c.dead and c.global_position.distance_to(pos) <= 460.0:
+			c.heal((c.stats.max_hp - c.hp) * 0.25)
+			c.restore_mana((c.stats.max_mana - c.mana) * 0.25)
+	fx("ring", {"pos": pos, "radius": 460.0, "color": RELIC_COLOR})
+
+
+func _draw_relics(canvas: CanvasItem) -> void:
+	for i in relic_positions.size():
+		var p := relic_positions[i]
+		var active := started and time >= relic_ready[i]
+		var c := RELIC_COLOR if active else Color(0.35, 0.45, 0.45, 0.65)
+		canvas.draw_circle(p, 32.0, Color(c, 0.25))
+		canvas.draw_arc(p, 32.0, 0.0, TAU, 24, c, 3.0, true)
+		if active:
+			canvas.draw_line(p - Vector2(16, 0), p + Vector2(16, 0), c, 5.0, true)
+			canvas.draw_line(p - Vector2(0, 16), p + Vector2(0, 16), c, 5.0, true)
+
+
+@rpc("authority", "call_remote", "reliable")
+func _rpc_relic_ready(index: int, ready_at: float) -> void:
+	if not closing and index >= 0 and index < relic_ready.size():
+		relic_ready[index] = ready_at
+
+
+## Practice matches normally allow F1-F4 cheats and shopping anywhere.
 func cheats_allowed() -> bool:
-	return not online or bool(map.data.get("cheats", false))
+	return not aram and (not online or bool(map.data.get("cheats", false)))
 
 
 ## Whether `u` can be seen by `viewer_team` (fog of war and stealth).
@@ -905,11 +1119,11 @@ func nearest_enemy(pos: Vector2, team: int, max_d: float, champs_only := false, 
 
 
 ## Unit under/near a point. enemy=true picks enemies of `team`, otherwise allies.
-func pick_unit(pos: Vector2, team: int, enemy: bool, tolerance: float, structs := true) -> Unit:
+func pick_unit(pos: Vector2, team: int, enemy: bool, tolerance: float, structs := true, champs_only := false) -> Unit:
 	var best: Unit = null
 	var bd := INF
 	for u in units:
-		if u.dead or not u.targetable() or (u.is_structure and not structs) or (u.team != team) != enemy:
+		if u.dead or not u.targetable() or (u.is_structure and not structs) or (u.team != team) != enemy or (champs_only and not u.is_champion):
 			continue
 		if enemy and not can_see(u, team):
 			continue
@@ -958,16 +1172,18 @@ func _unhandled_input(event: InputEvent) -> void:
 							send_command("rune", ["dematerialize", target.net_id])
 						return
 					if aim_slot != "":
-						_cast(aim_slot)
+						_cast(aim_slot, click_world)
 						aim_slot = ""
 					elif amove_armed or Game.prefs.move_mode == "wasd":
 						if amove_armed:
 							amove_armed = false
-							attack_move()
+							attack_move(click_world)
 						else:
-							var picked := inspect_at(click_world)
-							if picked == null:
-								attack_move()
+							var target := pick_unit(click_world, local_team, true, 14.0, true, Input.is_action_pressed("target_champions"))
+							if target != null:
+								send_command("attack", [target.net_id])
+							else:
+								inspect_at(click_world)
 					else:
 						inspect_at(click_world)
 				return
@@ -1008,14 +1224,24 @@ func _unhandled_input(event: InputEvent) -> void:
 		if pressed and mods and slot in Champion.SLOTS:
 			send_command("rank_up", [slot])
 			return
+		if slot == "q" and local_champion != null and local_champion.sion != null:
+			if pressed:
+				_cast(slot)
+				_sion_q_held = true
+				aim_slot = ""
+				amove_armed = false
+			elif _sion_q_held:
+				_release_sion_q()
+			return
 		if pressed:
 			var ab = aim_ability(slot)
-			if not slot in Champion.SLOTS and (ab == null or ab.targeting == "self" or channeling(slot)):
+			amove_armed = false
+			if Game.prefs.cast_mode == "quick" or (ab != null and ab.targeting == "self") or channeling(slot):
+				aim_slot = ""
 				_cast(slot)
 				return
 			aim_slot = slot
-			amove_armed = false
-		elif aim_slot == slot:
+		elif aim_slot == slot and Game.prefs.cast_mode == "indicator":
 			_cast(slot)
 			aim_slot = ""
 		return
@@ -1028,10 +1254,16 @@ func _unhandled_input(event: InputEvent) -> void:
 		return
 	match act:
 		"attack_move":
+			aim_slot = ""
 			if Game.prefs.amove_click:
 				amove_armed = true
+				rmb_held = false
 			else:
 				attack_move()
+		"attack_move_click":
+			aim_slot = ""
+			amove_armed = false
+			attack_move()
 		"stop":
 			send_command("stop")
 		"recall":
@@ -1044,10 +1276,10 @@ func _unhandled_input(event: InputEvent) -> void:
 
 ## Attack-move at the cursor: the host attacks the enemy in range closest to the cursor (or to
 ## you - see Settings), otherwise walks there attacking whatever comes into range.
-func attack_move() -> void:
+func attack_move(at := Vector2.INF) -> void:
 	if local_champion == null or local_champion.dead or ended:
 		return
-	var m := get_global_mouse_position()
+	var m := at if at.is_finite() else get_global_mouse_position()
 	send_command("amove", [m, str(Game.prefs.amove_target)])
 	_play_fx("click", {"pos": m, "color": Color(1, 0.3, 0.3)})
 	_amove_ring = 0.35
@@ -1107,7 +1339,7 @@ func _right_click(with_fx: bool) -> void:
 	if local_champion == null or local_champion.dead:
 		return
 	var m := get_global_mouse_position()
-	var t := pick_unit(m, local_team, true, 14.0)
+	var t := pick_unit(m, local_team, true, 14.0, true, Input.is_action_pressed("target_champions"))
 	if t != null:
 		send_command("attack", [t.net_id])
 		if with_fx:
@@ -1120,17 +1352,21 @@ func _right_click(with_fx: bool) -> void:
 	rmb_timer = 0.15
 
 
-func _cast(slot: String) -> void:
+func _cast(slot: String, at := Vector2.INF) -> void:
 	var c := local_champion
 	if c == null or ended:
 		return
 	var ab = aim_ability(slot)
 	if ab == null or (c.dead and not (not slot in Champion.SLOTS and ab.get("while_dead", false))):
 		return
-	var m := get_global_mouse_position()
+	var m := at if at.is_finite() else get_global_mouse_position()
+	if c.sion != null and slot in Champion.SLOTS:
+		if c.sion.form == SionKit.ZOMBIE or (slot == "r" and c.sion.action == SionKit.CHARGE):
+			send_command("cast", [slot, m, 0])
+			return
 	var tid := 0
 	if ab.targeting == "unit" or ab.targeting == "ally":
-		var t := pick_unit(m, local_team, ab.targeting == "unit", 70.0, bool(ab.get("structures", false)))
+		var t := pick_unit(m, local_team, ab.targeting == "unit", 14.0, bool(ab.get("structures", false)), Input.is_action_pressed("target_champions"))
 		if t != null:
 			tid = t.net_id
 	if slot.begins_with("i"):
@@ -1159,12 +1395,34 @@ func _cast(slot: String) -> void:
 		_sfx("cast", c.global_position, -14.0)
 
 
+func _release_sion_q() -> void:
+	_sion_q_held = false
+	send_command("sion_release")
+
+
 func _process(delta: float) -> void:
+	pings.tick(delta)
+	if pings.open_action != "" and (not keys_free() or hud.shop_open() or not Input.is_action_pressed(pings.open_action)):
+		pings.cancel()
+	if relic_art != null:
+		relic_art.queue_redraw()
 	camera.zoom = camera.zoom.lerp(Vector2.ONE * cam_zoom, minf(10.0 * delta, 1.0))
 	_steer()
+	if _sion_q_held and not Input.is_action_pressed("ability_q"):
+		_release_sion_q()
+	if local_champion != null and local_champion.sion != null and local_champion.sion.action == SionKit.CHARGE and not ended:
+		_sion_steer_timer -= delta
+		if _sion_steer_timer <= 0.0:
+			_sion_steer_timer = 0.1
+			send_command("sion_steer", [test_aim if test_aim != null else get_global_mouse_position()])
+	else:
+		_sion_steer_timer = 0.0
 	_amove_ring = maxf(_amove_ring - delta, 0.0)
 	var focus = entities.get(_cam_focus) if _cam_focus_t > 0.0 else null
-	if focus is Unit:
+	hud.minimap_dragging = hud.minimap_dragging and not ended and keys_free() and Input.is_mouse_button_pressed(MOUSE_BUTTON_LEFT)
+	if hud.minimap_dragging:
+		pass # The minimap owns the camera until the button is released.
+	elif focus is Unit:
 		# an ability (e.g. Clorinde's R) points the caster's camera at its target for a moment
 		_cam_focus_t -= delta
 		camera.global_position = camera.global_position.lerp(focus.global_position, minf(16.0 * delta, 1.0))
@@ -1207,7 +1465,7 @@ func _process(delta: float) -> void:
 		camera.offset = Vector2.ZERO
 	hover_unit = null
 	if local_champion != null and not ended and not closing and get_viewport().gui_get_hovered_control() == null:
-		hover_unit = pick_unit(get_global_mouse_position(), local_team, true, 10.0)
+		hover_unit = pick_unit(get_global_mouse_position(), local_team, true, 10.0, true, Input.is_action_pressed("target_champions"))
 	var want_attack := hover_unit != null or amove_armed
 	if want_attack != _cursor_attack:
 		_cursor_attack = want_attack

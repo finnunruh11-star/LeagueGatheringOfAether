@@ -14,7 +14,8 @@ signal suggestions_changed
 signal suggestion_status_changed(text: String)
 
 const CharacterSuggestions = preload("res://scripts/character_suggestions.gd")
-const PROTOCOL := 8
+const Mayhem = preload("res://scripts/mayhem.gd")
+const PROTOCOL := 10
 const DEFAULT_PORT := 7777
 const MAX_APPROVED_SUGGESTIONS := 8
 const SUGGESTION_INTERVAL_MS := 3000
@@ -55,7 +56,8 @@ var debug_log := false  # --itemtest prints every damage/heal/proc
 var prefs := {
 	"move_mode": "click",       # "click" (right-click to move) or "wasd"
 	"amove_target": "cursor",   # attack-move attacks the enemy closest to the "cursor" or to your "champion"
-	"amove_click": false,       # true: the attack-move key arms it and a left click fires it
+	"amove_click": true,        # false preserves the old instant attack-move behavior
+	"cast_mode": "quick",       # quick, indicator (on release), or normal (click to confirm)
 	"edge_pan": true,
 	"camera_speed": 1.0,
 	"camera_locked": true,      # the camera follows your champion when a match starts
@@ -105,6 +107,9 @@ func reload_content() -> void:
 		if def != null:
 			characters[id] = def
 	maps = Content.read_maps(content_errors)
+	if maps.has("bridge"):
+		maps[Mayhem.STANDARD_MAP_ID] = Mayhem.map_variant(maps.bridge, false)
+		maps[Mayhem.MAP_ID] = Mayhem.map_variant(maps.bridge, true)
 	item_pack = Content.read_item_pack(content_errors)
 	_build_items()
 	summoner_pack = Content.read_summoner_pack(content_errors)
@@ -145,6 +150,11 @@ func valid_summoners(list) -> Array:
 		if summoners.has(s) and not out.has(s):
 			out.append(s)
 	return out
+
+
+func aram_summoners(list: Array) -> Array:
+	return valid_summoners(list.filter(func(id): return id not in Mayhem.DISALLOWED_SPELLS)
+		+ ["flash", "mark", "heal"]).filter(func(id): return id not in Mayhem.DISALLOWED_SPELLS)
 
 
 ## Flash plus a spell that suits the character's role (used for bots and new players).
@@ -231,6 +241,8 @@ func _init_lobby() -> void:
 	players[1] = {"name": player_name, "team": 0, "character": default_character(), "bot": false,
 		"summoners": valid_summoners(prefs.summoners),
 		"runes": Runes.canonical(prefs.runes) if Runes.valid(prefs.runes) else {}}
+	if Mayhem.is_aram(settings.map):
+		_deal_aram_cards(1)
 	lobby_changed.emit()
 
 
@@ -289,6 +301,8 @@ func _rpc_register(pname: String, protocol: int) -> void:
 		return
 	players[id] = {"name": pname.substr(0, 20), "team": _smaller_team(), "character": default_character(), "bot": false,
 		"summoners": valid_summoners([])}
+	if Mayhem.is_aram(settings.map):
+		_deal_aram_cards(id)
 	_rpc_content_begin.rpc_id(id)
 	for cid in character_packs:
 		_rpc_character_pack.rpc_id(id, cid, character_packs[cid])
@@ -486,8 +500,14 @@ func _apply_change(pid: int, key: String, value) -> void:
 		"team":
 			players[pid].team = clampi(int(value), 0, 1)
 		"character":
+			if Mayhem.is_aram(settings.map):
+				return
 			if characters.has(str(value)):
 				players[pid].character = str(value)
+		"aram_character":
+			if not Mayhem.is_aram(settings.map) or value not in players[pid].get("aram_cards", []):
+				return
+			players[pid].aram_character = value
 		"summoners":
 			if value is Array and value.size() == 2 and str(value[0]) != str(value[1]):
 				players[pid].summoners = valid_summoners(value)
@@ -503,8 +523,10 @@ func _apply_change(pid: int, key: String, value) -> void:
 
 
 func set_map(id: String) -> void:
-	if is_host() and maps.has(id):
+	if is_host() and not in_match and maps.has(id) and id != settings.map:
 		settings.map = id
+		if Mayhem.is_aram(id):
+			_redeal_aram_cards()
 		_broadcast_lobby()
 
 
@@ -522,6 +544,8 @@ func add_bot(team: int, difficulty := "") -> void:
 	var cid: String = ids[randi() % ids.size()]
 	players[_next_bot] = {"name": "Bot %d" % -_next_bot, "team": team, "character": cid, "bot": true,
 		"summoners": default_summoners(cid), "difficulty": BotBrain.level_name(difficulty if difficulty != "" else prefs.bot_difficulty)}
+	if Mayhem.is_aram(settings.map):
+		_deal_aram_cards(_next_bot)
 	_next_bot -= 1
 	_broadcast_lobby()
 
@@ -532,24 +556,63 @@ func remove_bot(pid: int) -> void:
 		_broadcast_lobby()
 
 
+func _redeal_aram_cards() -> void:
+	for p in players.values():
+		p.erase("aram_cards")
+		p.erase("aram_character")
+	for pid in players:
+		_deal_aram_cards(pid)
+
+
+func _deal_aram_cards(pid: int) -> void:
+	var pool := characters.keys()
+	if pool.is_empty():
+		return
+	var available := pool.duplicate()
+	for other in players:
+		if other != pid:
+			for card in players[other].get("aram_cards", []):
+				available.erase(card)
+	available.shuffle()
+	var cards := available.slice(0, 2)
+	if cards.size() < 2:
+		pool.shuffle()
+		for card in pool:
+			if card not in cards:
+				cards.append(card)
+			if cards.size() == 2:
+				break
+	players[pid].aram_cards = cards
+	players[pid].aram_character = cards[0]
+
+
 # ------------------------------------------------------------------ match ---
 
 func start_match() -> void:
-	if not is_host() or in_match or maps.is_empty():
+	if not is_host() or in_match or maps.is_empty() or characters.is_empty():
 		return
 	var map_id: String = settings.map if maps.has(settings.map) else maps.keys()[0]
-	for pid in players:
-		if not characters.has(players[pid].character):
-			players[pid].character = default_character()
-		players[pid].summoners = valid_summoners(players[pid].get("summoners", []))
-		if not Runes.valid(players[pid].get("runes")):
-			players[pid].runes = default_runes(players[pid].character)
+	var aram := Mayhem.is_aram(map_id)
+	var match_players := players.duplicate(true)
+	for pid in match_players:
+		var p: Dictionary = match_players[pid]
+		if aram:
+			if not characters.has(players[pid].get("aram_character", "")):
+				_deal_aram_cards(pid)
+			p.character = players[pid].aram_character
+			p.summoners = aram_summoners(p.get("summoners", []))
+		else:
+			if not characters.has(p.character):
+				p.character = default_character()
+			p.summoners = valid_summoners(p.get("summoners", []))
+		if not Runes.valid(p.get("runes")):
+			p.runes = default_runes(p.character)
 	match_count += 1
 	var config := {
 		"id": match_count,
 		"map": map_id,
 		"map_data": maps[map_id],
-		"players": players.duplicate(true),
+		"players": match_players,
 		"online": online,
 		"fog": bool(settings.get("fog", true)),
 	}
@@ -590,6 +653,9 @@ func return_to_lobby() -> void:
 	if online:
 		_rpc_return_to_lobby.rpc()
 	_rpc_return_to_lobby()
+	if Mayhem.is_aram(settings.map):
+		_redeal_aram_cards()
+		_broadcast_lobby()
 
 
 @rpc("authority", "call_remote", "reliable")

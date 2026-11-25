@@ -56,6 +56,7 @@ func _ready() -> void:
 
 	_section(body, "Gameplay")
 	_option(body, "Movement", "move_mode", [["click", "Right-click to move (classic)"], ["wasd", "WASD keys (left click attacks)"]], _on_move_mode)
+	_option(body, "Ability casting", "cast_mode", [["quick", "Quick cast on press"], ["indicator", "Quick cast with indicator on release"], ["normal", "Normal cast: aim, then left-click"]])
 	_option(body, "Attack-move attacks", "amove_target", [["cursor", "the enemy closest to the cursor"], ["champion", "the enemy closest to you"]])
 	_check(body, "The attack-move key waits for a left click (otherwise it attacks at the cursor right away)", "amove_click")
 	_check(body, "Autobuy - buy your build in your base or while dead (edit the build in the shop)", "autobuy", _on_autobuy)
@@ -158,7 +159,7 @@ func _on_move_mode(mode: String) -> void:
 	Game.save_settings()
 	_refresh_keys()
 	if mode == "wasd":
-		_note.text = "WASD layout: move with %s%s%s%s, left click attacks the enemy nearest the cursor, abilities on %s %s %s %s, summoner spells on %s / %s. Change any key below." % [
+		_note.text = "WASD layout: move with %s%s%s%s, left-click an enemy to attack, abilities on %s %s %s %s, summoner spells on %s / %s. Change any key below." % [
 			Controls.label("move_up"), Controls.label("move_left"), Controls.label("move_down"), Controls.label("move_right"),
 			Controls.label("ability_q"), Controls.label("ability_w"), Controls.label("ability_e"), Controls.label("ability_r"),
 			Controls.label("summoner_1"), Controls.label("summoner_2")]

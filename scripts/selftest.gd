@@ -15,6 +15,12 @@ func _ready() -> void:
 		print("[selftest] no world")
 		get_tree().quit(1)
 		return
+	if Game.cmdline.get("selftest") in ["aram", "mayhem"]:
+		_test_aram(Game.cmdline.selftest == "mayhem")
+		return
+	if Game.cmdline.get("selftest") == "mayhem_net":
+		await _test_mayhem_net()
+		return
 	if Game.cmdline.get("selftest") == "balance":
 		_test_balance()
 		return
@@ -35,6 +41,9 @@ func _ready() -> void:
 		return
 	if Game.cmdline.get("selftest") == "zeri":
 		await _test_zeri()
+		return
+	if Game.cmdline.get("selftest") == "sion":
+		await _test_sion()
 		return
 	if Game.cmdline.get("selftest") == "rift":
 		_test_rift()
@@ -254,6 +263,143 @@ func _test_runes() -> void:
 	player.command("move", [center])
 	ok = _check(player.casting == null, "moving cancels the Hexflash channel") and ok
 	print("[runes] ", "passed" if ok else "failed")
+	get_tree().quit(0 if ok else 1)
+
+
+func _test_sion() -> void:
+	var c := world.local_champion
+	if c == null or c.sion == null or world.map.data.get("name") != "Training Arena":
+		push_error("[sion] requires --char=sion --map=arena")
+		get_tree().quit(1)
+		return
+	for u in world.units.duplicate():
+		if u is Dummy:
+			world.despawn(u)
+	var at := Vector2(700, 900)
+	c.teleport(at)
+	c.rune_state = null
+	c.recompute_stats()
+	c.ranks.q = 1
+	c.ranks.w = 1
+	c.ranks.e = 1
+	c.ranks.r = 1
+	var t: Dummy = world.spawn("dummy", {"pos": at + Vector2(300, 0), "hp": 1000})
+	var off: Dummy = world.spawn("dummy", {"pos": at + Vector2(300, 350), "hp": 1000})
+	var foe: Champion = world.spawn("champion", {"peer": 1001, "team": 1, "character": "sion",
+		"name": "Target", "pos": at + Vector2(1100, 0)})
+	var ok := true
+	var fired := c.cast("q", t.global_position, 0)
+	c.command("sion_release", [])
+	await get_tree().create_timer(0.35).timeout
+	ok = _check(fired and is_equal_approx(t.total_taken, 60.6) and not t.has_status("stun"),
+		"Sion tap Q does minimum damage without stunning (got %.2f)" % t.total_taken) and ok
+	var before := t.total_taken
+	c.cooldowns.q = 0.0
+	fired = c.cast("q", t.global_position, 0)
+	await get_tree().create_timer(2.1).timeout
+	ok = _check(fired and is_equal_approx(t.total_taken - before, 161.8) and t.has_status("stun")
+		and off.total_taken == 0.0 and c.cooldowns.q > 9.8,
+		"Sion full Q hits only inside the axe hitbox and starts its cooldown on release") and ok
+	c.cooldowns.q = 0.0
+	c.cast("q", t.global_position, 0)
+	c.add_status({"type": "stun", "time": 0.3}, foe)
+	ok = _check(c.sion.action == SionKit.IDLE and c.cooldowns.q == 2.0,
+		"Interrupting Q cancels it and leaves a 2s cooldown") and ok
+	c.cleanse()
+	var minion: Minion = world.spawn("minion", {"pos": at + Vector2(250, 0), "team": 1, "type": "melee"})
+	minion.die(c)
+	var siege: Minion = world.spawn("minion", {"pos": at + Vector2(250, 0), "team": 1, "type": "siege"})
+	siege.die(c)
+	c.on_takedown(foe, true)
+	ok = _check(is_equal_approx(c.stats.max_hp, 579.0), "W stacks +4, +15 and +15 for melee, siege and a champion assist") and ok
+	c.mana = c.stats.max_mana
+	before = t.total_taken
+	fired = c.cast("w", at, 0)
+	ok = _check(fired and not c.cast("w", at, 0) and is_equal_approx(c.sion.shield().get("amount", 0.0), 117.9),
+		"W scales with stacked health and cannot detonate early") and ok
+	await get_tree().create_timer(3.1).timeout
+	ok = _check(c.cast("w", at, 0) and is_equal_approx(t.total_taken - before, 140.0),
+		"An intact W detonates for base plus percent max-health magic damage") and ok
+	c.cooldowns.w = 0.0
+	c.cast("w", at, 0)
+	c.take_damage(125.0, foe, "true")
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	ok = _check(not c.cast("w", at, 0) and c.active_ability("w") == c.def.abilities.w and c.cooldowns.w > 10.0,
+		"A broken shield cannot detonate") and ok
+	c.cooldowns.w = 0.0
+	c.mana = c.stats.max_mana
+	before = t.total_taken
+	c.cast("w", at, 0)
+	await get_tree().create_timer(6.1).timeout
+	ok = _check(is_equal_approx(t.total_taken - before, 140.0) and c.sion.shield().is_empty(),
+		"An unbroken W also detonates automatically when it expires") and ok
+	world.despawn(t)
+	var carrier: Minion = world.spawn("minion", {"pos": at + Vector2(250, 0), "team": 1, "type": "melee"})
+	carrier.base_stats.move_speed = 0.0
+	carrier.recompute_stats()
+	foe.base_stats.magic_resist = 0.0
+	foe.recompute_stats()
+	before = foe.hp
+	fired = c.cast("e", foe.global_position, 0)
+	await get_tree().create_timer(1.05).timeout
+	ok = _check(fired and absf(foe.hp - (before - 65.0)) < 3.0 and foe.has_status("slow")
+		and is_equal_approx(foe.stats.armor, 25.6) and carrier.global_position.x > at.x + 450.0,
+		"E launches the minion beyond E range (damage %.2f, armor %.2f, minion x %.2f)" % [before - foe.hp, foe.stats.armor, carrier.global_position.x]) and ok
+	world.despawn(carrier)
+	foe.teleport(at + Vector2(600.0, 0.0))
+	world.test_aim = foe.global_position
+	c.mana = c.stats.max_mana
+	fired = c.cast("r", foe.global_position, 0)
+	c.add_status({"type": "stun", "time": 10.0}, foe)
+	c.knockback(Vector2(-100.0, 0.0), 0.5)
+	ok = _check(fired and not c.cast("r", at, 0) and not c.has_status("stun") and c.forced == null,
+		"R rejects early recast and ignores enemy stuns and knockbacks") and ok
+	await get_tree().create_timer(1.4).timeout
+	ok = _check(c.sion.action == SionKit.IDLE and c.global_position.x > at.x + 300.0 and foe.has_status("stun"),
+		"R impacts champion (action %d, from %s to %s, radii %.0f/%.0f, targetable %s)" % [
+			c.sion.action, c.global_position, foe.global_position, c.radius, foe.radius, foe.targetable()]) and ok
+	c.teleport(at)
+	c.cooldowns.r = 0.0
+	c.mana = c.stats.max_mana
+	world.test_aim = at + Vector2(700, -700)
+	c.cast("r", at + Vector2(700, 0), 0)
+	await get_tree().create_timer(0.65).timeout
+	ok = _check(c.global_position.y < at.y - 20.0 and c.global_position.x > at.x + 150.0
+		and c.cast("r", at, 0) and c.sion.action == SionKit.IDLE and c.cooldowns.r > 130.0,
+		"R steers gradually toward the cursor and can exit early without resetting cooldown") and ok
+	c.teleport(Vector2(640, 380))
+	c.cooldowns.r = 0.0
+	c.mana = c.stats.max_mana
+	world.test_aim = Vector2(1200, 380)
+	c.cast("r", world.test_aim, 0)
+	await get_tree().create_timer(0.6).timeout
+	ok = _check(c.sion.action == SionKit.IDLE and c.global_position.x < 768.0,
+		"R collides with terrain instead of crossing it") and ok
+	world.test_aim = null
+	var deaths := c.deaths
+	var kills := foe.kills
+	c.die(foe)
+	ok = _check(c.dead and c.sion.form == SionKit.RISING and c.deaths == deaths + 1 and foe.kills == kills + 1,
+		"Sion's initial death awards exactly one kill") and ok
+	await get_tree().create_timer(1.65).timeout
+	ok = _check(not c.dead and c.sion.form == SionKit.ZOMBIE and is_equal_approx(c.stats.attack_speed, 1.75)
+		and is_equal_approx(c.stats.lifesteal, 1.0), "Sion rises at the corpse with empowered attacks") and ok
+	ok = _check(c.cast("e", at, 0) and not c.cast("q", at, 0), "Death Surge shares one use across all ability slots") and ok
+	var puppet: Champion = world.spawn("champion", {"peer": 1002, "team": 0, "character": "sion",
+		"name": "Replica", "pos": at})
+	puppet.puppet = true
+	puppet.apply_net_state(c.net_state())
+	ok = _check(puppet.sion.form == SionKit.ZOMBIE and puppet.sion.surge_used and puppet.sion.bonus_health == 34.0
+		and puppet.active_ability("w").name == "Death Surge", "Snapshot restores zombie state and ability UI") and ok
+	var old_hp := c.hp
+	await get_tree().create_timer(0.5).timeout
+	ok = _check(c.hp < old_hp, "Zombie health decays without incoming damage") and ok
+	c.die(foe)
+	await get_tree().create_timer(1.0).timeout
+	ok = _check(not c.dead and c.sion.form == SionKit.ALIVE and c.deaths == deaths + 1 and foe.kills == kills + 1
+		and is_equal_approx(c.stats.max_hp, 579.0), "Zombie death awards no second kill; permanent health survives respawn") and ok
+	print("[sion] ", "passed" if ok else "failed")
 	get_tree().quit(0 if ok else 1)
 
 
@@ -556,6 +702,158 @@ func _check(condition: bool, label: String) -> bool:
 	if not condition:
 		push_error("[balance] " + label)
 	return condition
+
+
+func _test_aram(with_augments: bool) -> void:
+	var ch := world.local_champion
+	var lobby: Dictionary = Game.players[ch.peer]
+	var original: String = lobby.character
+	var ok := _mayhem_check(world.aram and world.mayhem == with_augments and ch.level == 3 and ch.gold >= 1400 and not world.cheats_allowed(), "ARAM opening rules")
+	var cards: Array = lobby.get("aram_cards", [])
+	ok = _mayhem_check(cards.size() == 2 and ch.char_id in cards, "random match character comes from the dealt cards") and ok
+	ok = _mayhem_check(ch.summoners.all(func(id): return id not in Game.Mayhem.DISALLOWED_SPELLS), "ARAM excludes Teleport and Smite") and ok
+	if with_augments:
+		ok = _test_mayhem_augments(ch) and ok
+	else:
+		_mayhem_raise_level(ch, Game.Mayhem.LEVELS.back())
+		world._tick_aram()
+		world.apply_command(ch.peer, "augment_pick", [0, 0, "battle_drill"])
+		ok = _mayhem_check(world.hud.augment_panel == null and world.champions.values().all(
+			func(c): return c.augment_offers.is_empty() and c.augments.is_empty()), "standard ARAM never offers or applies augments, even at level 15") and ok
+	var owned := ch.augments.duplicate()
+	var home := world.map.spawn_point(ch.team)
+	ok = _mayhem_check(ch.can_shop(), "can buy before leaving base") and ok
+	ch.teleport(home.lerp(world.map.size * 0.5, 0.4))
+	world._tick_aram()
+	ch.teleport(home)
+	ch.command("recall", [])
+	ch.hp *= 0.5
+	var hp := ch.hp
+	world._fountain(1.0)
+	ok = _mayhem_check(not ch.can_shop() and ch.recall_timer == 0.0 and ch.hp == hp, "no shopping on return, recall, or fountain healing") and ok
+	ch.take_damage(100000.0, null, "true")
+	if ch.sion != null and ch.sion.form == SionKit.ZOMBIE:
+		ch.take_damage(100000.0, null, "true")
+	ok = _mayhem_check(ch.dead and ch.can_shop(), "shop opens on death") and ok
+	ch.respawn()
+	ok = _mayhem_check(ch.can_shop() and ch.augments == owned, "respawn reopens shop and preserves any augments") and ok
+	world.time = World.RELIC_FIRST
+	ch.teleport(world.relic_positions[0])
+	ch.hp *= 0.5
+	hp = ch.hp
+	world._tick_aram()
+	var after_pickup := ch.hp
+	world.time += 2.0
+	world._run_scheduled()
+	ok = _mayhem_check(after_pickup > hp and ch.hp > after_pickup and world.relic_ready[0] > world.time, "relic heals on pickup and in an area before going on cooldown") and ok
+	var bridge: Dictionary = Game.maps.bridge
+	ok = _mayhem_check(not bridge.has("start_level") and bridge.towers.size() == 2 and world.structures.size() == 12, "ARAM structures do not alter Bridge") and ok
+	Game.return_to_lobby()
+	Game.set_map("bridge")
+	ok = _mayhem_check(Game.players[ch.peer].character == original, "switching to Bridge restores the normal champion pick") and ok
+	_mayhem_result(ok, "[mayhem]" if with_augments else "[aram]")
+
+
+func _test_mayhem_augments(ch: Champion) -> bool:
+	var ok := _mayhem_check(world.champions.values().any(func(bot): return bot.is_bot and bot.augments.size() == 1), "bot picked its starting augment")
+	ok = _mayhem_check(ch.augment_offers.size() == 3 and world.hud.augment_panel.visible, "first augment offered and visible") and ok
+	if not ok:
+		return false
+	var old: Array = ch.augment_offers.duplicate()
+	world.send_command("augment_reroll", [0, 0, old[0]])
+	var replacement: String = ch.augment_offers[0]
+	ok = _mayhem_check(replacement not in old and not world._augment_command(ch, "augment_reroll", [0, 0, replacement]), "reroll is unique and only available once per card") and ok
+	ok = _mayhem_check(not world._augment_command(ch, "augment_pick", [0, 0, old[0]]) and not world._augment_command(ch, "augment_pick", [1, 0, replacement]), "rejects stale slot and round requests") and ok
+	world.send_command("augment_pick", [0, 0, replacement])
+	var tiers := [Game.Mayhem.AUGMENTS[replacement].tier]
+	for i in range(1, Game.Mayhem.LEVELS.size()):
+		_mayhem_raise_level(ch, Game.Mayhem.LEVELS[i] - 1)
+		world._offer_augment(ch)
+		ok = _mayhem_check(ch.augment_offers.is_empty(), "does not unlock before level %d" % Game.Mayhem.LEVELS[i]) and ok
+		_mayhem_raise_level(ch, Game.Mayhem.LEVELS[i])
+		world._offer_augment(ch)
+		if not _mayhem_check(ch.augment_offers.size() == 3, "offer unlocks at level %d" % ch.level):
+			return false
+		var id: String = ch.augment_offers[0]
+		tiers.append(ch.augment_tier)
+		world.send_command("augment_pick", [i, 0, id])
+	ok = _mayhem_check(ch.augments.size() == 4 and tiers.has(0) and tiers.has(1) and tiers.has(2), "four permanent picks across all rarities") and ok
+	var owned := ch.augments.duplicate()
+	ch.augments.clear()
+	ch.recompute_stats()
+	var base_health: float = ch.stats.max_hp
+	ch.augments = ["living_fortress", "headhunter"]
+	ch._rebuild_triggers()
+	ch.recompute_stats()
+	var gold := ch.gold
+	ch.on_takedown(ch, true)
+	ok = _mayhem_check(is_equal_approx(ch.stats.max_hp, base_health * 1.22) and is_equal_approx(ch.gold, gold + 175.0), "stat and combat augments apply") and ok
+	ch.augments = owned
+	ch._rebuild_triggers()
+	ch.recompute_stats()
+	return ok
+
+
+func _mayhem_raise_level(ch: Champion, level: int) -> void:
+	while ch.level < level:
+		ch.gain_xp(ch.xp_to_next())
+
+
+func _test_mayhem_net() -> void:
+	for i in 40:
+		if world.local_champion != null:
+			break
+		await get_tree().create_timer(0.2).timeout
+	var ch := world.local_champion
+	if not _mayhem_check(ch != null, "local champion did not spawn"):
+		get_tree().quit(1)
+		return
+	if world.is_server:
+		for i in 30:
+			await get_tree().create_timer(0.2).timeout
+			for guest: Champion in world.champions.values():
+				if guest.peer > 1 and not guest.augments.is_empty():
+					await get_tree().create_timer(0.6).timeout
+					_mayhem_result(_mayhem_check(guest.augment_seen.size() == 4 and guest.augments[0] == guest.augment_seen[3]
+						and ch.augments.is_empty(), "remote reroll and pick only change the sender"), "[mayhem net host]")
+					return
+		_mayhem_result(_mayhem_check(false, "host timed out waiting for a remote pick"), "[mayhem net host]")
+		return
+	for i in 20:
+		if ch.augment_offers.size() == 3 and world.hud.augment_panel.visible:
+			break
+		await get_tree().create_timer(0.1).timeout
+	if not _mayhem_check(ch.augment_offers.size() == 3 and world.hud.augment_panel.visible, "guest receives opening offer and renders the panel"):
+		get_tree().quit(1)
+		return
+	var first: String = ch.augment_offers[0]
+	world.send_command("augment_reroll", [0, 0, first])
+	for i in 30:
+		await get_tree().create_timer(0.1).timeout
+		if ch.augment_offers[0] != first:
+			break
+	if not _mayhem_check(ch.augment_rerolled[0], "guest receives rerolled card"):
+		get_tree().quit(1)
+		return
+	var replacement: String = ch.augment_offers[0]
+	world.send_command("augment_pick", [0, 0, replacement])
+	for i in 30:
+		await get_tree().create_timer(0.1).timeout
+		if ch.augments == [replacement] and ch.augment_offers.is_empty():
+			_mayhem_result(true, "[mayhem net guest]")
+			return
+	_mayhem_result(_mayhem_check(false, "guest did not receive confirmation"), "[mayhem net guest]")
+
+
+func _mayhem_check(condition: bool, text: String) -> bool:
+	if not condition:
+		push_error("[aram] " + text)
+	return condition
+
+
+func _mayhem_result(ok: bool, prefix: String) -> void:
+	print(prefix, " passed" if ok else " failed")
+	get_tree().quit(0 if ok else 1)
 
 
 func _test_classic_items() -> void:

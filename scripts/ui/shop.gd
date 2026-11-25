@@ -256,7 +256,7 @@ func _sell() -> void:
 	if it == null:
 		return
 	if not ch.can_shop():
-		_flash("You can only sell in your base (or while dead)", RED)
+		_flash(ch.shop_closed_reason(), RED)
 		return
 	world.send_command("sell", [_sel_slot])
 	_flash("Sold %s for %d gold" % [it.name, _sell_value(it)], GOLD)

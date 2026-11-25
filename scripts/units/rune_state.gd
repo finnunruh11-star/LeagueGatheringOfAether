@@ -698,6 +698,7 @@ func action(name: String, args: Array) -> bool:
 			var i: int = args[0]
 			var id: String = args[1]
 			var recent: Array = state.get("spells", [])
+			if c.world.aram and id in Game.Mayhem.DISALLOWED_SPELLS: return false
 			if i < 0 or i >= c.summoners.size() or not Game.summoners.has(id) or c.summoners.has(id) or recent.has(id): return false
 			state.swap = {"slot": i, "id": c.summoners[i], "until": c.world.time + c.sum_cd[i], "total": c.sum_cd_total[i]}
 			recent.append(id)

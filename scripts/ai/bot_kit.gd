@@ -13,6 +13,8 @@ const OFFENSIVE_STATS := ["attack_damage", "ability_power", "bonus_attack_speed"
 ## Items (in order) for the bundled characters. "@tank_boots", "@defense" and "@antiheal" are
 ## picked against the enemy team when the bot shops ("scripting"), or a default otherwise.
 const BUILDS := {
+	"sion": {"start": ["dorans_shield", "health_potion"],
+		"items": ["sunfire_aegis", "@tank_boots", "hullbreaker", "@antiheal", "titanic_hydra", "@defense"]},
 	"sir_bonk": {"start": ["dorans_shield", "health_potion"],
 		"items": ["goredrinker", "@tank_boots", "black_cleaver", "@antiheal", "deaths_dance", "steraks_gage", "@defense"]},
 	"honk_lord": {"start": ["dorans_blade", "health_potion"],
@@ -29,6 +31,7 @@ const BUILDS := {
 }
 ## Which basic ability to max first (R is always taken when possible).
 const SKILL_ORDER := {
+	"sion": ["q", "w", "e"],
 	"sir_bonk": ["q", "e", "w"], "honk_lord": ["q", "e", "w"], "gizmo": ["q", "w", "e"],
 	"ember": ["q", "w", "e"], "mender": ["q", "w", "e"], "clorinde": ["e", "q", "w"],
 }

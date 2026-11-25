@@ -1,0 +1,80 @@
+{
+  "name": "Sion",
+  "title": "The Undead Juggernaut",
+  "description": "A patch 12.8 tank who charges up crushing blows, stacks permanent health, and keeps fighting after death.",
+  "color": "#bb5650",
+  "gameplay_radius": 80,
+  "pathing_radius": 26,
+  "selection_radius": 125,
+  "stats": {
+    "max_hp": 545, "hp_regen": 1.5, "max_mana": 330, "mana_regen": 1.6,
+    "attack_damage": 68, "attack_speed": 0.679, "attack_range": 175,
+    "armor": 32, "magic_resist": 32, "move_speed": 345
+  },
+  "per_level": {
+    "max_hp": 73, "hp_regen": 0.16, "max_mana": 42, "mana_regen": 0.12,
+    "attack_damage": 4, "bonus_attack_speed": 0.013, "armor": 3, "magic_resist": 1.25
+  },
+  "attack": {"ranged": false, "hit_vfx": "slash"},
+  "passive": {
+    "name": "Glory in Death",
+    "short_description": "After dying, briefly rise again with rapidly decaying health and empowered attacks. All ability keys become Death Surge, a one-use burst of movement speed.",
+    "description": "After 1.5s, rise at full health. Health decays increasingly fast, but you attack at 1.75 attack speed with 100% life steal and deal 10% of the target's maximum health as bonus physical damage (maximum 75 against minions and monsters). Death Surge grants 50% movement speed, decaying over 2.5s."
+  },
+  "abilities": {
+    "q": {
+      "name": "Decimating Smash",
+      "short_description": "Hold to charge an axe smash in a fixed direction, then release. Charge for at least 1s to knock enemies up and stun them.",
+      "description": "Charge for up to 2s. Deals 30/50/70/90/110 (+45/52.5/60/67.5/75% total AD) to 70/135/200/265/330 (+135/157.5/180/202.5/225% total AD) physical damage. At 1s or more, knocks enemies up and stuns them for 1.25-2.5s based on charge time. An interruption puts Q on a 2s cooldown.",
+      "targeting": "direction", "range": 750, "cost": 45, "cooldown": [10, 9, 8, 7, 6],
+      "cancels_attacks": true,
+      "effects": [{"type": "beam", "width": 350, "on_hit": [
+        {"type": "damage", "amount": "20 * rank + 10 + (0.375 + 0.075 * rank) * ad", "damage_type": "physical"},
+        {"type": "stun", "duration": 1.25}
+      ]}]
+    },
+    "w": {
+      "name": "Soul Furnace",
+      "short_description": "Gain permanent health from kills and champion takedowns. Shield yourself, then recast after 3s to detonate the shield if it still holds.",
+      "description": "Kills grant 4 permanent health, or 15 for champions, large monsters and large minions. Shield for 6s for 60/85/110/135/160 (+40% AP) (+10/11/12/13/14% max HP). An intact shield detonates on recast or expiry.",
+      "targeting": "self", "range": 400, "cost": [65, 70, 75, 80, 85], "cooldown": [15, 14, 13, 12, 11],
+      "effects": [{"type": "shield", "id": "sion_furnace", "amount": "35 + 25 * rank + 0.4 * ap + (0.09 + 0.01 * rank) * max_hp", "duration": 6}],
+      "recast": {
+        "name": "Detonate Soul Furnace",
+        "description": "Deals 40/65/90/115/140 (+40% AP) plus 10/11/12/13/14% of the target's maximum health as magic damage. The max-health damage is capped at 400 against minions and monsters.",
+        "targeting": "self", "range": 400, "cost": 0, "cooldown": 3, "status": "sion_furnace",
+        "effects": [{"type": "area", "at": "self", "radius": 400, "effects": [
+          {"type": "damage", "amount": "15 + 25 * rank + 0.4 * ap + (min(400, (0.09 + 0.01 * rank) * t_max_hp) if not t_champion else (0.09 + 0.01 * rank) * t_max_hp)", "damage_type": "magic"}
+        ]}]
+      }
+    },
+    "e": {
+      "name": "Roar of the Slayer",
+      "short_description": "Fire a shockwave that slows and shreds armor. A minion or small monster hit is hurled through enemies, applying the same effects.",
+      "description": "Deals 65/100/135/170/205 (+55% AP) magic damage, slows by 40/45/50/55/60% for 2.5s, and reduces armor by 20% for 4s. Launches a minion or non-epic monster up to 1,350 units, hitting enemies in its path.",
+      "targeting": "direction", "range": 800, "cast_time": 0.25, "cost": [35, 40, 45, 50, 55], "cooldown": [12, 11, 10, 9, 8],
+      "effects": [{"type": "projectile", "speed": 1800, "radius": 40, "through_walls": true, "on_hit": [
+        {"type": "damage", "amount": "30 + 35 * rank + 0.55 * ap", "damage_type": "magic"},
+        {"type": "slow", "amount": "0.35 + 0.05 * rank", "duration": 2.5},
+        {"type": "buff", "id": "sion_roar", "duration": 4, "multiply": {"armor": 0.8}}
+      ]}]
+    },
+    "r": {
+      "name": "Unstoppable Onslaught",
+      "short_description": "Charge toward your cursor with limited steering and crowd-control immunity. Recast to slam early, or crash into an enemy champion, a turret, or terrain.",
+      "description": "Charge for up to 8s, accelerating to 950 movement speed. Impact deals 150/300/450 (+40% bonus AD) to 400/800/1200 (+80% bonus AD) physical damage and stuns nearby enemies for 0.75-1.75s, reaching full strength after 3s. Enemies farther from the impact are slowed for 3s.",
+      "targeting": "direction", "range": 7500, "cost": 100, "cooldown": [140, 100, 60],
+      "cancels_attacks": true,
+      "effects": [{"type": "projectile", "radius": 125, "speed": 950, "on_hit": [
+        {"type": "damage", "amount": "150 * rank + 0.4 * bonus_ad", "damage_type": "physical"},
+        {"type": "stun", "duration": 0.75}
+      ]}],
+      "recast": {
+        "name": "End Unstoppable Onslaught",
+        "description": "End the charge with an impact at your position.",
+        "targeting": "self", "range": 500, "cooldown": 0.5,
+        "effects": [{"type": "area", "at": "self", "radius": 500, "effects": []}]
+      }
+    }
+  }
+}

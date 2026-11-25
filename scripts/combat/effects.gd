@@ -877,7 +877,7 @@ static func _cc_time(u: Unit, e: Dictionary, ctx: Dictionary, def: float) -> flo
 
 static func _cc_event(type: String, u: Unit, ctx: Dictionary) -> void:
 	var c := _caster(ctx)
-	if c and u.is_champion and u.team != c.team:
+	if c and u.is_champion and u.team != c.team and not u.crowd_control_immune():
 		c.trigger("cc_applied", u, null, {"cc": type})
 		u.trigger("cc_received", c, null, {"cc": type})
 
