@@ -366,15 +366,17 @@ func remove_status_id(id: String, src = null) -> void:
 
 func can_move() -> bool:
 	return not dead and not is_structure and forced == null and stats.move_speed > 0.0 and not has_status("stun") \
-		and not has_status("root") and not has_status("stasis")
+		and not has_status("root") and not has_status("stasis") and not has_status("busy")
 
 
 func can_attack() -> bool:
-	return not dead and forced == null and stats.attack_damage > 0.0 and not has_status("stun") and not has_status("stasis")
+	return not dead and forced == null and stats.attack_damage > 0.0 and not has_status("stun") and not has_status("stasis") \
+		and not has_status("busy")
 
 
 func can_cast() -> bool:
-	return not attack_action_locked() and not dead and forced == null and not has_status("stun") and not has_status("silence") and not has_status("stasis")
+	return not attack_action_locked() and not dead and forced == null and not has_status("stun") and not has_status("silence") \
+		and not has_status("stasis") and not has_status("busy")
 
 
 func trigger(_event: String, _target = null, _pos = null, _extra := {}, _only := "") -> bool:
@@ -417,6 +419,16 @@ func start_action(kind: int, variant: int, windup: float, span := 0.0) -> void:
 	anim_windup = windup
 	anim_span = span
 	_action_time = world.time if world != null else 0.0
+
+
+## Replays an action animation from an effect: "attack", "cast", "cast_q" ... "cast_r" or "cast_r_recast".
+func play_action(action: String, windup := 0.0) -> void:
+	if action == "attack":
+		start_action(ANIM_ATTACK, _attack_variant(), windup)
+		return
+	var slot := action.trim_prefix("cast_").trim_suffix("_recast")
+	var i := "qwer".find(slot) if slot.length() == 1 else -1
+	start_action(ANIM_CAST, ((ACT_RECAST if action.ends_with("_recast") else 1) + i) if i >= 0 else 0, windup)
 
 
 ## Which swing the next basic attack shows: the regular ones take turns, starting over after a pause.
@@ -1187,26 +1199,33 @@ func _afterimages(delta: float) -> void:
 	if _afterimage_t > 0.0:
 		return
 	_afterimage_t = 0.03
-	var g: Node2D
 	if sprite != null:
-		var s := Sprite2D.new()
-		s.texture = sprite.sprite_frames.get_frame_texture(sprite.animation, sprite.frame)
-		s.texture_filter = sprite.texture_filter
-		s.flip_h = sprite.flip_h
-		s.scale = sprite.scale
-		s.position = global_position + sprite.position
-		g = s
-	else:
-		var dn := DrawNode.new()
-		var r := radius
-		dn.draw_func = func(n): n.draw_circle(Vector2.ZERO, r, Color.WHITE)
-		dn.position = global_position + _body_offset()
-		g = dn
-	g.modulate = Color(color.lightened(0.35), 0.5)
-	world.under_layer.add_child(g)
-	var tw := g.create_tween()
-	tw.tween_property(g, "modulate:a", 0.0, 0.28)
-	tw.tween_callback(g.queue_free)
+		_ghost(global_position + sprite.position, Color(color.lightened(0.35), 0.5), 0.28)
+		return
+	var dn := DrawNode.new()
+	var r := radius
+	dn.draw_func = func(n): n.draw_circle(Vector2.ZERO, r, Color.WHITE)
+	dn.position = global_position + _body_offset()
+	dn.modulate = Color(color.lightened(0.35), 0.5)
+	world.under_layer.add_child(dn)
+	var tw := dn.create_tween()
+	tw.tween_property(dn, "modulate:a", 0.0, 0.28)
+	tw.tween_callback(dn.queue_free)
+
+
+## A fading copy of the sprite's current frame at `at` (world position).
+func _ghost(at: Vector2, col: Color, life: float) -> void:
+	var s := Sprite2D.new()
+	s.texture = sprite.sprite_frames.get_frame_texture(sprite.animation, sprite.frame)
+	s.texture_filter = sprite.texture_filter
+	s.flip_h = sprite.flip_h
+	s.scale = sprite.scale
+	s.position = at
+	s.modulate = col
+	world.under_layer.add_child(s)
+	var tw := s.create_tween()
+	tw.tween_property(s, "modulate:a", 0.0, life)
+	tw.tween_callback(s.queue_free)
 
 
 ## Ambient particles that make ongoing statuses readable at a glance.
@@ -1269,11 +1288,16 @@ func _clips(k: String):
 func _update_sprite(delta: float) -> void:
 	if _vis_pos != Vector2.INF and delta > 0.0:
 		_vis_speed = lerpf(_vis_speed, global_position.distance_to(_vis_pos) / delta, minf(delta * 15.0, 1.0))
+	var prev_pos := _vis_pos
 	_vis_pos = global_position
 	if anim_seq != _seen_seq:
 		_seen_seq = anim_seq
-		_act_on = _action_clip() != null
+		var ac = _action_clip()
+		_act_on = ac != null
 		_clip_state = ""
+		if _act_on and ac.afterimage.a > 0.0 and _presented and sprite.visible and not dead and prev_pos != Vector2.INF:
+			var g: Color = ac.afterimage
+			_ghost(prev_pos + sprite.position, Color(g.r * 2.2, g.g * 2.2, g.b * 2.2, g.a), 0.22)    # brightened: reads as a glow
 	if dead != _was_dead:
 		_was_dead = dead
 		_act_on = false
@@ -1402,12 +1426,17 @@ func _action_clip():
 		if anim_variant >= ACT_RECAST and anim_variant < ACT_RECAST + 4:
 			k = "cast_" + "qwer"[anim_variant - ACT_RECAST]
 			if _clips(k + "_recast") != null:
-				return _clips(k + "_recast")[0]
+				return _turn(_clips(k + "_recast"))
 		if _clips(k) != null:
-			return _clips(k)[0]
+			return _turn(_clips(k))
 		if _clips("cast") != null:
-			return _clips("cast")[0]
+			return _turn(_clips("cast"))
 	return null
+
+
+## Cast animations given as a list take turns (one per cast).
+func _turn(list: Array) -> Dictionary:
+	return list[anim_seq % list.size()]
 
 
 ## Frame of an attack/cast clip `t` seconds in: frames before "hit" fill the windup, frames from

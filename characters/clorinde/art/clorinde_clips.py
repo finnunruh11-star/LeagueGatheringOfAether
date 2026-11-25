@@ -5,7 +5,7 @@ Hand positions are in rig space but carried along with the chest's translation, 
 Every one-shot starts and ends on its stance (STAND with the sword, VREADY with the pistol drawn),
 so cross-fades into idle are seamless.
 """
-from clorinde_anim import pose
+from clorinde_anim import add, pose
 
 HOLSTER_GRIP = (-0.07, 0.205, 0.935)
 HOLSTER_AIM = (-0.41, 0.11, -0.91)
@@ -13,8 +13,10 @@ HOLSTER_AIM = (-0.41, 0.11, -0.91)
 
 class Clip:
     def __init__(self, name, frames, fps, keys, loop=False, hit=None, land=None, pistol=0, trail=(), fx=None, extra=None,
-                 stride=0.0):
+                 stride=0.0, pre=None, form=None):
         self.name, self.frames, self.fps, self.loop = name, frames, fps, loop
+        self.pre = pre                  # pose the cloth starts from: it whips into the first key over a couple of frames
+        self.form = form or {}          # {frame: "spear"}: the body is replaced by an effect on these frames
         self.keys = [(k[0], k[1], k[2] if len(k) > 2 else 1.0) for k in keys]
         self.hit, self.land = hit, land
         self.pistol = pistol if isinstance(pistol, list) else [(0, pistol)]     # [(from frame, 0/1)]
@@ -145,15 +147,53 @@ def attack_slash():
                 hit=5, trail=[(3.6, 7.0)])
 
 
+def _aim(deg):
+    """Pre-rotation aim that points at +X (the target) once the body is turned by `deg` (rot z)."""
+    import math
+    a = math.radians(deg)
+    return (math.cos(a), -math.sin(a), 0.0)
+
+
+# Night Vigil pistol poses. She snaps from one to the next on every shot (the game draws a violet
+# afterimage of the previous pose), like the in-game rapid fire.
+def shot_poses():
+    classic = pose(VREADY, body=(0.0, -0.01, -0.07), hips=(-14, 3, -2), chest=(-16, 2, 0), neck=(10, 0, 0), head=(14, -3, 0),
+                   handL=(0.47, 0.12, 1.3), aimL=(1, -0.02, 0.0), elbowL=(-0.2, 0.8, -0.7),
+                   handR=(-0.14, -0.3, 0.98), aimR=(-0.3, -0.6, -0.74))
+    crouch = pose(VREADY, body=(0.06, 0.0, -0.24), hips=(4, 18, 0), spine=(0, 6, 0), chest=(-8, 8, 0), neck=(4, -10, 0), head=(8, -12, 0),
+                  footL=(0.3, 0.16, 0.085), fyawL=10, footR=(-0.3, -0.18, 0.085), fyawR=-40, toeR=-10, kneeL=(1, 0.4, 0), kneeR=(0.6, -0.8, 0),
+                  handL=(0.52, 0.1, 1.08), aimL=(1, -0.02, 0.06), elbowL=(-0.2, 0.9, -0.5),
+                  handR=(-0.36, -0.36, 1.2), aimR=(-0.6, -0.3, 0.74), elbowR=(-0.5, -1, -0.2), wind=(-2, 0, 0))
+    turn = -150                                     # spun around clockwise: shoots back over her left shoulder
+    back = pose(VREADY, rot=(0, 0, turn), body=(0.0, 0.0, -0.08), hips=(0, 4, 0), spine=(14, 0, 0), chest=(22, 0, -4), neck=(24, 0, 0),
+                head=(30, -4, 0), footL=(-0.12, 0.16, 0.085), fyawL=20, footR=(0.16, -0.12, 0.085), fyawR=-10,
+                handL=(-0.36, 0.42, 1.36), aimL=_aim(turn), elbowL=(0.2, 1, -0.4),
+                handR=(0.3, -0.3, 1.05), aimR=(0.8, -0.3, -0.5), elbowR=(-0.4, -1, -0.2), wind=(3, 1, 0))
+    turn2 = 75                                      # turned left, the pistol across her body
+    cross = pose(VREADY, rot=(0, 0, turn2), body=(0.02, 0.0, -0.1), hips=(-6, 6, 0), chest=(-20, 4, 0), neck=(-14, 0, 0), head=(-26, -4, 0),
+                 footL=(0.14, 0.15, 0.085), fyawL=10, footR=(-0.14, -0.13, 0.085), fyawR=-20,
+                 handL=(0.3, -0.22, 1.32), aimL=_aim(turn2), elbowL=(-0.3, 1, -0.6),
+                 handR=(-0.18, -0.36, 1.55), aimR=(0.1, -0.4, 0.9), elbowR=(-0.4, -1, 0.2), wind=(-1, -2, 0))
+    leap = pose(VREADY, body=(0.0, -0.02, 0.06), hips=(-12, -4, 4), spine=(0, -4, 0), chest=(-14, -6, 0), neck=(10, 4, 0), head=(14, 6, 0),
+                footL=(-0.04, 0.12, 0.13), toeL=-30, footR=(0.2, -0.12, 0.42), toeR=10, kneeR=(1, -0.3, 0.6), fyawR=-10,
+                handL=(0.46, 0.14, 1.46), aimL=(1, -0.02, 0.06), elbowL=(-0.2, 0.8, -0.6),
+                handR=(0.04, -0.32, 1.62), aimR=(0.1, -0.1, 1.0), elbowR=(-0.3, -1, 0.2), wind=(0, 0, -3))
+    return [classic, back, crouch, cross, leap]
+
+
 def attack_vigil():
-    b = VREADY
-    aim = pose(b, handL=(0.43, 0.12, 1.25), aimL=(1, -0.03, 0.0), chest=(-11, 1, 0))
-    fire = pose(aim, chest=(-12, 0, 0))
-    recoil = pose(aim, handL=(0.35, 0.13, 1.37), aimL=(0.75, -0.02, 0.62), chest=(-8, -4, 0), head=(12, -5, 0),
-                  body=(-0.03, -0.01, -0.06))
-    settle = pose(b, handL=(0.39, 0.13, 1.24), aimL=(1, -0.05, 0.12))
-    return Clip("attack@vigil", 10, 24, [(0, b), (1, aim, 0.3), (2, fire, 0), (3, recoil, 0.4), (5, settle), (9, b, 0)],
-                hit=2, pistol=1, fx={2: ["muzzle"], 3: ["muzzle_small", "smoke"]})
+    poses = shot_poses()
+    clips = []
+    for k, sp in enumerate(poses):
+        recoil = pose(sp, handL=add(sp["handL"], (-0.05, 0, 0.09)), aimL=add(sp["aimL"], (0, 0, 0.5)), chest=add(sp["chest"], (0, -4, 0)),
+                      body=add(sp["body"], (-0.02, 0, 0.005)))
+        hold = pose(sp, body=add(sp["body"], (0, 0, -0.008)))
+        keys = [(0, sp, 0), (1, sp, 0), (3, recoil, 0.4), (5, hold), (7, hold, 0), (11, VREADY, 0)]
+        name = "attack@vigil" if k == 0 else f"attack@vigil#{k}"
+        clips.append(Clip(name, 12, 24, keys, hit=1, pistol=1, pre=poses[k - 1] if k else VREADY,
+                          fx={0: ["flash_in"], 1: ["star", "crescent"], 2: ["muzzle_small", "crescent_fade", "spark_pistol"], 3: ["smoke"]},
+                          extra={"afterimage": "#b48cff"}))
+    return clips
 
 
 # ------------------------------------------------------------------- vigil transitions ---
@@ -178,23 +218,26 @@ def exit_vigil():
 
 
 def lunge():
+    """Impale the Night: sword raised for the stab, then she becomes a lightning spear for the dash."""
     b = VREADY
-    coil = pose(b, body=(-0.07, 0.02, -0.13), hips=(-24, 6, 0), spine=(-4, 4, 0), chest=(-16, 6, 0), neck=(14, 0, 0), head=(24, -4, 0),
-                handR=(-0.25, -0.24, 1.08), aimR=(1, 0.0, 0.06), elbowR=(-1, -0.3, -0.2),
-                handL=(0.3, 0.2, 1.17), aimL=(1, 0, -0.1),
-                footR=(-0.14, -0.12, 0.085), footL=(0.18, 0.14, 0.085))
-    launch = pose(b, body=(0.15, 0.0, -0.1), hips=(12, 18, 0), spine=(4, 6, 0), chest=(18, 8, 0), neck=(-12, -10, 0), head=(-16, -8, 0),
-                  handR=(0.66, -0.07, 1.12), aimR=(1, 0.04, -0.02), elbowR=(-0.2, -1, -0.4),
-                  handL=(-0.36, 0.3, 1.16), aimL=(-1, 0.2, -0.2), elbowL=(0, 1, -0.3),
-                  footR=(0.5, -0.1, 0.2), toeR=20, footL=(-0.45, 0.14, 0.2), toeL=-40, fyawR=0, fyawL=10, wind=(-15, 0, 0))
-    fly = pose(launch, body=(0.2, 0.0, -0.08), footR=(0.56, -0.1, 0.24), footL=(-0.5, 0.14, 0.27), handR=(0.72, -0.06, 1.13))
-    land = pose(fly, body=(0.24, 0.0, -0.17), hips=(14, 22, 0), footR=(0.58, -0.1, 0.085), toeR=0, footL=(-0.42, 0.15, 0.085), toeL=-35,
-                handR=(0.76, -0.05, 1.12), wind=(-4, 0, 0))
-    hold = pose(land, body=(0.2, 0.0, -0.15), handR=(0.7, -0.08, 1.1), aimR=(0.95, 0, -0.2), wind=(0, 0, 0))
+    raise_ = pose(b, body=(-0.06, 0.01, -0.14), hips=(-22, 8, 0), spine=(-2, 6, 0), chest=(-14, 8, 0), neck=(10, -4, 0), head=(16, -6, 0),
+                  handR=(-0.04, -0.14, 1.74), aimR=(1, 0.06, -0.12), elbowR=(-0.4, -1, 0.5), rollR=-20,
+                  handL=(-0.3, 0.32, 1.12), aimL=(-0.7, 0.3, -0.6), elbowL=(0, 1, -0.3),
+                  footR=(-0.16, -0.13, 0.085), footL=(0.2, 0.14, 0.085), fyawL=0, fyawR=-20)
+    launch = pose(raise_, body=(0.14, 0.0, -0.12), hips=(10, 20, 0), chest=(6, 10, 0), neck=(-6, -10, 0), head=(-8, -10, 0),
+                  handR=(0.36, -0.12, 1.66), footR=(0.32, -0.1, 0.16), toeR=10, footL=(-0.4, 0.14, 0.16), toeL=-40, wind=(-12, 0, 0))
+    land = pose(b, body=(0.24, 0.0, -0.18), hips=(14, 22, 0), spine=(4, 6, 0), chest=(18, 8, 0), neck=(-12, -10, 0), head=(-16, -8, 0),
+                handR=(0.8, -0.05, 1.22), aimR=(1, 0.04, 0.0), elbowR=(-0.2, -1, -0.4),
+                handL=(-0.38, 0.3, 1.16), aimL=(-1, 0.2, -0.2), elbowL=(0, 1, -0.3),
+                footR=(0.58, -0.1, 0.085), footL=(-0.42, 0.15, 0.085), toeL=-35, fyawL=10, wind=(-8, 0, 0))
+    hold = pose(land, body=(0.2, 0.0, -0.16), handR=(0.74, -0.07, 1.18), aimR=(0.97, 0, -0.15), wind=(0, 0, 0))
     rise = pose(b, body=(0.1, 0.0, -0.1), handR=(0.3, -0.25, 1.0), aimR=(0.7, -0.4, -0.5), footR=(0.25, -0.1, 0.085), footL=(-0.2, 0.14, 0.085))
-    return Clip("cast_e_recast", 14, 20, [(0, b), (1, coil, 0), (2, launch), (4, fly), (6, land, 0), (8, hold), (10, rise), (13, b, 0)],
-                hit=2, land=6, pistol=1, trail=[(1.6, 7.2)], fx={2: ["streak", "spark_blade"], 3: ["streak", "spark_blade"], 4: ["streak"],
-                                                                5: ["streak", "spark_blade"]})
+    # the dash starts with the cast, so only one frame comes before "hit"; hit..land is stretched over the dash
+    keys = [(0, raise_, 0), (1, launch, 0), (5, launch, 0), (6, land, 0), (8, hold), (10, rise), (13, b, 0)]
+    return Clip("cast_e_recast", 14, 20, keys, hit=1, land=6, pistol=1, trail=[(5.9, 8.0)], pre=b,
+                form={2: "spear", 3: "spear", 4: "spear", 5: "spear"},
+                fx={0: ["spark_blade"], 1: ["electro_flash", "spark_burst_body"], 2: ["spear", "streak"], 3: ["spear", "streak"],
+                    4: ["spear", "streak"], 5: ["spear", "streak"], 6: ["electro_flash_small", "spark_blade"], 7: ["spark_blade"]})
 
 
 # --------------------------------------------------------------------------- abilities ---
@@ -257,37 +300,28 @@ def cast_w(vigil):
 
 
 def cast_r(vigil):
-    import math
+    """Last Lightfall: one blink-in shot. The ability teleports her around the target ten times and
+    replays this clip on each blink (the variants take turns), so she flickers from pose to pose."""
     b = stance(vigil)
-    crouch = pose(VREADY, body=(0.0, 0.0, -0.17), hips=(0, 10, 0), chest=(0, 8, 0), head=(0, -4, 0),
-                  handR=(-0.22, -0.3, 1.0), aimR=(-0.4, -0.5, -0.76), handL=(0.3, 0.22, 1.18), aimL=(1, 0.2, 0.1),
-                  footL=(0.12, 0.16, 0.085), footR=(-0.12, -0.17, 0.085))
-    spin = pose(crouch, body=(0.0, 0.0, -0.08), hips=(0, 4, 0), chest=(0, 2, 0), head=(0, 0, 0),
-                handR=(0.05, -0.6, 1.25), aimR=(0.25, -1, 0.05), elbowR=(-0.5, -0.2, -1),
-                handL=(-0.05, 0.6, 1.25), aimL=(-0.2, 1, 0.0), elbowL=(-0.5, 0.2, -1),
-                footL=(0.0, 0.14, 0.085), footR=(0.0, -0.14, 0.085))
-    keys = [(0, b)]
-    pistol = 1
-    if not vigil:
-        reach = pose(b, chest=(8, 2, 7), handL=HOLSTER_GRIP, aimL=HOLSTER_AIM, elbowL=(-0.6, 1, 0.2), body=(-0.01, 0.02, -0.05))
-        keys.append((1, reach, 0))
-        pistol = [(0, 0), (1, 1), (22, 0)]
-    keys.append((3, crouch, 0))
-    for i in range(1, 7):
-        f = 3 + i * 2
-        keys.append((f, pose(spin, rot=(0, 0, 60 * i), body=(0, 0, -0.06 + 0.02 * math.sin(i)))))
-    salute = pose(STAND if not vigil else VREADY, body=(0.0, 0.0, -0.05), hips=(8, 0, 0), chest=(6, -2, 0), head=(-4, -4, 0),
-                  handR=(0.2, -0.06, 1.5), aimR=(0.15, 0.0, 1.0), elbowR=(0.2, -1, -0.4), rot=(0, 0, 360))
-    if vigil:
-        salute = pose(salute, handL=(0.18, 0.3, 1.0), aimL=(0.2, 0.3, -0.93))
-    else:
-        salute = pose(salute, handL=HOLSTER_GRIP, aimL=HOLSTER_AIM, elbowL=(-0.6, 1, 0.2))
-    keys += [(17, salute, 0), (19, pose(salute, body=(0, 0, -0.055)), 0), (23, pose(b, rot=(0, 0, 360)), 0)]
-    fx = {f: ["muzzle"] for f in (5, 7, 9, 11, 13, 15)}
-    for f in (4, 6, 8, 10, 12, 14):
-        fx[f] = ["muzzle_small"]
-    fx[17] = ["glint"]
-    return Clip(V_("cast_r", vigil), 24, 20, keys, pistol=pistol, trail=[(3.5, 16.0)], fx=fx)
+    clips = []
+    poses = shot_poses()
+    for k, sp in enumerate([poses[0], poses[1], poses[3], poses[2]]):
+        recoil = pose(sp, handL=add(sp["handL"], (-0.05, 0, 0.09)), aimL=add(sp["aimL"], (0, 0, 0.5)), chest=add(sp["chest"], (0, -4, 0)))
+        settle = pose(VREADY, body=(0.0, -0.01, -0.07))
+        keys = [(0, sp, 0), (1, sp, 0), (3, recoil, 0.4), (6, sp, 0.4), (10, settle)]
+        if vigil:
+            keys.append((15, b, 0))
+            pistol = 1
+        else:
+            hol = pose(STAND, chest=(8, 2, 7), handL=HOLSTER_GRIP, aimL=HOLSTER_AIM, elbowL=(-0.6, 1, 0.2), body=(-0.01, 0.02, -0.05))
+            keys += [(13, hol, 0.3), (14, hol, 0), (17, b, 0)]
+            pistol = [(0, 1), (14, 0)]
+        n = 16 if vigil else 18
+        name = V_("cast_r", vigil) + ("" if k == 0 else f"#{k}")
+        clips.append(Clip(name, n, 30, keys, pistol=pistol, pre=poses[(k + 2) % len(poses)],
+                          fx={0: ["blink_in"], 1: ["star", "crescent"], 2: ["muzzle_small", "crescent_fade", "spark_pistol"], 3: ["smoke"]},
+                          extra={"afterimage": "#c9a2ff"}))
+    return clips
 
 
 # ------------------------------------------------------------------------- reactions ---
@@ -370,6 +404,6 @@ def fidget():
 
 
 def all_clips():
-    return [idle(), run(False), attack_thrust(), attack_slash(), idle_vigil(), run(True), attack_vigil(), cast_e(), exit_vigil(), lunge(),
-            cast_q(False), cast_q(True), cast_w(False), cast_w(True), cast_r(False), cast_r(True), hurt(False), hurt(True), stun(), death(),
-            spawn(), recall(), fidget()]
+    return [idle(), run(False), attack_thrust(), attack_slash(), idle_vigil(), run(True), *attack_vigil(), cast_e(), exit_vigil(), lunge(),
+            cast_q(False), cast_q(True), cast_w(False), cast_w(True), *cast_r(False), *cast_r(True), hurt(False), hurt(True), stun(),
+            death(), spawn(), recall(), fidget()]

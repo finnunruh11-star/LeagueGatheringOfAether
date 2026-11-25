@@ -66,6 +66,7 @@ const EFFECT_TYPES := [
 	"mana", "gold", "mark", "remove", "counter", "stasis", "stealth", "spellshield", "grievous",
 	"untargetable", "modify_damage", "transform", "vfx", "attack_reset", "item_cooldown",
 	"shield_break", "fire_event", "passive_cooldown", "reveal", "level_up", "xp", "bond_of_life",
+	"busy", "camera", "animation",
 ]
 const NESTED_KEYS := ["effects", "on_hit", "on_end", "on_expire", "on_death", "options"]
 ## Optional basic-attack keys evaluated when the attack happens (numbers or expressions).
@@ -731,8 +732,17 @@ static func _clip_info(key: String, a: Dictionary, fw: int, fh: int, n: int, loo
 		"pingpong": bool(a.get("pingpong", false)),
 		"hit": mini(int(a.get("hit", -1)), n - 1), "land": mini(int(a.get("land", -1)), n),
 		"speed": maxf(float(a.get("speed", 0.0)), 0.0),
+		"afterimage": _afterimage_color(a.get("afterimage")),
 		"shift": Vector2(fw * 0.5, fh * 0.5) - anchor, "h": fh, "anchor_y": anchor.y,
 	}
+
+
+static func _afterimage_color(v) -> Color:
+	if v is String and Color.html_is_valid(v):
+		return Color(Color.html(v), 0.6)
+	if v == true:
+		return Color(0.78, 0.62, 1.0, 0.6)
+	return Color(0, 0, 0, 0)
 
 
 ## Returns a texture from a character's folder (cached). `quiet` skips nothing-found errors.

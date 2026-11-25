@@ -178,6 +178,7 @@ and math functions, but cannot access object properties or call arbitrary engine
 | `shield` | `amount` 100, `duration` 3, `damage_type` "all" / "magic" / "physical" (only blocks that type), `decay` (shrinks to 0 over the duration) |
 | `stun`, `root`, `silence` | `duration` 1 (shortened by tenacity) |
 | `invulnerable`, `stasis`, `untargetable`, `stealth` | `duration` 1. Stasis = invulnerable + untargetable + can't act (Zhonya's) |
+| `busy` | `duration` 1: can't move, attack or cast (not crowd control - for an ability that plays itself out, e.g. Clorinde's R) |
 | `spellshield` | blocks the next enemy ability hit; `duration` (default: until popped) |
 | `grievous` | healing reduction: `amount` 0.4, `duration` 3 |
 | `slow` | `amount` 0.3 (0-1), `duration` 2, `decay` (fades out over the duration) |
@@ -223,7 +224,7 @@ completely fires the `bond_cleared` trigger.
 | type | keys |
 |---|---|
 | `dash` | `to` "aim" (toward the target point) / "direction" (full distance) / "back" / "target"; `distance` 350, `min_distance` (aim dashes go at least this far), `speed` 1400, `on_hit` [effects on each unit passed through], `stop_on_hit`, `on_end` [effects at the landing spot] |
-| `teleport` | `to` "pos" (default) / "target" (behind the target) / "home" |
+| `teleport` | `to` "pos" (default) / "target" (behind the target) / "around_target" (a random spot `min_distance` 120 - `distance` 220 from the target's edge, on a different side than now, facing it) / "home"; `show` false hides the blink effect |
 
 ### Spawners
 | type | keys |
@@ -258,6 +259,8 @@ lime, c2 red, c3 violet, c4 orange, c5 cyan), and `none`. They come from `assets
 | `text` | floating text: `text`, `color`, `size` 28, `at` "target" |
 | `vfx` | a visual only: `kind` "ring" (`at`, `radius`) / "blast" (`at`, `radius`, `vfx`) / "line" or "beam" (`from`, `to`, `width`) |
 | `sound` | `file` (.wav/.ogg in your folder), `volume` (dB), `at` "self" |
+| `animation` | replays one of the caster's sprite animations: `action` "attack" / "cast" / "cast_q" ... "cast_r" / "cast_r_recast", `windup` 0 |
+| `camera` | points the caster's camera at the target (`focus` "target", or "self") for `duration` 1 second |
 
 ## Passive triggers
 ```jsonc
@@ -462,6 +465,9 @@ Sir Bonk (`sir_bonk/`) uses an 8-direction sheet set made from the "2D HD Charac
 - Moving or casting cancels attack animations right away (it may jump a little); everything else
   cross-fades over `blend` seconds.
 - **Recasts:** `cast_e_recast` (etc.) plays when an ability is recast; without it the recast uses `cast_e`.
+  Like `attack`, any cast animation can be a list of variants that take turns.
+- **Afterimages:** `"afterimage": "#b48cff"` (or `true`) on an attack/cast animation leaves a fading,
+  tinted copy of the previous pose where she was whenever it starts - for snapping between poses or blinking.
 - **Animation sets:** a `buff` effect with `"anim_set": "vigil"` switches the sprite to its `@vigil`
   animations while the buff lasts: `idle@vigil`, `run@vigil`, `attack@vigil`, `cast_q@vigil`... replace
   the plain ones (anything without an `@vigil` version stays as is). When the set ends, `exit@vigil`

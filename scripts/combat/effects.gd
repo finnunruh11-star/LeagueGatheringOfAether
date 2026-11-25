@@ -554,11 +554,11 @@ static func _one(e: Dictionary, ctx: Dictionary) -> void:
 			if u and not _blocked(u, ctx):
 				_add(u, {"type": type, "time": _cc_time(u, e, ctx, 1.0)}, e, ctx)
 				_cc_event(type, u, ctx)
-		"invulnerable", "stasis", "stealth", "untargetable":
+		"invulnerable", "stasis", "stealth", "untargetable", "busy":
 			var u := _unit(e, ctx)
 			if u:
 				_add(u, {"type": type, "time": num(e.get("duration"), ctx, 1.0)}, e, ctx)
-				if type == "stasis":
+				if type == "stasis" or type == "busy":
 					u.attack_target = null
 					u.move_goal = null
 		"spellshield":
@@ -676,6 +676,15 @@ static func _one(e: Dictionary, ctx: Dictionary) -> void:
 			_dash(e, ctx)
 		"teleport", "blink":
 			_teleport(e, ctx)
+		"animation":
+			var c := _caster(ctx)
+			if c and not c.dead:
+				c.play_action(str(e.get("action", "attack")), num(e.get("windup"), ctx, 0.0))
+		"camera":
+			var c := _caster(ctx)
+			var u = ctx.get("target") if str(e.get("focus", "target")) == "target" else c
+			if c and is_instance_valid(u) and u is Unit:
+				w.fx("camera", {"v": c.net_id, "t": u.net_id, "dur": num(e.get("duration"), ctx, 1.0)})
 		"swap":
 			var c := _caster(ctx)
 			var u := _unit(e, ctx)
@@ -1045,17 +1054,28 @@ static func _teleport(e: Dictionary, ctx: Dictionary) -> void:
 	if c == null or c.dead:
 		return
 	var to: Vector2 = ctx.get("pos", c.global_position)
+	var t = ctx.get("target")
+	var around := str(e.get("to", "pos")) == "around_target"
 	match str(e.get("to", "pos")):
 		"target":
-			var t = ctx.get("target")
 			if is_instance_valid(t) and t != c:
 				var d: Vector2 = (t.global_position - c.global_position).normalized()
 				to = t.global_position + d * (t.radius + c.radius + 6.0)
+		"around_target":
+			# a random spot around the target, on a different side than now
+			if is_instance_valid(t) and t != c:
+				var cur: float = (c.global_position - t.global_position).angle()
+				var lo := num(e.get("min_distance"), ctx, 120.0)
+				var dist := randf_range(lo, maxf(num(e.get("distance"), ctx, 220.0), lo))
+				to = t.global_position + Vector2.from_angle(cur + randf_range(0.7, TAU - 0.7)) * (t.radius + dist)
 		"home", "base", "spawn":
 			to = w.map.spawn_point(c.team)
 	to = w.map.nearest_open(to)
-	w.fx("blink", {"from": c.global_position, "to": to, "color": _color(e, ctx), "team": c.team})
+	if bool(e.get("show", true)):
+		w.fx("blink", {"from": c.global_position, "to": to, "color": _color(e, ctx), "team": c.team})
 	c.teleport(to)
+	if around and is_instance_valid(t):
+		c.face(t.global_position)
 	c.trigger("dash", c, to)
 
 

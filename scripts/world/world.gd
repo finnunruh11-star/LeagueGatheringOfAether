@@ -60,6 +60,9 @@ var camera: Camera2D
 var hud: Hud
 
 var cam_locked := true
+var _cam_focus := 0          # net id of the unit the camera is pointed at by a "camera" effect
+var _cam_focus_t := 0.0
+var _cam_return := 0.0
 var edge_pan := true
 var cam_zoom := 0.8
 var aim_slot := ""
@@ -399,6 +402,11 @@ func _play_fx(kind: String, data: Dictionary) -> void:
 					"color": Color(1.0, 0.85, 0.25), "size": 18, "dur": 0.9})
 				fx_layer.add_child(g)
 				_sfx("coin", data.p, -16.0)
+			return
+		"camera":
+			if local_champion != null and int(data.get("v", 0)) == local_champion.net_id:
+				_cam_focus = int(data.get("t", 0))
+				_cam_focus_t = float(data.get("dur", 1.0))
 			return
 		"buy", "rankup":
 			if local_champion != null and int(data.get("v", 0)) == local_champion.net_id:
@@ -1139,8 +1147,18 @@ func _process(delta: float) -> void:
 	camera.zoom = camera.zoom.lerp(Vector2.ONE * cam_zoom, minf(10.0 * delta, 1.0))
 	_steer()
 	_amove_ring = maxf(_amove_ring - delta, 0.0)
-	if (cam_locked or _cam_hold) and local_champion != null:
-		camera.global_position = local_champion.global_position
+	var focus = entities.get(_cam_focus) if _cam_focus_t > 0.0 else null
+	if focus is Unit:
+		# an ability (e.g. Clorinde's R) points the caster's camera at its target for a moment
+		_cam_focus_t -= delta
+		camera.global_position = camera.global_position.lerp(focus.global_position, minf(16.0 * delta, 1.0))
+		_cam_return = 0.3
+	elif (cam_locked or _cam_hold) and local_champion != null:
+		_cam_return = maxf(_cam_return - delta, 0.0)
+		if _cam_return > 0.0:
+			camera.global_position = camera.global_position.lerp(local_champion.global_position, minf(16.0 * delta, 1.0))
+		else:
+			camera.global_position = local_champion.global_position
 	elif not cam_locked:
 		var vp := get_viewport().get_visible_rect().size
 		var mp := get_viewport().get_mouse_position()

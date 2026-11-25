@@ -10,6 +10,7 @@ animations in clorinde_clips.py.
 """
 import json
 import math
+import random
 import os
 import sys
 import time
@@ -216,9 +217,23 @@ def bake(R, clip, weapons):
     def at(t):
         p = A.sample(clip.keys, t, loop_len)
         return A.solve(R, p), p
-    M, p = at(0.0)
-    for _ in range(SUB * 8):
-        sim.step(M, dt, p["wind"])
+    if clip.pre is not None:
+        # settle the cloth in the previous pose, then snap into the first key over two frames so it whips along
+        M = A.solve(R, clip.pre)
+        for _ in range(SUB * 8):
+            sim.step(M, dt, clip.pre["wind"])
+        p0 = A.sample(clip.keys, 0.0)
+        n = SUB * 2
+        for k in range(n):
+            u = (k + 1) / n
+            u = u * u * (3 - 2 * u)
+            pp = {key: A._lerp(clip.pre[key], p0[key], u) for key in p0}
+            sim.step(A.solve(R, pp), dt, pp["wind"])
+        M, p = at(0.0)
+    else:
+        M, p = at(0.0)
+        for _ in range(SUB * 8):
+            sim.step(M, dt, p["wind"])
     base_rest, tip_rest = weapons["sword_line"]
     hist = []
     out = []
@@ -243,7 +258,7 @@ def bake(R, clip, weapons):
             sim.apply(M)
             trail = [(b, t) for (tt, b, t) in hist if tt >= T - TRAIL_LEN - 1e-6]
             out.append({"basis": A.to_basis(R, M), "M": {k: m.copy() for k, m in M.items()}, "pistol": clip.pistol_at(f),
-                        "trail": trail if len(trail) >= 3 else [], "fx": clip.fx.get(f, [])})
+                        "trail": trail if len(trail) >= 3 else [], "fx": clip.fx.get(f, []), "form": clip.form.get(f), "f": f})
         if clip.loop and ps == 0:
             T = 0.0
             hist.clear()
@@ -253,10 +268,13 @@ def bake(R, clip, weapons):
 def apply_frame(rig, weapons, fr):
     for name, m in fr["basis"].items():
         rig.pose.bones[name].matrix_basis = m
+    hidden = fr.get("form") is not None          # e.g. turned into a lightning spear
+    for o in weapons["body"]:
+        o.hide_render = hidden
     for o in weapons["pistol"]:
-        o.hide_render = not fr["pistol"]
+        o.hide_render = hidden or not fr["pistol"]
     for o in weapons["holster"]:
-        o.hide_render = bool(fr["pistol"])
+        o.hide_render = hidden or bool(fr["pistol"])
 
 
 FX_MATS = {}
@@ -273,6 +291,11 @@ def fx_mats():
             "streak": A._fx_material("fx_streak", (214, 188, 255), 2.5, True, 0.9),
             "smoke": A._fx_material("fx_smoke", (214, 206, 236), 1.0, False, 0.4),
             "glint": A._fx_material("fx_glint", (255, 255, 255), 6.0, False, 1.0),
+            "streak_dim": A._fx_material("fx_streak_dim", (214, 188, 255), 2.0, True, 0.45),
+            "spear_glow": A._fx_material("fx_spear_glow", (150, 90, 255), 4.0, False, 0.7),
+            "crescent": A._fx_material("fx_crescent", (230, 214, 255), 4.5, True, 1.0),
+            "aura": A._fx_material("fx_aura", (190, 140, 255), 3.0, False, 0.35),
+            "bolt": A._fx_material("fx_bolt", (236, 220, 255), 6.0, False, 1.0),
         })
     return FX_MATS
 
@@ -292,8 +315,84 @@ def build_fx(rig, R, weapons, fr):
     aim = hl.col[2].xyz.normalized()
     base_rest, tip_rest = weapons["sword_line"]
     sb, st = A.bone_point(R, M, "hand.R", base_rest), A.bone_point(R, M, "hand.R", tip_rest)
+    tilt = math.radians(CAM_TILT)
+    cam = (rig.matrix_world.to_3x3().inverted() @ Vector((0, -math.sin(tilt), math.cos(tilt)))).normalized()   # toward the camera
+    chest = M["chest"].translation + M["chest"].col[1].xyz * 0.12
+    hips = M["hips"].translation
+    rnd = random.Random(fr["f"] * 7919 + len(fr["fx"]))
+
+    def bolts(pairs, width=0.011, mat="bolt"):
+        for a, b in pairs:
+            add("Bolt", A.bolt_geo(a, b, rnd.randrange(1 << 16), width, 6, (b - a).length * 0.12), mat)
+
+    def crescent(span, alpha_mat, r0=0.42, r1=0.6):
+        # a swoosh around her at gun height that ends where the pistol points
+        end = math.atan2(aim.y, aim.x)
+        sgn = 1 if fr["f"] % 2 == 0 else -1
+        c = Vector((hips.x, hips.y, muzzle.z - 0.05))
+        verts, faces, uvs = [], [], []
+        n = 22
+        for k in range(n + 1):
+            u = k / n                                   # 0 = head (at the pistol), 1 = tail
+            a = end - sgn * math.radians(span) * u
+            z = 0.1 * (1 - u) - 0.08 * u
+            d = Vector((math.cos(a), math.sin(a), 0))
+            w = r1 - (r1 - r0 - 0.03) * u
+            verts += [c + d * r0 + Vector((0, 0, z)), c + d * w + Vector((0, 0, z + 0.03))]
+            uvs += [(u, 0.0), (u, 1.0)]
+        for k in range(n):
+            faces.append((2 * k, 2 * k + 2, 2 * k + 3, 2 * k + 1))
+        add("Crescent", (verts, faces), alpha_mat, uvs)
+
     for i, name in enumerate(fr["fx"]):
-        if name == "muzzle":
+        if name == "star":
+            hot = muzzle + aim * 0.05
+            add("Star", A.star_geo(hot + cam * 0.05, cam, 0.34, 4, 0.11), "glint")
+            add("Star2", A.star_geo(hot + cam * 0.06, cam, 0.17, 4, 0.16, twist=math.pi / 4), "glint")
+            add("StarGlow", A.star_geo(hot + cam * 0.04, cam, 0.15, 12, 0.85), "flash")
+            add("Muzzle", A.star_geo(muzzle + aim * 0.03, aim, 0.12, 8, 0.35, 0.4), "hot")
+        elif name == "crescent":
+            crescent(170, "crescent", 0.3, 0.62)
+        elif name == "crescent_fade":
+            crescent(110, "streak_dim", 0.5, 0.66)
+        elif name == "flash_in":
+            add("Aura", A.star_geo(chest + cam * 0.2, cam, 0.42, 14, 0.82), "aura")
+            bolts([(chest + Vector((rnd.uniform(-.2, .2), rnd.uniform(-.2, .2), rnd.uniform(-.3, .2))),
+                    chest + Vector((rnd.uniform(-.45, .45), rnd.uniform(-.45, .45), rnd.uniform(-.5, .4)))) for _ in range(3)], 0.008)
+        elif name in ("electro_flash", "electro_flash_small"):
+            big = name == "electro_flash"
+            r = 0.55 if big else 0.3
+            add("Flash", A.star_geo(chest + cam * 0.25, cam, r, 4, 0.14), "glint")
+            add("FlashGlow", A.star_geo(chest + cam * 0.22, cam, r * 0.6, 14, 0.8), "aura")
+            out = []
+            for k in range(6 if big else 3):
+                a = rnd.uniform(0, 2 * math.pi)
+                d = Vector((math.cos(a), math.sin(a), rnd.uniform(-0.5, 0.7))).normalized()
+                out.append((chest + d * 0.08, chest + d * r * 1.1))
+            bolts(out, 0.012)
+        elif name == "spark_burst_body":
+            bolts([(hips + Vector((rnd.uniform(-.15, .15), rnd.uniform(-.2, .2), rnd.uniform(-.6, 0))),
+                    hips + Vector((rnd.uniform(-.4, .4), rnd.uniform(-.4, .4), rnd.uniform(-.2, .7)))) for _ in range(5)], 0.009)
+        elif name == "blink_in":
+            feet = Vector((hips.x, hips.y, 0.02))
+            ring = [feet + Vector((math.cos(a) * 0.48, math.sin(a) * 0.48, 0.0)) for a in [k * math.pi / 5 + rnd.uniform(0, .3) for k in range(10)]]
+            bolts([(ring[k], ring[(k + 1) % 10] + Vector((0, 0, 0.04))) for k in range(10) if k % 3 != 2], 0.012)
+            bolts([(feet + Vector((rnd.uniform(-.3, .3), rnd.uniform(-.3, .3), 0)), chest + Vector((rnd.uniform(-.15, .15), rnd.uniform(-.15, .15), 0.1)))
+                   for _ in range(3)], 0.01)
+            add("Aura", A.star_geo(chest + cam * 0.2, cam, 0.5, 16, 0.75), "aura")
+            add("Glint", A.star_geo(chest + cam * 0.25, cam, 0.22, 4, 0.15), "glint")
+        elif name == "spear":
+            # the lightning lance she becomes while dashing: hot core, violet sheath, crackling bolts
+            y0, z0 = hips.y, hips.z + 0.18
+            tail, tip = Vector((hips.x - 0.85, y0, z0 + 0.04)), Vector((hips.x + 0.95, y0, z0))
+            add("SpearCore", A.lance_geo(tail, tip, 0.055, 0.62), "hot")
+            add("SpearGlow", A.lance_geo(tail - Vector((0.15, 0, 0)), tip + Vector((0.1, 0, 0)), 0.15, 0.55), "spear_glow")
+            add("SpearTip", A.star_geo(tip + cam * 0.05, cam, 0.2, 4, 0.14, twist=rnd.uniform(0, 0.5)), "glint")
+            pts = [tail.lerp(tip, k / 6) + Vector((0, rnd.uniform(-.12, .12), rnd.uniform(-.12, .12))) for k in range(7)]
+            bolts([(pts[k], pts[k + 1]) for k in range(6)], 0.012)
+            bolts([(tail.lerp(tip, rnd.uniform(0.1, 0.8)), tail.lerp(tip, rnd.uniform(0, 0.6)) + Vector((-0.2, rnd.uniform(-.3, .3), rnd.uniform(-.25, .25))))
+                   for _ in range(3)], 0.009)
+        elif name == "muzzle":
             add("Muzzle", A.star_geo(muzzle + aim * 0.03, aim, 0.12, 8, 0.35, 0.36), "hot")
         elif name == "muzzle_small":
             add("Muzzle", A.star_geo(muzzle + aim * 0.02, aim, 0.07, 6, 0.4, 0.18, twist=0.4), "hot")
@@ -349,7 +448,9 @@ def render_clips(names, out_dir, dirs=range(8), samples=16):
     except AttributeError:
         pass
     R = A.RigData(rig)
-    clips = [c for c in C.all_clips() if not names or c.name in names]
+    special = {id(o) for o in weapons["pistol"] + weapons["holster"]}
+    weapons["body"] = [o for o in model.COLLECTION.objects if o.type == "MESH" and id(o) not in special]
+    clips = [c for c in C.all_clips() if not names or c.name in names or c.name.split("#")[0] in names]
     manifest = {"anchor": anchor_px(sc, cam), "frame": FRAME_PX, "px_per_m": FRAME_PX / ORTHO, "clips": []}
     for clip in clips:
         t0 = time.time()

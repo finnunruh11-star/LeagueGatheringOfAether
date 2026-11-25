@@ -423,3 +423,23 @@ def bolt_geo(a, b, seed, width=0.012, segs=7, jag=0.05):
     for i in range(segs):
         faces.append((2 * i, 2 * i + 2, 2 * i + 3, 2 * i + 1))
     return verts, faces
+
+
+def lance_geo(tail, tip, radius, widest=0.6, sides=6):
+    """A spear-like bipyramid from tail to tip, widest at `widest` of the way."""
+    d = tip - tail
+    side = d.cross(V((0, 0, 1)))
+    if side.length < 1e-4:
+        side = V((0, 1, 0))
+    side.normalize()
+    up = side.cross(d.normalized())
+    mid = tail + d * widest
+    verts = [tail.copy(), tip.copy()]
+    for k in range(sides):
+        a = 2 * math.pi * k / sides
+        verts.append(mid + (side * math.cos(a) + up * math.sin(a)) * radius)
+    faces = []
+    for k in range(sides):
+        a, b = 2 + k, 2 + (k + 1) % sides
+        faces += [(0, b, a), (1, a, b)]
+    return verts, faces

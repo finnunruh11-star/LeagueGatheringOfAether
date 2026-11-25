@@ -21,8 +21,12 @@ SCALE = 1.0             # in-game scale (the frames are rendered at the size the
 GROUND = 49             # the engine's ground point is 0.75 x the champion radius (65) below the unit's origin
 DIRS = 8
 PAD = 2
-# render clip name -> (character.json animation name, sheet file)
-ATTACK_VARIANTS = ["attack", "attack#slash"]
+
+
+def _variant_key(name):
+    """"attack", "attack#slash", "attack@vigil#3": variants ("#...") of an animation become a list, in this order."""
+    tail = name.split("#", 1)[1] if "#" in name else ""
+    return (0, 0) if tail == "" else ((1, int(tail)) if tail.isdigit() else (1, 0))
 
 
 def main(render_dir, char_dir):
@@ -33,7 +37,7 @@ def main(render_dir, char_dir):
     os.makedirs(out_dir, exist_ok=True)
     anims = {}
     top = 0
-    for c in man["clips"]:
+    for c in sorted(man["clips"], key=lambda c: (c["name"].split("#")[0], _variant_key(c["name"]))):
         src = os.path.join(render_dir, c["dir"])
         n = c["frames"]
         frames = [[Image.open(os.path.join(src, f"{d}_{f:02d}.png")) for f in range(n)] for d in range(DIRS)]
@@ -62,15 +66,16 @@ def main(render_dir, char_dir):
             a["speed"] = round(c["stride"] * man["px_per_m"] * SCALE * c["fps"] / n)
         a.update(c.get("extra") or {})
         name = c["name"]
-        if name in ATTACK_VARIANTS:
-            anims.setdefault("attack", [None] * len(ATTACK_VARIANTS))[ATTACK_VARIANTS.index(name)] = a
+        base = name.split("#")[0]
+        if "#" in name:
+            if not isinstance(anims.get(base), list):
+                anims[base] = [anims[base]] if base in anims else []
+            anims[base].append(a)
         else:
             anims[name] = a
         if name == "idle":
             top = round(ay - y0 - (min(im.getbbox()[1] for row in frames for im in row) - y0))
         print(f"{name}: {w}x{h} x {n} frames -> {file} ({os.path.getsize(os.path.join(out_dir, file)) // 1024} KB)")
-    if "attack" in anims:
-        anims["attack"] = [a for a in anims["attack"] if a]
     order = ["idle", "run", "attack", "cast_q", "cast_w", "cast_e", "cast_e_recast", "cast_r", "hurt", "stun", "death", "spawn",
              "recall", "fidget", "idle@vigil", "run@vigil", "attack@vigil", "cast_q@vigil", "cast_w@vigil", "cast_r@vigil", "hurt@vigil",
              "exit@vigil"]

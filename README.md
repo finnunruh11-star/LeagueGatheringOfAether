@@ -145,8 +145,9 @@ traps, knockbacks, beams, zones...), passives and sprites. The six example chara
 - **Honk Lord** - a goose. Custom pixel-art sprite sheet and goslings.
 - **Clorinde** - Genshin Impact's duelist: a recast ability (Night Vigil turns her sword into piercing
   pistol shots, recast to lunge), Bond of Life (healing debt that heal bonuses turn into huge heals),
-  a parry that stuns if it blocked a champion, and adaptive AD/AP damage. 3D-rendered 8-direction
-  sprites with a second animation set while her pistol is drawn.
+  a parry that stuns if it blocked a champion, adaptive AD/AP damage and a point-and-click ultimate that
+  blinks her around the target ten times in a second. 3D-rendered 8-direction sprites with a second
+  animation set while her pistol is drawn, afterimages and a lightning-spear dash.
 
 Ember and Clorinde show explicit per-rank numbers (`[70, 105, 140, 175, 210]`); the others scale automatically.
 

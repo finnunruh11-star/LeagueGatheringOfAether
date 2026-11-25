@@ -15,8 +15,13 @@
       "cast_q": {"sheet": "sprites/cast_q.webp", "frame_width": 215, "frame_height": 227, "frames": 17, "fps": 20, "anchor": [107.0, 163.2]},
       "cast_w": {"sheet": "sprites/cast_w.webp", "frame_width": 306, "frame_height": 266, "frames": 24, "fps": 20, "anchor": [160.0, 156.2]},
       "cast_e": {"sheet": "sprites/cast_e.webp", "frame_width": 165, "frame_height": 191, "frames": 14, "fps": 20, "anchor": [88.0, 127.2]},
-      "cast_e_recast": {"sheet": "sprites/cast_e_recast.webp", "frame_width": 305, "frame_height": 262, "frames": 14, "fps": 20, "anchor": [160.0, 152.2], "hit": 2, "land": 6},
-      "cast_r": {"sheet": "sprites/cast_r.webp", "frame_width": 248, "frame_height": 249, "frames": 24, "fps": 20, "anchor": [133.0, 156.2]},
+      "cast_e_recast": {"sheet": "sprites/cast_e_recast.webp", "frame_width": 306, "frame_height": 268, "frames": 14, "fps": 20, "anchor": [160.0, 155.2], "hit": 1, "land": 6},
+      "cast_r": [
+        {"sheet": "sprites/cast_r.webp", "frame_width": 199, "frame_height": 211, "frames": 18, "fps": 30, "anchor": [100.0, 147.2], "afterimage": "#c9a2ff"},
+        {"sheet": "sprites/cast_r_1.webp", "frame_width": 203, "frame_height": 224, "frames": 18, "fps": 30, "anchor": [101.0, 155.2], "afterimage": "#c9a2ff"},
+        {"sheet": "sprites/cast_r_2.webp", "frame_width": 196, "frame_height": 238, "frames": 18, "fps": 30, "anchor": [109.0, 161.2], "afterimage": "#c9a2ff"},
+        {"sheet": "sprites/cast_r_3.webp", "frame_width": 228, "frame_height": 212, "frames": 18, "fps": 30, "anchor": [114.0, 138.2], "afterimage": "#c9a2ff"}
+      ],
       "hurt": {"sheet": "sprites/hurt.webp", "frame_width": 149, "frame_height": 180, "frames": 8, "fps": 20, "anchor": [77.0, 127.2]},
       "stun": {"sheet": "sprites/stun.webp", "frame_width": 149, "frame_height": 177, "frames": 14, "fps": 10, "anchor": [77.0, 126.2], "loop_from": 4},
       "death": {"sheet": "sprites/death.webp", "frame_width": 312, "frame_height": 252, "frames": 20, "fps": 14, "anchor": [156.0, 139.2]},
@@ -25,10 +30,21 @@
       "fidget": {"sheet": "sprites/fidget.webp", "frame_width": 150, "frame_height": 189, "frames": 24, "fps": 15, "anchor": [78.0, 135.2]},
       "idle@vigil": {"sheet": "sprites/idle_vigil.webp", "frame_width": 149, "frame_height": 181, "frames": 16, "fps": 10, "anchor": [81.0, 123.2]},
       "run@vigil": {"sheet": "sprites/run_vigil.webp", "frame_width": 141, "frame_height": 177, "frames": 12, "fps": 18, "anchor": [77.0, 123.2], "speed": 269},
-      "attack@vigil": {"sheet": "sprites/attack_vigil.webp", "frame_width": 188, "frame_height": 205, "frames": 10, "fps": 24, "anchor": [94.0, 143.2], "hit": 2},
+      "attack@vigil": [
+        {"sheet": "sprites/attack_vigil.webp", "frame_width": 199, "frame_height": 210, "frames": 12, "fps": 24, "anchor": [100.0, 146.2], "hit": 1, "afterimage": "#b48cff"},
+        {"sheet": "sprites/attack_vigil_1.webp", "frame_width": 203, "frame_height": 226, "frames": 12, "fps": 24, "anchor": [101.0, 156.2], "hit": 1, "afterimage": "#b48cff"},
+        {"sheet": "sprites/attack_vigil_2.webp", "frame_width": 228, "frame_height": 215, "frames": 12, "fps": 24, "anchor": [114.0, 139.2], "hit": 1, "afterimage": "#b48cff"},
+        {"sheet": "sprites/attack_vigil_3.webp", "frame_width": 186, "frame_height": 236, "frames": 12, "fps": 24, "anchor": [99.0, 160.2], "hit": 1, "afterimage": "#b48cff"},
+        {"sheet": "sprites/attack_vigil_4.webp", "frame_width": 202, "frame_height": 237, "frames": 12, "fps": 24, "anchor": [106.0, 163.2], "hit": 1, "afterimage": "#b48cff"}
+      ],
       "cast_q@vigil": {"sheet": "sprites/cast_q_vigil.webp", "frame_width": 215, "frame_height": 227, "frames": 16, "fps": 20, "anchor": [107.0, 163.2]},
       "cast_w@vigil": {"sheet": "sprites/cast_w_vigil.webp", "frame_width": 306, "frame_height": 266, "frames": 24, "fps": 20, "anchor": [160.0, 156.2]},
-      "cast_r@vigil": {"sheet": "sprites/cast_r_vigil.webp", "frame_width": 248, "frame_height": 249, "frames": 24, "fps": 20, "anchor": [133.0, 156.2]},
+      "cast_r@vigil": [
+        {"sheet": "sprites/cast_r_vigil.webp", "frame_width": 199, "frame_height": 211, "frames": 16, "fps": 30, "anchor": [100.0, 147.2], "afterimage": "#c9a2ff"},
+        {"sheet": "sprites/cast_r_vigil_1.webp", "frame_width": 203, "frame_height": 224, "frames": 16, "fps": 30, "anchor": [101.0, 155.2], "afterimage": "#c9a2ff"},
+        {"sheet": "sprites/cast_r_vigil_2.webp", "frame_width": 193, "frame_height": 237, "frames": 16, "fps": 30, "anchor": [106.0, 161.2], "afterimage": "#c9a2ff"},
+        {"sheet": "sprites/cast_r_vigil_3.webp", "frame_width": 228, "frame_height": 213, "frames": 16, "fps": 30, "anchor": [114.0, 138.2], "afterimage": "#c9a2ff"}
+      ],
       "hurt@vigil": {"sheet": "sprites/hurt_vigil.webp", "frame_width": 149, "frame_height": 181, "frames": 8, "fps": 20, "anchor": [81.0, 123.2]},
       "exit@vigil": {"sheet": "sprites/exit_vigil.webp", "frame_width": 153, "frame_height": 185, "frames": 10, "fps": 18, "anchor": [81.0, 127.2]}
     }
@@ -134,10 +150,10 @@
         "effects": [
           {"type": "counter", "id": "lunge_tier", "set": "0 if bond <= 0 else (2 if bond >= max_hp else 1)"},
           {"type": "dash", "to": "direction", "distance": "180 if bond <= 0 else 260", "speed": 1700, "on_hit": [
-            {"type": "damage", "if": "counter('lunge_tier') == 0", "vfx": "claw",
+            {"type": "damage", "if": "counter('lunge_tier') == 0", "vfx": "claw", "color": "#c9a2ff",
               "amount": "0.5 * ([0, 3, 6, 12, 20][rank - 1] + max(0.35 * ad, 0.6 * ap))",
               "damage_type": "'physical' if 0.35 * ad >= 0.6 * ap else 'magic'"},
-            {"type": "damage", "if": "counter('lunge_tier') == 1", "vfx": "slash",
+            {"type": "damage", "if": "counter('lunge_tier') == 1", "vfx": "slash", "color": "#c9a2ff",
               "amount": "0.65 * ([0, 3, 6, 12, 20][rank - 1] + max(0.35 * ad, 0.6 * ap))",
               "damage_type": "'physical' if 0.35 * ad >= 0.6 * ap else 'magic'"},
             {"type": "repeat", "if": "counter('lunge_tier') == 2", "count": 3, "interval": 0.12, "effects": [
@@ -155,19 +171,23 @@
     },
     "r": {
       "name": "Last Lightfall",
-      "short_description": "Gain Bond of Life and unleash a barrage around you while staying free to move and attack.",
-      "description": "Clorinde gains Bond of Life equal to 66% of her max HP, then unloads saber and pistol: 8 volleys over 2s hit every enemy within 450 of her for 30/45/60 (+10% AP) magic damage each. She can move, attack and lunge meanwhile.",
+      "short_description": "Flicker around an enemy, shooting 10 times in under a second while invulnerable.",
+      "description": "Clorinde gains Bond of Life equal to 66% of her max HP, then strikes the chosen enemy from every side: 10 instant blinks around them in 0.9s, each followed by a shot dealing 25/38/50 (+8% AP) magic damage. She is invulnerable and can't move, attack or cast meanwhile, and ends next to them.",
       "cooldown": [90, 75, 60],
-      "targeting": "self",
+      "targeting": "unit",
+      "range": 600,
       "effects": [
         {"type": "bond_of_life", "target": "self", "amount": "0.66 * max_hp"},
+        {"type": "invulnerable", "target": "self", "duration": 1.0},
+        {"type": "busy", "target": "self", "duration": 0.95},
+        {"type": "camera", "focus": "target", "duration": 1.05},
         {"type": "text", "text": "Last Lightfall", "at": "self", "color": "#c9a2ff", "size": 30},
-        {"type": "repeat", "count": 8, "interval": 0.25, "effects": [
-          {"type": "area", "at": "self", "radius": 450, "color": "#b48cff", "show": false, "effects": [
-            {"type": "damage", "amount": "[30, 45, 60][rank - 1] + 0.1 * ap", "damage_type": "magic", "vfx": "streaks"}
-          ]},
-          {"type": "vfx", "kind": "ring", "at": "self", "radius": 450, "color": "#b48cff"},
-          {"type": "projectile", "count": "6 + fmod(i, 3)", "spread": 360, "speed": 2400, "range": 450, "radius": 4, "color": "#d9c2ff", "pierce": true}
+        {"type": "repeat", "count": 10, "interval": 0.09, "effects": [
+          {"type": "teleport", "to": "around_target", "min_distance": 110, "distance": 230, "show": false},
+          {"type": "animation", "action": "cast_r"},
+          {"type": "projectile", "homing": true, "speed": 3600, "range": 700, "radius": 5, "color": "#e8dcff", "on_hit": [
+            {"type": "damage", "amount": "[25, 38, 50][rank - 1] + 0.08 * ap", "damage_type": "magic", "vfx": "streaks"}
+          ]}
         ]}
       ]
     }
