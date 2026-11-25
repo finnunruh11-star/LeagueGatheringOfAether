@@ -117,15 +117,15 @@
     "e": {
       "name": "Hunter's Vigil",
       "short_description": "Switch to pistol shots that build Bond of Life. Recast to lunge and spend it.",
-      "description": "Night Vigil for 7s: her attacks become pistol shots (425 range, +100/115/130/145/160% attack speed, attack speed cap raised to 3.0) dealing 12/14/17/24/30 (+17% AP) magic damage. A shot gives her Bond of Life equal to 35% of her max HP while she has less than 100%. Shots fired while she has Bond of Life deal 50% more damage and pierce enemies behind the target. Recast: Impale the Night. The cooldown starts when Night Vigil ends.",
+      "description": "Night Vigil for 7s: her attacks become pistol shots (425 range, +300/335/370/405/440% attack speed, attack speed cap raised to 5.0) dealing 6/7/8.5/12/15 (+8.5% AP) magic damage. A shot gives her Bond of Life equal to 35% of her max HP while she has less than 100%. Shots fired while she has Bond of Life deal 50% more damage and pierce enemies behind the target. Recast: Impale the Night. The cooldown starts when Night Vigil ends.",
       "cooldown": [16, 15, 14, 13, 12],
       "targeting": "self",
       "effects": [
         {"type": "buff", "target": "self", "id": "night_vigil", "duration": 7, "anim_set": "vigil",
-          "add": {"attack_range": 300, "bonus_attack_speed": "[1.0, 1.15, 1.3, 1.45, 1.6][rank - 1]", "attack_speed_cap": 0.5, "heal_to_bond": 1},
+          "add": {"attack_range": 300, "bonus_attack_speed": "[3.0, 3.35, 3.7, 4.05, 4.4][rank - 1]", "attack_speed_cap": 2.5, "heal_to_bond": 1},
           "attack": {
             "ranged": true, "projectile_speed": 2200, "projectile_color": "#c9a2ff", "projectile_size": 5, "hit_vfx": "streaks",
-            "damage": "([12, 14, 17, 24, 30][rank - 1] + 0.17 * ap) * (1.5 if bond > 0 else 1.0)",
+            "damage": "([6, 7, 8.5, 12, 15][rank - 1] + 0.085 * ap) * (1.5 if bond > 0 else 1.0)",
             "damage_type": "magic",
             "pierce": "bond > 0", "pierce_range": 350,
             "on_hit": [
