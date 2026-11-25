@@ -117,7 +117,7 @@
     "e": {
       "name": "Hunter's Vigil",
       "short_description": "Switch to pistol shots that build Bond of Life. Recast to lunge and spend it.",
-      "description": "Night Vigil for 7s: her attacks become pistol shots (425 range, +300/335/370/405/440% attack speed, attack speed cap raised to 5.0) dealing 6/7/8.5/12/15 (+8.5% AP) magic damage. A shot gives her Bond of Life equal to 35% of her max HP while she has less than 100%. Shots fired while she has Bond of Life deal 50% more damage and pierce enemies behind the target. Recast: Impale the Night. The cooldown starts when Night Vigil ends.",
+      "description": "Night Vigil for 7s: her attacks become pistol shots (425 range, +300/335/370/405/440% attack speed, attack speed cap raised to 5.0) dealing 5.3/6.1/7.4/10.5/13 (+7.4% AP) magic damage. A shot gives her Bond of Life equal to 35% of her max HP while she has less than 100%. Shots fired while she has Bond of Life deal 50% more damage and pierce enemies behind the target. Recast: Impale the Night. The cooldown starts when Night Vigil ends.",
       "cooldown": [16, 15, 14, 13, 12],
       "targeting": "self",
       "effects": [
@@ -125,7 +125,7 @@
           "add": {"attack_range": 300, "bonus_attack_speed": "[3.0, 3.35, 3.7, 4.05, 4.4][rank - 1]", "attack_speed_cap": 2.5, "heal_to_bond": 1},
           "attack": {
             "ranged": true, "projectile_speed": 2200, "projectile_color": "#c9a2ff", "projectile_size": 5, "hit_vfx": "streaks",
-            "damage": "([6, 7, 8.5, 12, 15][rank - 1] + 0.085 * ap) * (1.5 if bond > 0 else 1.0)",
+            "damage": "([5.3, 6.1, 7.4, 10.5, 13][rank - 1] + 0.074 * ap) * (1.5 if bond > 0 else 1.0)",
             "damage_type": "magic",
             "pierce": "bond > 0", "pierce_range": 350,
             "on_hit": [
@@ -137,7 +137,7 @@
       "recast": {
         "name": "Impale the Night",
         "short_description": "Lunge through enemies and spend Bond of Life to heal. More Bond strengthens the lunge.",
-        "description": "Lunge through enemies. With no Bond of Life: travel 180 and deal 50% damage. With Bond below max HP: travel 260 and deal 65%. With Bond at or above max HP: travel 260 and strike three times for 75% each, 0.12s apart. Base damage: 0/3/6/12/20 + the higher of 35% AD (physical) or 60% AP (magic). Heal for 110% of Bond and clear any remaining Bond. Unlimited uses during Night Vigil, subject to the recast cooldown.",
+        "description": "Lunge through enemies. With no Bond of Life: travel 180 and deal 44% damage. With Bond below max HP: travel 260 and deal 57%. With Bond at or above max HP: travel 260 and strike three times for 66% each, 0.12s apart. Base damage: 0/3/6/12/20 + the higher of 35% AD (physical) or 60% AP (magic). Heal for 110% of Bond and clear any remaining Bond. Unlimited uses during Night Vigil, subject to the recast cooldown.",
         "status": "night_vigil",
         "cancels_attacks": true,
         "charges": 0,
@@ -148,14 +148,14 @@
           {"type": "counter", "id": "lunge_tier", "set": "0 if bond <= 0 else (2 if bond >= max_hp else 1)"},
           {"type": "dash", "to": "direction", "distance": "180 if bond <= 0 else 260", "speed": 1700, "on_hit": [
             {"type": "damage", "if": "counter('lunge_tier') == 0", "vfx": "claw", "color": "#c9a2ff",
-              "amount": "0.5 * ([0, 3, 6, 12, 20][rank - 1] + max(0.35 * ad, 0.6 * ap))",
+              "amount": "0.44 * ([0, 3, 6, 12, 20][rank - 1] + max(0.35 * ad, 0.6 * ap))",
               "damage_type": "'physical' if 0.35 * ad >= 0.6 * ap else 'magic'"},
             {"type": "damage", "if": "counter('lunge_tier') == 1", "vfx": "slash", "color": "#c9a2ff",
-              "amount": "0.65 * ([0, 3, 6, 12, 20][rank - 1] + max(0.35 * ad, 0.6 * ap))",
+              "amount": "0.57 * ([0, 3, 6, 12, 20][rank - 1] + max(0.35 * ad, 0.6 * ap))",
               "damage_type": "'physical' if 0.35 * ad >= 0.6 * ap else 'magic'"},
             {"type": "repeat", "if": "counter('lunge_tier') == 2", "count": 3, "interval": 0.12, "effects": [
               {"type": "damage", "vfx": "slash", "color": "#ff6f9a",
-                "amount": "0.75 * ([0, 3, 6, 12, 20][rank - 1] + max(0.35 * ad, 0.6 * ap))",
+                "amount": "0.66 * ([0, 3, 6, 12, 20][rank - 1] + max(0.35 * ad, 0.6 * ap))",
                 "damage_type": "'physical' if 0.35 * ad >= 0.6 * ap else 'magic'"}
             ]}
           ], "on_end": [
@@ -169,7 +169,7 @@
     "r": {
       "name": "Last Lightfall",
       "short_description": "Flicker around an enemy, shooting 10 times in under a second while invulnerable.",
-      "description": "Clorinde gains Bond of Life equal to 66% of her max HP, then strikes the chosen enemy from every side: 10 instant blinks around them in 0.9s, each followed by a shot dealing 25/38/50 (+8% AP) magic damage. She is invulnerable and can't move, attack or cast meanwhile, and ends next to them.",
+      "description": "Clorinde gains Bond of Life equal to 66% of her max HP, then strikes the chosen enemy from every side: 10 instant blinks around them in 0.9s, each followed by a shot dealing 34/51/68 (+11% AP) magic damage. She is invulnerable and can't move, attack or cast meanwhile, and ends next to them.",
       "cooldown": [90, 75, 60],
       "targeting": "unit",
       "range": 600,
@@ -183,7 +183,7 @@
           {"type": "teleport", "to": "around_target", "min_distance": 110, "distance": 230, "show": false},
           {"type": "animation", "action": "cast_r"},
           {"type": "projectile", "homing": true, "speed": 3600, "range": 700, "radius": 5, "color": "#e8dcff", "on_hit": [
-            {"type": "damage", "amount": "[25, 38, 50][rank - 1] + 0.08 * ap", "damage_type": "magic", "vfx": "streaks"}
+            {"type": "damage", "amount": "[34, 51, 68][rank - 1] + 0.11 * ap", "damage_type": "magic", "vfx": "streaks"}
           ]}
         ]}
       ]
