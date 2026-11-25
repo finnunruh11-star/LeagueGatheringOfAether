@@ -18,6 +18,9 @@ func _ready() -> void:
 	if Game.cmdline.get("selftest") in ["aram", "mayhem"]:
 		_test_aram(Game.cmdline.selftest == "mayhem")
 		return
+	if Game.cmdline.get("selftest") == "arurf":
+		_test_arurf()
+		return
 	if Game.cmdline.get("selftest") == "mayhem_net":
 		await _test_mayhem_net()
 		return
@@ -704,12 +707,36 @@ func _check(condition: bool, label: String) -> bool:
 	return condition
 
 
+func _test_arurf() -> void:
+	var player := world.local_champion
+	var lobby: Dictionary = Game.players[player.peer]
+	var cards: Array = lobby.get("champion_cards", [])
+	var ember: Champion = world.spawn("champion", {"peer": 999, "team": player.team, "character": "ember",
+		"name": "URF test", "pos": player.global_position, "summoners": ["flash", "smite"]})
+	ember.rank_up("e")
+	ember.mana = 0.0
+	var blink := ember.global_position + Vector2(70.0, 0.0)
+	var ok := world.urf and not world.aram and world.map.lane_count() == 3 and world.jungle != null
+	ok = ok and world.hud.augment_panel == null and cards.size() == 2 and player.char_id in cards
+	ok = ok and ember.cast("e", blink, 0) and is_zero_approx(ember.mana)
+	ok = ok and is_equal_approx(ember.cooldowns.e, 3.5) and is_equal_approx(ember.summoner_cooldown(0), 75.0)
+	ember.items[0] = {"id": "youmuus_ghostblade", "n": 1, "cd": 0.0, "cd_total": 1.0}
+	ok = ok and ember.use_item(0, ember.global_position, 0) and is_equal_approx(ember.items[0].cd, 11.25)
+	var health_cost: Dictionary = ember.def.abilities.e.duplicate()
+	health_cost.cost_type = "health"
+	ok = ok and is_equal_approx(ember.ability_cost(health_cost), 60.0)
+	if not ok:
+		push_error("[arurf] Expected a random draft on Rift, a free 3.5s blink, 75s Flash, 11.25s Wraith Step, and unchanged health costs")
+	print("[arurf] ", "passed" if ok else "failed")
+	get_tree().quit(0 if ok else 1)
+
+
 func _test_aram(with_augments: bool) -> void:
 	var ch := world.local_champion
 	var lobby: Dictionary = Game.players[ch.peer]
 	var original: String = lobby.character
 	var ok := _mayhem_check(world.aram and world.mayhem == with_augments and ch.level == 3 and ch.gold >= 1400 and not world.cheats_allowed(), "ARAM opening rules")
-	var cards: Array = lobby.get("aram_cards", [])
+	var cards: Array = lobby.get("champion_cards", [])
 	ok = _mayhem_check(cards.size() == 2 and ch.char_id in cards, "random match character comes from the dealt cards") and ok
 	ok = _mayhem_check(ch.summoners.all(func(id): return id not in Game.Mayhem.DISALLOWED_SPELLS), "ARAM excludes Teleport and Smite") and ok
 	if with_augments:

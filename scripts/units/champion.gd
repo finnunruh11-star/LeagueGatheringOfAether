@@ -352,7 +352,7 @@ func cast(slot: String, aim: Vector2, tid: int) -> bool:
 
 ## Mana (or health) cost at the ability's current rank. Manaless champions pay nothing.
 func ability_cost(ab: Dictionary, ctx := {}) -> float:
-	if ab.cost_type != "health" and not uses_mana():
+	if ab.cost_type != "health" and (world.urf or not uses_mana()):
 		return 0.0
 	if ctx.is_empty():
 		ctx = {"caster": self, "rank": maxi(int(ranks.get(ab.slot, 1)), 1)}
@@ -1052,6 +1052,11 @@ func use_item(slot: int, aim: Vector2, tid: int) -> bool:
 
 
 func _extra_stats(st: Dictionary, mult: Dictionary) -> void:
+	if world.urf:
+		st.ability_haste += 300.0
+		st.summoner_haste += 300.0
+		st.item_haste += 300.0
+		st.move_speed += 60.0
 	var legendary := 0
 	var mythic = null
 	for inst in items:

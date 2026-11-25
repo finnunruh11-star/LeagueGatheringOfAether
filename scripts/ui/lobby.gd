@@ -13,7 +13,7 @@ var problems: RichTextLabel
 var editing := 0
 var _map_ids: Array = []
 var _champion_hint: Label
-var _aram_cards: HBoxContainer
+var _champion_cards: HBoxContainer
 var _champion_scroll: ScrollContainer
 var sum_pick: Array = []   # the two summoner spell OptionButtons
 var rune_button: Button
@@ -95,7 +95,7 @@ func _ready() -> void:
 	mid.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	cols.add_child(mid)
 	_champion_hint = UiKit.label(mid, "")
-	_aram_cards = UiKit.row(mid)
+	_champion_cards = UiKit.row(mid)
 	var scroll := ScrollContainer.new()
 	_champion_scroll = scroll
 	scroll.size_flags_vertical = Control.SIZE_EXPAND_FILL
@@ -235,6 +235,7 @@ func _refresh() -> void:
 		c.queue_free()
 	var me := multiplayer.get_unique_id()
 	var aram := Game.Mayhem.is_aram(Game.settings.map)
+	var random_draft := Game.uses_random_draft(Game.settings.map)
 	if editing != 0 and not Game.players.has(editing):
 		editing = 0
 	var ids := Game.players.keys()
@@ -246,7 +247,7 @@ func _refresh() -> void:
 		sw.color = Game.TEAM_COLORS[clampi(int(p.team), 0, 1)]
 		sw.custom_minimum_size = Vector2(10, 30)
 		row.add_child(sw)
-		var cid: String = p.get("aram_character", "") if aram else p.character
+		var cid: String = p.get("draft_character", "") if random_draft else p.character
 		var cname: String = Game.characters[cid].name if Game.characters.has(cid) else "?"
 		var can_edit: bool = pid == me or (Game.is_host() and p.bot)
 		var name_btn := Button.new()
@@ -286,18 +287,18 @@ func _refresh() -> void:
 	else:
 		status.text = "Connected. Waiting for the host to start..."
 	var mine = Game.players.get(editing if editing != 0 else me)
-	var picked: String = mine.get("aram_character", "") if aram and mine != null else (mine.character if mine != null else "")
-	_champion_hint.text = "%s: choose one of your random champion cards." % md.name if aram \
+	var picked: String = mine.get("draft_character", "") if random_draft and mine != null else (mine.character if mine != null else "")
+	_champion_hint.text = "%s: choose one of your random champion cards." % md.name if random_draft \
 		else "Choose your champion (host can click a bot's name first to pick for it)"
-	_champion_scroll.visible = not aram
-	_aram_cards.visible = aram
-	for c in _aram_cards.get_children():
-		_aram_cards.remove_child(c)
+	_champion_scroll.visible = not random_draft
+	_champion_cards.visible = random_draft
+	for c in _champion_cards.get_children():
+		_champion_cards.remove_child(c)
 		c.queue_free()
-	if aram and mine != null:
-		for cid in mine.get("aram_cards", []):
-			var b := UiKit.button(_aram_cards, str(Game.characters[cid].name),
-				func(): Game.request_change("aram_character", cid, editing))
+	if random_draft and mine != null:
+		for cid in mine.get("champion_cards", []):
+			var b := UiKit.button(_champion_cards, str(Game.characters[cid].name),
+				func(): Game.request_change("draft_character", cid, editing))
 			b.icon = UiKit.placeholder(Game.characters[cid])
 			b.expand_icon = true
 			b.custom_minimum_size = Vector2(225, 68)
@@ -321,7 +322,7 @@ func _edit_runes() -> void:
 	var page: Dictionary = player.get("runes", {})
 	var editor := RunePageEditor.new()
 	add_child(editor)
-	var cid: String = player.get("aram_character", player.character) if Game.Mayhem.is_aram(Game.settings.map) else player.character
+	var cid: String = player.get("draft_character", player.character) if Game.uses_random_draft(Game.settings.map) else player.character
 	editor.open(player.name, page if Runes.valid(page) else Game.default_runes(cid), func(chosen):
 		if not Game.players.has(pid):
 			return

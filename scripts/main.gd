@@ -138,7 +138,7 @@ func _process(delta: float) -> void:
 		_auto_started = true
 		get_tree().create_timer(1.0).timeout.connect(Game.start_match)
 	if a.has("char") and str(a.get("auto", "")) == "join" and Game.players.has(multiplayer.get_unique_id()) \
-			and not Game.in_match and not Game.Mayhem.is_aram(Game.settings.map) \
+			and not Game.in_match and not Game.uses_random_draft(Game.settings.map) \
 			and Game.characters.has(a.char) and Game.players[multiplayer.get_unique_id()].character != a.char:
 		Game.request_change("character", a.char)
 	if a.has("autopilot") and Game.world != null and Game.world.local_champion != null and not Game.world.local_champion.get_meta("auto", false):

@@ -605,6 +605,8 @@ func _process(_delta: float) -> void:
 	_update_inspection()
 	var t := int(world.time)
 	top_label.text = "%s %d  :  %d %s      %02d:%02d" % [Game.TEAM_NAMES[0], world.kills[0], world.kills[1], Game.TEAM_NAMES[1], t / 60, t % 60]
+	if world.urf:
+		top_label.text += "      ARURF"
 	if world.jungle != null:
 		top_label.text += "      Drakes %d : %d" % [world.jungle.drakes[0].size(), world.jungle.drakes[1].size()]
 	var now := Time.get_ticks_msec()

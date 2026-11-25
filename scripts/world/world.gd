@@ -23,6 +23,7 @@ var online := false
 var is_server := true
 var aram := false
 var mayhem := false
+var urf := false
 var mayhem_tiers := [0, 1, 1, 2]
 var relic_positions := PackedVector2Array()
 var relic_ready := PackedFloat32Array()
@@ -96,6 +97,7 @@ func start(cfg: Dictionary) -> void:
 	config = cfg
 	aram = Game.Mayhem.is_aram(cfg.map)
 	mayhem = cfg.get("map") == Game.Mayhem.MAP_ID
+	urf = cfg.map == Game.ARURF_MAP_ID
 	Game.world = self
 	online = bool(cfg.get("online", false))
 	is_server = multiplayer.is_server()

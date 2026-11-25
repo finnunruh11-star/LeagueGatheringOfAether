@@ -87,6 +87,13 @@ variant with brush, an inhibitor and two Nexus turrets per team. Regular Bridge 
 - Green health relics restore health and mana on pickup, then pulse to heal and restore mana
   to nearby champions on either team. The minimap shows which relics are active.
 
+### All Random URF
+Choose **All Random URF** in the lobby's **Map** menu for a faster Aether Rift match, in
+Practice or online. Pick from two random champion cards. Champions gain 300 ability,
+summoner spell and item haste (one quarter of the base cooldown without other modifiers)
+and 60 move speed before soft caps. Abilities cost no mana; health costs still apply.
+The three lanes, jungle and objectives stay the same as on regular Aether Rift.
+
 ### Aether Rift (Summoner's Rift-style)
 A 14,800 x 14,800 map laid out like Summoner's Rift: blue base bottom-left, red base top-right
 (the red half is the blue half rotated 180 degrees), turrets, inhibitors, Nexus turrets and Nexus at
@@ -274,6 +281,7 @@ Run the lane and base siege integration test, and the Aether Rift test (layout, 
 godot --headless --path . -- --auto=practice --map=two_lanes --selftest=balance
 godot --headless --path . -- --auto=practice --map=arena --char=ember --selftest=windup
 godot --headless --path . -- --auto=practice --map=rift --char=ember --selftest=rift
+godot --headless --path . -- --auto=practice --map=arurf --selftest=arurf
 godot --headless --path . -- --auto=practice --map=aram --bots_red=1 --selftest=aram
 godot --headless --path . -- --auto=practice --map=aram_mayhem --bots_red=1 --selftest=mayhem
 ```
