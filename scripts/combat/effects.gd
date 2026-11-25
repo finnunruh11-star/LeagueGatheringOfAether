@@ -17,6 +17,7 @@ const VARS := [
 	"dmg", "dtype", "crit_hit", "is_attack", "is_ability", "is_dot", "is_aoe", "slot", "amount",
 	"in_combat", "combat_time", "since_hit", "since_combat", "gold", "kills", "deaths", "assists", "energy", "legendaries", "moving",
 	"cc", "t_self", "at_base", "t_summon", "dmg_raw", "shield", "t_shield", "t_ward", "bond", "t_bond",
+	"t_monster", "t_large_monster", "t_epic",
 ]
 const DAMAGE_TYPES := ["physical", "magic", "true"]
 const FORMULA_WORDS := [
@@ -92,7 +93,7 @@ class Env extends RefCounted:
 	func near_enemies(r: float, without := "") -> int:
 		return _count(r, false, true, without)
 
-	## Enemy units (champions, minions, summons) near the caster.
+	## Enemy units (champions, minions, summons) near the caster. Jungle monsters don't count.
 	func near_units(r: float) -> int:
 		return _count(r, false, false)
 
@@ -102,7 +103,7 @@ class Env extends RefCounted:
 			return 0
 		var n := 0
 		for u in Game.world.units:
-			if u == c or u.dead or u.is_structure or (champs and not u.is_champion) or (u.team == c.team) != allies:
+			if u == c or u.dead or u.is_structure or (champs and not u.is_champion) or (u.team == c.team) != allies or u is Monster:
 				continue
 			if without != "" and not u.find_status(without, c).is_empty():
 				continue
@@ -450,6 +451,10 @@ static func _values(ctx: Dictionary) -> Array:
 	vals[72] = 1.0 if tv and t.is_ward else 0.0
 	vals[73] = c.bond if cv else 0.0
 	vals[74] = t.bond if tv else 0.0
+	if tv and t is Monster:
+		vals[75] = 1.0
+		vals[76] = 1.0 if t.large else 0.0
+		vals[77] = 1.0 if t.epic else 0.0
 	return vals
 
 

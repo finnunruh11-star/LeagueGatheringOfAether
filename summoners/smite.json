@@ -3,7 +3,7 @@
   "short": "SM",
   "color": "#ffb347",
   "glyph": "bolt",
-  "description": "Deals 600 true damage to target enemy minion or summon (not champions or wards). There are no jungle camps, so it's for cannon minions and enemy pets/turrets.",
+  "description": "Deals 600 true damage to target monster, or enemy minion or summon (not champions or wards). Secure buffs, Dragon and Baron with it; on maps without a jungle it's for cannon minions and enemy pets/turrets.",
   "cooldown": 60,
   "targeting": "unit",
   "range": 500,

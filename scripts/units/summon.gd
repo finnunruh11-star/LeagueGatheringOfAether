@@ -86,7 +86,7 @@ func _think(delta: float) -> void:
 	if attack_target != null and (not valid_target(attack_target) or global_position.distance_to(attack_target.global_position) > limit + 120.0):
 		attack_target = null
 	if attack_target == null:
-		attack_target = world.nearest_enemy(global_position, team, limit, false, false)
+		attack_target = world.nearest_enemy(global_position, team, limit, false, false, false)
 	move_goal = null
 	if attack_target == null and o != null and not stationary and global_position.distance_to(o.global_position) > 220.0:
 		move_goal = o.global_position + Vector2(randf_range(-90, 90), randf_range(-90, 90))

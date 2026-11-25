@@ -11,6 +11,7 @@ const SELL_RATIO := 0.7
 ## Events that item/passive effects can't set off again (no infinite proc chains) unless the
 ## trigger has "procs": true.
 const PROC_GUARDED := ["deal_damage", "deal_damage_pre", "heal_ally", "shield_ally", "buff_ally"]
+const JUNGLE_BUFFS := ["crest_of_insight", "crest_of_cinders", "hand_of_baron", "aspect_of_the_elder"]
 
 var peer := 0
 var def := {}
@@ -63,6 +64,7 @@ var bot_plan: Array = []
 var bot_difficulty := "normal"  # brick / normal / scripting (see BotBrain)
 var brain: BotBrain = null     # host: the bot AI while is_bot
 var cs := 0                    # minions and summons killed (host)
+var jungle_times := PackedFloat32Array([0.0, 0.0, 0.0, 0.0])  # clients: replicated JUNGLE_BUFFS timers
 var target_id := 0
 
 
@@ -626,7 +628,7 @@ func on_damaged(_amount: float, src) -> void:
 
 func on_kill(victim) -> void:
 	var p: Vector2 = victim.global_position if is_instance_valid(victim) else global_position
-	if victim is Minion or (victim is Summon and not victim.is_ward):
+	if victim is Minion or victim is Monster or (victim is Summon and not victim.is_ward):
 		cs += 1
 	trigger("kill", victim, p)
 	if victim is Champion:
@@ -1296,7 +1298,7 @@ func start_recall() -> void:
 	if dead or recall_timer > 0.0 or casting != null or attack_action_locked():
 		return
 	cancel_attack_windup()
-	recall_timer = 8.0
+	recall_timer = 4.0 if not find_status("hand_of_baron").is_empty() else 8.0
 	move_goal = null
 	attack_target = null
 	amove = null
@@ -1377,6 +1379,8 @@ func respawn() -> void:
 	mana = stats.max_mana
 	flags = 0
 	world.fx("spawn", {"p": global_position, "c": team_color(), "r": radius * 2.0})
+	if world.jungle != null:
+		world.jungle.sync_team_buffs(self)
 	trigger("spawn", self)
 
 
@@ -1419,7 +1423,18 @@ func net_state() -> PackedFloat32Array:
 	for k in SLOTS:
 		s.append_array([recast_left[k], recast_charges[k]])
 	s.append_array([sum_cd[0], sum_cd[1], sum_cd_total[0], sum_cd_total[1], 1.0 if sum_recast[0] else 0.0, 1.0 if sum_recast[1] else 0.0])
+	s.append_array(jungle_buff_times())
 	return s
+
+
+## Seconds left on Crest of Insight, Crest of Cinders, Hand of Baron and Aspect of the Elder.
+func jungle_buff_times() -> PackedFloat32Array:
+	if puppet:
+		return jungle_times
+	var out := PackedFloat32Array()
+	for id in JUNGLE_BUFFS:
+		out.append(maxf(float(find_status(id).get("time", 0.0)), 0.0))
+	return out
 
 
 ## What an item slot shows: [count or stacks, cooldown, cooldown total]. Items without an
@@ -1501,6 +1516,9 @@ func apply_net_state(s: PackedFloat32Array) -> void:
 		sum_cd = [s[o], s[o + 1]]
 		sum_cd_total = [s[o + 2], s[o + 3]]
 		sum_recast = [s[o + 4] > 0.5, s[o + 5] > 0.5]
+	o += 6
+	if o + JUNGLE_BUFFS.size() <= s.size():
+		jungle_times = s.slice(o, o + JUNGLE_BUFFS.size())
 	if changed:
 		_rebuild_triggers()
 

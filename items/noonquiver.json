@@ -20,9 +20,9 @@
   "passives": [
     {
       "name": "Precision",
-      "description": "Basic attacks deal 20 bonus physical damage to minions (no jungle monsters in this game).",
+      "description": "Basic attacks deal 20 bonus physical damage to minions and monsters.",
       "on": "attack",
-      "if": "t_minion",
+      "if": "t_monster or t_minion",
       "effects": [
         {
           "type": "damage",
