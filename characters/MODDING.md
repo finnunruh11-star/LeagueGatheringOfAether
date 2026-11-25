@@ -88,6 +88,7 @@ All stats can be changed temporarily with the `buff` effect.
   "range": 900,
   "cast_time": 0,                    // windup in seconds before effects; 0 is instant
   "start_effects": [ ... ],          // optional: run when a cast_time starts (e.g. a warning marker)
+  "cancels_attacks": false,          // true: can always be cast, even as a basic attack is about to land (that attack is lost)
   "effects": [ ... ]
 }
 ```

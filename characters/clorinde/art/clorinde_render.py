@@ -325,10 +325,9 @@ def build_fx(rig, R, weapons, fr):
         for a, b in pairs:
             add("Bolt", A.bolt_geo(a, b, rnd.randrange(1 << 16), width, 6, (b - a).length * 0.12), mat)
 
-    def crescent(span, alpha_mat, r0=0.42, r1=0.6):
+    def crescent(span, alpha_mat, sgn, r0=0.42, r1=0.6):
         # a swoosh around her at gun height that ends where the pistol points
         end = math.atan2(aim.y, aim.x)
-        sgn = 1 if fr["f"] % 2 == 0 else -1
         c = Vector((hips.x, hips.y, muzzle.z - 0.05))
         verts, faces, uvs = [], [], []
         n = 22
@@ -351,10 +350,12 @@ def build_fx(rig, R, weapons, fr):
             add("Star2", A.star_geo(hot + cam * 0.06, cam, 0.17, 4, 0.16, twist=math.pi / 4), "glint")
             add("StarGlow", A.star_geo(hot + cam * 0.04, cam, 0.15, 12, 0.85), "flash")
             add("Muzzle", A.star_geo(muzzle + aim * 0.03, aim, 0.12, 8, 0.35, 0.4), "hot")
-        elif name == "crescent":
-            crescent(170, "crescent", 0.3, 0.62)
-        elif name == "crescent_fade":
-            crescent(110, "streak_dim", 0.5, 0.66)
+        elif name.startswith("crescent"):          # crescent_[fade_]l / _r: which way it curls
+            sgn = -1 if name.endswith("_l") else 1
+            if "fade" in name:
+                crescent(110, "streak_dim", sgn, 0.5, 0.66)
+            else:
+                crescent(170, "crescent", sgn, 0.3, 0.62)
         elif name == "flash_in":
             add("Aura", A.star_geo(chest + cam * 0.2, cam, 0.42, 14, 0.82), "aura")
             bolts([(chest + Vector((rnd.uniform(-.2, .2), rnd.uniform(-.2, .2), rnd.uniform(-.3, .2))),
@@ -474,7 +475,8 @@ def render_clips(names, out_dir, dirs=range(8), samples=16):
             old = {c["name"]: c for c in json.load(fh).get("clips", [])}
     for c in manifest["clips"]:
         old[c["name"]] = c
-    manifest["clips"] = list(old.values())
+    current = {c.name for c in C.all_clips()}
+    manifest["clips"] = [c for c in old.values() if c["name"] in current]     # drop clips that no longer exist
     with open(path, "w") as fh:
         json.dump(manifest, fh, indent=1)
 

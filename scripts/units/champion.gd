@@ -234,7 +234,10 @@ func command(cmd: String, args: Array) -> void:
 
 func cast(slot: String, aim: Vector2, tid: int) -> bool:
 	var ab = active_ability(slot)
-	if ab == null or int(ranks.get(slot, 0)) <= 0 or dead or cooldowns.get(slot, 0.0) > 0.0 or not can_cast() or casting != null:
+	if ab == null or int(ranks.get(slot, 0)) <= 0 or dead or cooldowns.get(slot, 0.0) > 0.0 or casting != null:
+		return false
+	var over_attacks := bool(ab.get("cancels_attacks", false))
+	if not can_cast(over_attacks):
 		return false
 	var is_recast := recasts.has(slot) and not is_same(ab, def.abilities.get(slot))
 	var ctx := _make_ctx(ab, aim, tid)
@@ -257,7 +260,9 @@ func cast(slot: String, aim: Vector2, tid: int) -> bool:
 	if is_recast:
 		_spend_recast(slot)
 	_cancel_recall()
-	cancel_attack_windup()
+	cancel_attack_windup(over_attacks)
+	if over_attacks:
+		recovery_lock = 0.0
 	face(ctx.pos)
 	var ct := Effects.num(ab.cast_time, ctx, 0.0)
 	var variant := (ACT_RECAST if is_recast else 1) + SLOTS.find(slot)

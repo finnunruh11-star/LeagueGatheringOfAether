@@ -374,8 +374,9 @@ func can_attack() -> bool:
 		and not has_status("busy")
 
 
-func can_cast() -> bool:
-	return not attack_action_locked() and not dead and forced == null and not has_status("stun") and not has_status("silence") \
+## `over_attacks`: the ability may interrupt a basic attack that is about to land or recovering.
+func can_cast(over_attacks := false) -> bool:
+	return (over_attacks or not attack_action_locked()) and not dead and forced == null and not has_status("stun") and not has_status("silence") \
 		and not has_status("stasis") and not has_status("busy")
 
 
