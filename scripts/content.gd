@@ -49,9 +49,11 @@ const DEFAULT_STATS := {
 	"vision": 1350.0,            # sight radius (fog of war)
 	"size": 1.0,
 	"damage_mult": 1.0,
+	"structure_damage_mult": 1.0,
 	"damage_taken_mult": 1.0,
 	"cooldown_mult": 1.0,
 	"summoner_haste": 0.0,       # shortens summoner spell cooldowns like ability haste
+	"item_haste": 0.0,
 	"ghost": 0.0,                # > 0: walks through other units (Ghost)
 }
 

@@ -490,7 +490,7 @@ static func _one(e: Dictionary, ctx: Dictionary) -> void:
 	match type:
 		"damage":
 			var u := _unit(e, ctx)
-			if u and not _blocked(u, ctx):
+			if u and not _blocked(u, ctx, bool(e.get("spellshieldable", false))):
 				var amt := num(e.get("amount"), ctx, 50.0) * rmult
 				var hit := _hit(e, ctx, u)
 				var c := _caster(ctx)
@@ -505,9 +505,12 @@ static func _one(e: Dictionary, ctx: Dictionary) -> void:
 				var amt := num(e.get("amount"), ctx, 50.0) * rmult
 				if c:
 					amt *= 1.0 + c.stats.get("heal_power", 0.0)
+					if c is Champion and c.rune_state != null and c.rune_state.has(8224) and ctx.get("src_slot") == "r":
+						amt *= 1.12
 				var healed := u.heal(amt, c, bool(e.get("show", true)), bool(e.get("convert", true)))
 				if c and u != c and u.is_champion and healed > 0.0:
 					c.trigger("heal_ally", u, null, {"amount": healed, "is_proc": bool(ctx.get("proc", false))})
+					if c is Champion and c.rune_state != null: c.rune_state.support(u)
 		"bond_of_life":
 			var u := _unit(e, ctx)
 			if u and (u.team == int(ctx.get("team", -1)) or not _blocked(u, ctx)):
@@ -523,6 +526,10 @@ static func _one(e: Dictionary, ctx: Dictionary) -> void:
 				var amt: float = num(e.get("amount"), ctx, 100.0) * rmult * (1.0 + u.stats.get("heal_received", 0.0))
 				if c:
 					amt *= 1.0 + c.stats.get("heal_power", 0.0)
+					if c is Champion and c.rune_state != null and c.rune_state.has(8224) and ctx.get("src_slot") == "r":
+						amt *= 1.12
+				if u.hp < u.stats.max_hp * 0.4 and ((u is Champion and u.rune_state != null and u.rune_state.has(8453)) or (c is Champion and c.rune_state != null and c.rune_state.has(8453))):
+					amt *= 1.1
 				for s in u.statuses:
 					if s.type == "shield_break":
 						amt *= 1.0 - clampf(s.amount, 0.0, 1.0)
@@ -533,6 +540,7 @@ static func _one(e: Dictionary, ctx: Dictionary) -> void:
 				_add(u, sh, e, ctx)
 				if c and u != c and u.is_champion:
 					c.trigger("shield_ally", u, null, {"amount": amt, "is_proc": bool(ctx.get("proc", false))})
+					if c is Champion and c.rune_state != null: c.rune_state.support(u)
 		"shield_break":
 			var u := _unit(e, ctx)
 			if u:
@@ -583,13 +591,19 @@ static func _one(e: Dictionary, ctx: Dictionary) -> void:
 			var u := _unit(e, ctx)
 			if u and (type == "hot" or not _blocked(u, ctx)):
 				var iv := maxf(num(e.get("interval"), ctx, 0.5), 0.1)
-				_add(u, {"type": type, "amount": num(e.get("amount"), ctx, 20.0) * rmult, "interval": iv, "tick": iv,
-					"time": num(e.get("duration"), ctx, 3.0), "dtype": str(e.get("damage_type", "magic")), "col": _color(e, ctx),
+				var amount := num(e.get("amount"), ctx, 20.0) * rmult
+				var duration := num(e.get("duration"), ctx, 3.0)
+				var c := _caster(ctx)
+				if type == "hot" and c is Champion and c.rune_state != null and c.rune_state.has(8352) and str(ctx.get("item", "")).ends_with("_potion"):
+					u.heal(amount * duration * 0.4, c)
+					amount *= 0.6
+				_add(u, {"type": type, "amount": amount, "interval": iv, "tick": iv,
+					"time": duration, "dtype": str(e.get("damage_type", "magic")), "col": _color(e, ctx),
 					"src_slot": str(ctx.get("src_slot", "")), "item": str(ctx.get("item", "")), "raw": bool(e.get("raw", false)),
 					"proc": bool(ctx.get("proc", false))}, e, ctx)
 		"buff":
 			var u := _unit(e, ctx)
-			if u and (u.team == int(ctx.get("team", -1)) or not _blocked(u, ctx)):
+			if u and not _blocked(u, ctx, bool(e.get("spellshieldable", false))):
 				var add := {}
 				var mult := {}
 				var ra = e.get("add", {})
@@ -866,14 +880,14 @@ static func _cc_event(type: String, u: Unit, ctx: Dictionary) -> void:
 
 
 ## Spell shields block the first enemy ability effect (and the rest of that hit).
-static func _blocked(u: Unit, ctx: Dictionary) -> bool:
+static func _blocked(u: Unit, ctx: Dictionary, spellshieldable := false) -> bool:
 	if u.team == int(ctx.get("team", -99)):
 		return false
 	var key := "_blocked_%d" % u.net_id
 	if ctx.has(key):
 		return ctx[key]
 	var blocked := false
-	if str(ctx.get("src_slot", "")) in ["q", "w", "e", "r"] and u.has_status("spellshield"):
+	if (spellshieldable or str(ctx.get("src_slot", "")) in ["q", "w", "e", "r"]) and u.has_status("spellshield"):
 		u.statuses = u.statuses.filter(func(s): return s.type != "spellshield")
 		Game.world.fx("text", {"pos": u.global_position + Vector2(0, -60), "text": "Blocked!", "color": Color(0.8, 0.65, 1.0), "size": 22})
 		Game.world.fx("ring", {"pos": u.global_position, "radius": u.radius + 30.0, "color": Color(0.8, 0.65, 1.0)})
@@ -961,6 +975,9 @@ static func _area_now(e: Dictionary, ctx: Dictionary, center: Vector2, radius: f
 			"minions":
 				if not u is Minion:
 					continue
+			"large_minions":
+				if not u is Minion or u.minion_type not in ["siege", "super"]:
+					continue
 			"non_champions":
 				if u.is_champion:
 					continue
@@ -1019,6 +1036,8 @@ static func _knockback(type: String, e: Dictionary, ctx: Dictionary) -> void:
 			dir = ctx.get("dir", Vector2.RIGHT)
 	if dist > 0.0:
 		u.knockback(dir * dist, dur)
+		if c is Champion and c.rune_state != null:
+			c.rune_state.crowd_control(u, true)
 		_cc_event(type, u, ctx)
 
 
@@ -1038,12 +1057,17 @@ static func _dash(e: Dictionary, ctx: Dictionary) -> void:
 				length = clampf(to.length(), minf(num(e.get("min_distance"), ctx, 0.0), dist), dist)
 		"back", "backward", "backwards":
 			dir = -dir
-		"target":
+		"target", "behind_target":
 			var t = ctx.get("target")
 			if is_instance_valid(t) and t != c:
 				var to2: Vector2 = t.global_position - c.global_position
-				dir = to2.normalized()
-				length = maxf(to2.length() - t.radius - c.radius, 0.0)
+				if str(e.to) == "behind_target":
+					if not to2.is_zero_approx():
+						dir = to2.normalized()
+					length = to2.length() + dist
+				else:
+					dir = to2.normalized()
+					length = maxf(to2.length() - t.radius - c.radius, 0.0)
 	c.start_dash(dir, length, speed, e, sub(ctx))
 	c.trigger("dash", c, c.global_position + dir * length)
 
@@ -1131,6 +1155,13 @@ static func _summon(e: Dictionary, ctx: Dictionary) -> void:
 		var at := center
 		if count > 1:
 			at += Vector2.from_angle(TAU * k / count) * 45.0
+		var caster := _caster(ctx)
+		var duration := num(e.get("duration"), ctx, 10.0)
+		if bool(e.get("ward", false)) and caster is Champion and caster.rune_state != null and caster.rune_state.has(8141):
+			var in_river: bool = caster.rune_state.river(at)
+			if (in_river and caster.level >= 9) or (not in_river and at.distance_to(w.map.spawn_point(1 - caster.team)) < at.distance_to(w.map.spawn_point(caster.team))):
+				st.max_hp = float(st.get("max_hp", 4.0)) + 1.0
+				duration += 30.0 + 15.0 * caster.rune_state.progress()
 		var s = w.spawn("summon", {
 			"pos": w.map.nearest_open(at), "team": int(ctx.get("team", 0)), "name": str(e.get("name", "Summon")),
 			"color": _color(e, ctx), "stats": st, "ranged": bool(e.get("ranged", false)),
@@ -1138,5 +1169,5 @@ static func _summon(e: Dictionary, ctx: Dictionary) -> void:
 			"char": str(ctx.get("char", "")), "stationary": bool(e.get("stationary", false)),
 			"ward": bool(e.get("ward", false)), "reveal": bool(e.get("reveal", false)),
 		})
-		s.init_server(_caster(ctx), num(e.get("duration"), ctx, 10.0), e, sub(ctx))
+		s.init_server(caster, duration, e, sub(ctx))
 		w.fx("spawn", {"p": s.global_position, "c": s.color, "r": s.radius})

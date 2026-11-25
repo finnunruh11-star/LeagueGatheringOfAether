@@ -1,7 +1,7 @@
 {
   "name": "Prowler's Claw",
-  "cost": 3000,
-  "rarity": "legendary",
+  "cost": 3100,
+  "rarity": "mythic",
   "from": [
     "serrated_dirk",
     "caulfields_warhammer"
@@ -13,79 +13,57 @@
     "AbilityHaste"
   ],
   "stats": {
-    "attack_damage": 55.0,
+    "attack_damage": 60.0,
     "lethality": 18.0,
-    "ability_haste": 15.0
+    "ability_haste": 20.0
   },
-  "description": "",
+  "mythic_stats": {
+    "lethality": 5.0,
+    "move_speed": 5.0
+  },
+  "active": {
+    "name": "Sandswipe",
+    "description": "Dash through an enemy champion and deal 75 + 30% bonus AD physical damage. For the next 3s, you deal 15% more damage to that champion.",
+    "targeting": "unit",
+    "requires": "t_champion",
+    "range": 500,
+    "cooldown": 90,
+    "effects": [
+      {
+        "type": "dash",
+        "to": "behind_target",
+        "distance": 150,
+        "speed": 2000,
+        "precise_distance": true,
+        "on_end": [
+          {
+            "type": "damage",
+            "damage_type": "physical",
+            "amount": "75 + 0.3 * bonus_ad",
+            "spellshieldable": true,
+            "vfx": "claw_red",
+            "color": "#ff5a4a"
+          },
+          {
+            "type": "buff",
+            "id": "prowlers_claw_sandswipe",
+            "duration": 3,
+            "spellshieldable": true
+          }
+        ]
+      }
+    ]
+  },
   "passives": [
     {
-      "name": "Sandstrike",
-      "description": "After you dash, blink or leave stealth, your next attack on a champion within 3s deals 85 + 55% bonus AD (melee) / 65 + 35% bonus AD (ranged) bonus physical damage; melee hits also slow by 99% for 0.5s (5s cooldown).",
-      "on": "dash",
+      "name": "Sandswipe",
+      "on": "deal_damage_pre",
+      "if": "t_has('prowlers_claw_sandswipe')",
+      "procs": true,
       "effects": [
         {
-          "type": "mark",
-          "target": "self",
-          "id": "prowlers_claw_sandstrike",
-          "duration": 3,
-          "max_stacks": 1
-        }
-      ]
-    },
-    {
-      "name": "Sandstrike",
-      "on": "interval",
-      "interval": 0.25,
-      "if": "has('stealth') or has('prowlers_claw_stealthed')",
-      "effects": [
-        {
-          "type": "mark",
-          "target": "self",
-          "id": "prowlers_claw_sandstrike",
-          "duration": 3,
-          "max_stacks": 1,
-          "if": "not has('stealth')"
-        },
-        {
-          "type": "remove",
-          "target": "self",
-          "id": "prowlers_claw_stealthed",
-          "if": "not has('stealth')"
-        },
-        {
-          "type": "mark",
-          "target": "self",
-          "id": "prowlers_claw_stealthed",
-          "duration": 1,
-          "max_stacks": 1,
-          "if": "has('stealth')"
-        }
-      ]
-    },
-    {
-      "name": "Sandstrike",
-      "on": "attack",
-      "if": "t_champion and has('prowlers_claw_sandstrike')",
-      "cooldown": 5,
-      "effects": [
-        {
-          "type": "remove",
-          "target": "self",
-          "id": "prowlers_claw_sandstrike"
-        },
-        {
-          "type": "damage",
-          "damage_type": "physical",
-          "amount": "melee * (85 + 0.55 * bonus_ad) + ranged * (65 + 0.35 * bonus_ad)",
-          "vfx": "claw_red",
-          "color": "#ff5a4a"
-        },
-        {
-          "type": "slow",
-          "amount": 0.99,
-          "duration": 0.5,
-          "if": "melee"
+          "type": "modify_damage",
+          "mult": 1.15
         }
       ]
     }

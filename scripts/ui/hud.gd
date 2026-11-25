@@ -54,6 +54,7 @@ var _notice_t := 9.0
 var minimap: DrawControl
 var minimap_units: DrawControl
 var scores: Scoreboard
+var rune_actions: Button
 var inspected_unit: Unit
 var inspect_label: Label
 var end_panel: PanelContainer
@@ -259,6 +260,9 @@ func _ready() -> void:
 	scores.mouse_filter = Control.MOUSE_FILTER_STOP
 	_place(scores, 0.5, 0.5, -380, -260, 760, 520)
 	root.add_child(scores)
+	rune_actions = UiKit.button(root, "Rune actions", _open_rune_actions)
+	_place(rune_actions, 0.5, 0.5, 208, 216, 152, 32)
+	rune_actions.hide()
 
 	var inspect_panel := PanelContainer.new()
 	inspect_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
@@ -415,6 +419,60 @@ func flash_slot(slot: String) -> void:
 
 func show_scores(on: bool) -> void:
 	scores.visible = on
+	var ch := world.local_champion
+	var picks: Array = ch.rune_page.major + ch.rune_page.minor if ch != null and not ch.rune_page.is_empty() else []
+	rune_actions.visible = on and picks.any(func(id): return id in [8345, 8317, 8124, 8360, 8358])
+
+
+func _open_rune_actions() -> void:
+	var ch := world.local_champion
+	if ch == null or ch.rune_page.is_empty():
+		return
+	var picks: Array = ch.rune_page.major + ch.rune_page.minor
+	var dialog := AcceptDialog.new()
+	dialog.title = "Rune actions"
+	dialog.ok_button_text = "Close"
+	add_child(dialog)
+	var box := VBoxContainer.new()
+	dialog.add_child(box)
+	dialog.confirmed.connect(dialog.queue_free)
+	dialog.canceled.connect(dialog.queue_free)
+	var biscuits := int(ch.rune_state.state.get("biscuits", 0)) if ch.rune_state != null else ch.rune_biscuits
+	var current: int = ch.rune_state.rotation[ch.rune_state.rotation_index] if ch.rune_state != null else ch.rune_keystone
+	if 8358 in picks:
+		UiKit.label(box, "Omnistone: " + Runes.keystone_name(current))
+	if 8345 in picks:
+		for option in [["Eat biscuit (%d)" % biscuits, "biscuit"], ["Sell biscuit (%d)" % biscuits, "sell_biscuit"]]:
+			var b := UiKit.button(box, option[0], func():
+				world.send_command("rune", [option[1]])
+				dialog.queue_free())
+			b.disabled = biscuits <= 0
+	if 8124 in picks or (8358 in picks and current == 8124):
+		UiKit.button(box, "Activate Predator", func():
+			world.send_command("rune", ["predator"])
+			dialog.queue_free())
+	if 8317 in picks:
+		UiKit.button(box, "Aim Minion Dematerializer", func():
+			world.dematerializer_armed = true
+			show_scores(false)
+			notice("Click an enemy lane minion; right-click to cancel")
+			dialog.queue_free())
+	if 8360 in picks:
+		for i in ch.summoners.size():
+			var picker := OptionButton.new()
+			picker.add_item("Replace " + str(Game.summoners[ch.summoners[i]].name))
+			var available := []
+			for id in Game.summoner_ids:
+				if not ch.summoners.has(id):
+					picker.add_item(Game.summoners[id].name)
+					available.append(id)
+			picker.disabled = world.time < 360.0
+			picker.item_selected.connect(func(index: int):
+				if index > 0:
+					world.send_command("rune", ["spellbook", i, available[index - 1]])
+					dialog.queue_free())
+			box.add_child(picker)
+	dialog.popup_centered(Vector2i(320, 200))
 
 
 func show_end(t: int) -> void:

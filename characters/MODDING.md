@@ -224,7 +224,7 @@ completely fires the `bond_cleared` trigger.
 ### Movement (you)
 | type | keys |
 |---|---|
-| `dash` | `to` "aim" (toward the target point) / "direction" (full distance) / "back" / "target"; `distance` 350, `min_distance` (aim dashes go at least this far), `speed` 1400, `on_hit` [effects on each unit passed through], `stop_on_hit`, `on_end` [effects at the landing spot] |
+| `dash` | `to` "aim" (toward the target point) / "direction" (full distance) / "back" / "target" / "behind_target" (continue `distance` units past the target's center); `distance` 350, `min_distance` (aim dashes go at least this far), `speed` 1400, `on_hit` [effects on each unit passed through], `stop_on_hit`, `on_end` [effects at the landing spot] |
 | `teleport` | `to` "pos" (default) / "target" (behind the target) / "around_target" (a random spot `min_distance` 120 - `distance` 220 from the target's edge, on a different side than now, facing it) / "home"; `show` false hides the blink effect |
 
 ### Spawners
@@ -354,6 +354,9 @@ fountain or while dead (anywhere in Practice / the Training Arena). Keys **1-6**
   of one item don't double up). Inside them `rank` = your level, so 18-entry lists scale by level.
 - `active` works like an ability (targeting, range, indicator) and is used with keys 1-6 (`"while_dead": true` allows using it while dead; `"requires": "t_minion"` - an expression checked before the cooldown starts, e.g. only usable on minions).
   Consumables (`"consume": true`, default for rarity consumable) lose one charge per use.
+- For an item active that should be blocked by spell shields, set `"spellshieldable": true` on its
+  damage and buff effects. An `area` with `"filter": "large_minions"` selects only siege and super
+  minions; their damage to structures can be scaled with `structure_damage_mult`.
 - `{"type": "transform", "into": "muramana"}` inside a passive upgrades the item in place.
 
 Examples in `items/`: `sheen.json` (Spellblade with marks), `kraken_slayer.json` (every 3rd attack,

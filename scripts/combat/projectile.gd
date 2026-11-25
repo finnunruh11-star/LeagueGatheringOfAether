@@ -32,6 +32,9 @@ var through_walls := false
 var last_hit = null
 var done := false
 var trail: Line2D
+var swept_hit: Callable
+var swept_wall: Callable
+var sweep_radius := 0.0
 
 var net_from := Vector2.ZERO
 var net_to := Vector2.ZERO
@@ -86,6 +89,9 @@ func _physics_process(delta: float) -> void:
 		return
 	if mode == "attack":
 		_attack_step(delta)
+		return
+	if swept_hit.is_valid():
+		_swept_step(delta)
 		return
 	if target != null:
 		if not is_instance_valid(target) or target.dead:
@@ -157,6 +163,42 @@ func _attack_step(delta: float) -> void:
 	dir = to.normalized()
 	global_position += dir * step
 	rotation = dir.angle()
+
+
+func _swept_step(delta: float) -> void:
+	var step := minf(speed * delta, max_dist - traveled)
+	var from := global_position
+	var wall := INF if through_walls else world.map.wall_distance(from, dir, step)
+	var end := from + dir * minf(step, wall)
+	var contacts := []
+	for u: Unit in world.query_line(from, end, sweep_radius, team, affects, hits_structures, hits_structures):
+		if hit_ids.has(u.net_id) or (u.is_ward and not u.visible_to(team)):
+			continue
+		var offset := u.global_position - from
+		var along := offset.dot(dir)
+		var perpendicular := offset.cross(dir)
+		var r := sweep_radius + u.radius
+		var contact := maxf(along - sqrt(maxf(r * r - perpendicular * perpendicular, 0.0)), 0.0)
+		if contact < wall:
+			contacts.append({"unit": u, "distance": contact})
+	contacts.sort_custom(func(a, b): return a.distance < b.distance)
+	for entry: Dictionary in contacts:
+		var u: Unit = entry.unit
+		if not u.targetable():
+			continue
+		hit_ids[u.net_id] = true
+		global_position = from + dir * float(entry.distance)
+		if bool(swept_hit.call(u)) or pierce == 0:
+			_finish()
+			return
+		if pierce > 0:
+			pierce -= 1
+	global_position = end
+	traveled += step
+	if wall < INF and swept_wall.is_valid():
+		swept_wall.call(end)
+	if wall < INF or traveled >= max_dist:
+		_finish()
 
 
 func _hit(u) -> void:

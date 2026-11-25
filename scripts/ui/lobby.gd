@@ -13,6 +13,7 @@ var problems: RichTextLabel
 var editing := 0
 var _map_ids: Array = []
 var sum_pick: Array = []   # the two summoner spell OptionButtons
+var rune_button: Button
 var _preview_id := ""
 var _expanded := false
 var _suggest_button: Button
@@ -64,6 +65,7 @@ func _ready() -> void:
 		o.item_selected.connect(_pick_summoner.bind(i))
 		srow.add_child(o)
 		sum_pick.append(o)
+	rune_button = UiKit.button(left, "Runes", _edit_runes)
 	var mrow := UiKit.row(left)
 	UiKit.label(mrow, "Map", 50)
 	map_select = OptionButton.new()
@@ -277,6 +279,28 @@ func _refresh() -> void:
 	if mine != null:
 		_show_details(mine.character)
 	_refresh_summoners(mine, mine != null and (editing == 0 or (Game.is_host() and bool(mine.bot))))
+	rune_button.disabled = mine == null or (editing != 0 and not (Game.is_host() and bool(mine.bot)))
+	if mine != null:
+		var page: Dictionary = mine.get("runes", {})
+		rune_button.text = "Runes: " + Runes.keystone(page if Runes.valid(page) else Game.default_runes(mine.character))
+
+
+func _edit_runes() -> void:
+	var me := multiplayer.get_unique_id()
+	var pid := editing if editing != 0 else me
+	var player: Dictionary = Game.players.get(pid, {})
+	if player.is_empty():
+		return
+	var page: Dictionary = player.get("runes", {})
+	var editor := RunePageEditor.new()
+	add_child(editor)
+	editor.open(player.name, page if Runes.valid(page) else Game.default_runes(player.character), func(chosen):
+		if not Game.players.has(pid):
+			return
+		if pid == me:
+			Game.prefs.runes = chosen
+			Game.save_settings()
+		Game.request_change("runes", chosen, pid if pid != me else 0))
 
 
 ## Bot difficulty (host can change it; the choice also becomes the default for new bots).

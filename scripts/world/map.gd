@@ -383,6 +383,15 @@ func is_wall(p: Vector2) -> bool:
 	return false
 
 
+func wall_distance(from: Vector2, dir: Vector2, length: float) -> float:
+	var count := maxi(ceili(length / 4.0), 1)
+	for i in range(count + 1):
+		var distance := length * i / count
+		if is_wall(from + dir * distance):
+			return distance
+	return INF
+
+
 ## Brush id at `p` (1-based index into `brushes`), 0 outside any brush.
 func brush_at(p: Vector2) -> int:
 	if brushes.is_empty():

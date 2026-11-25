@@ -1,62 +1,63 @@
 {
   "name": "Hullbreaker",
-  "cost": 3000,
+  "cost": 2800,
   "rarity": "legendary",
   "from": [
     "pickaxe",
-    "phage",
-    "winged_moonplate"
+    "phage"
   ],
   "tags": [
     "Health",
     "SpellBlock",
     "Armor",
-    "Damage",
-    "NonbootsMovement"
+    "Damage"
   ],
   "stats": {
-    "attack_damage": 60.0,
+    "attack_damage": 50.0,
     "max_hp": 400.0,
     "hp_regen_percent": 1.5,
-    "move_speed_bonus": 0.05
+    "armor": "(1 - 0.5 * ranged) * (20 + 40 * max(level - 9, 0) / 9.0) if near_allies(1400) == 0 else 0",
+    "magic_resist": "(1 - 0.5 * ranged) * (20 + 40 * max(level - 9, 0) / 9.0) if near_allies(1400) == 0 else 0"
   },
   "description": "",
   "passives": [
     {
       "name": "Boarding Party",
-      "description": "While no allied champion is within 1400 units, gain 10-60 armor and magic resist (5-30 if ranged; by level) and deal 20% more attack damage to structures. The resists linger 2s after an ally arrives. (There are no large minions, so their buff is left out.)",
+      "description": "While no allied champion is within 1400 units, gain 20-60 armor and magic resist (10-30 if ranged; by level) and deal 20% more damage to structures. Allied siege and super minions within 1050 units gain triple those resists, grow 10% larger, and deal triple damage to structures.",
       "on": "interval",
-      "interval": 0.5,
+      "interval": 0.25,
       "if": "near_allies(1400) == 0",
       "effects": [
         {
-          "type": "buff",
-          "target": "self",
-          "id": "hullbreaker_boarding_party",
-          "duration": 2,
-          "if": "melee",
-          "add": {
-            "armor": [10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 15, 20, 28, 36, 44, 52, 60],
-            "magic_resist": [10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 10, 15, 20, 28, 36, 44, 52, 60]
-          }
-        },
-        {
-          "type": "buff",
-          "target": "self",
-          "id": "hullbreaker_boarding_party",
-          "duration": 2,
-          "if": "ranged",
-          "add": {
-            "armor": [5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 7, 10, 14, 18, 22, 26, 30],
-            "magic_resist": [5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 5, 7, 10, 14, 18, 22, 26, 30]
-          }
+          "type": "area",
+          "at": "self",
+          "radius": 1050,
+          "affects": "allies",
+          "filter": "large_minions",
+          "show": false,
+          "effects": [
+            {
+              "type": "buff",
+              "id": "hullbreaker_boarding_party",
+              "duration": 0.35,
+              "add": {
+                "armor": "(1 - 0.5 * ranged) * (60 + 120 * max(level - 9, 0) / 9.0)",
+                "magic_resist": "(1 - 0.5 * ranged) * (60 + 120 * max(level - 9, 0) / 9.0)"
+              },
+              "multiply": {
+                "size": 1.1,
+                "structure_damage_mult": 3
+              }
+            }
+          ]
         }
       ]
     },
     {
       "name": "Boarding Party",
       "on": "deal_damage_pre",
-      "if": "is_attack and t_structure and has('hullbreaker_boarding_party')",
+      "if": "t_structure and near_allies(1400) == 0",
+      "procs": true,
       "effects": [
         {
           "type": "modify_damage",

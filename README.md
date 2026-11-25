@@ -112,6 +112,16 @@ a bot jungler swaps a summoner spell for Smite and starts with a jungle pet.
   (snowball - recast to dash to whoever it hit). Values are from LoL patch 13.24. They're JSON files
   in `summoners/`, so you can edit them or make your own (see MODDING.md).
 
+## Rune pages
+Choose **Runes** in the lobby to set your primary and secondary paths and three stat shards.
+The host can select a bot's name to edit its page. Unedited pages use a preset for the champion's role.
+The roster follows Summoner's Rift patch 26.23, with nine additional legacy choices, including
+Phase Rush alongside Stormraider's Surge and the live version of Lethal Tempo. Rune effects use
+CusOba's combat, shop and vision rules; they aren't exact League reproductions.
+
+Hold **Tab** and click **Rune actions** to use Biscuits, Predator, Minion Dematerializer, or
+Unsealed Spellbook. Hexflash uses your normal Flash key while Flash is on cooldown.
+
 ## Playing with friends
 1. Host: **Host game** (default UDP port 7777). The lobby shows your local IPs.
 2. Friends: enter the host's IP, **Join game**.
@@ -135,7 +145,7 @@ all join the same virtual LAN, e.g. [Tailscale](https://tailscale.com) or ZeroTi
 ## Make your own characters
 See **[characters/MODDING.md](characters/MODDING.md)** - stats, abilities, the effect building
 blocks (projectiles, explosions, dashes, teleports, shields, heals, stuns, slows, DoTs, summons,
-traps, knockbacks, beams, zones...), passives and sprites. The six example characters show most of it:
+traps, knockbacks, beams, zones...), passives and sprites. The bundled characters show most of it:
 
 - **Sir Bonk** - melee bruiser (dash, shield, spin, leap-slam, every-3rd-hit stun). Animated 8-direction
   knight sprites with alternating swings, a 3rd-hit "BONK" finisher and an animation per ability.
@@ -148,6 +158,15 @@ traps, knockbacks, beams, zones...), passives and sprites. The six example chara
   a parry that stuns if it blocked a champion, adaptive AD/AP damage and a point-and-click ultimate that
   blinks her around the target ten times in a second. 3D-rendered 8-direction sprites with a second
   animation set while her pistol is drawn, afterimages and a lightning-spear dash.
+- **Zeri** - Summoner's Rift patch 16.23 recreation, with a separate right-click zap and aimed Q,
+  terrain-powered W and E, and R chain lightning. Read the green battery bar below mana.
+  Stat growth stops at 18 even on maps that allow levels 19-21.
+
+Zeri's numbers are based on the [16.23 client data](https://raw.communitydragon.org/16.23/game/data/characters/zeri/zeri.bin.json).
+She uses CusOba's built-in visuals, older item pool, and collision rules. Wall abilities do not
+grant League-specific vision, and pellet timing, wall-ride paths, and unusual on-hit interactions
+are approximations. Run her gameplay checks with
+`godot --headless --path . -- --auto=practice --map=arena --char=zeri --selftest=zeri`.
 
 Ember and Clorinde show explicit per-rank numbers (`[70, 105, 140, 175, 210]`); the others scale automatically.
 
@@ -239,6 +258,17 @@ Blender 4.5 (`characters/clorinde/art/`: model, IK pose solver with cloth/hair s
 animations, weapon trails and muzzle flashes). `clorinde_render.py` renders the 8 directions and
 `clorinde_sheets.py` packs them into `characters/clorinde/sprites/` (lossy WebP) and updates the
 sprite block of her character.json. Godot ignores the `.py` files.
+
+All four lane minion types use Blender-rendered PNGs in [assets/minions](./assets/minions),
+with separate blue and red palettes. Lane minion sprites and hitbox radii are both 50% larger
+than their original sizes. Edit the eight scenes in
+[minions.blend](./assets/minions/art/minions.blend) or rebuild them from the project root:
+
+```powershell
+blender --background --python-exit-code 1 --python assets\minions\art\build_minions.py
+```
+
+The script regenerates both the Blender file and the PNGs, overwriting any manual scene edits.
 
 ## How it works (for tinkering)
 - `scripts/game.gd` - lobby, networking (Godot ENet), sends characters to clients

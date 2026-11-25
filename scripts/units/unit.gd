@@ -262,7 +262,7 @@ func _act(delta: float) -> void:
 				attack_starting = true
 				winding_attack = attack_target
 				var period := 1.0 / maxf(stats.attack_speed, 0.05)
-				var duration := minf(0.45, period * (0.32 if is_champion else 0.40))
+				var duration := minf(0.45, period * attack_windup_ratio())
 				begin_windup(ANIM_ATTACK, duration, global_position.direction_to(attack_target.global_position))
 				start_action(ANIM_ATTACK, _attack_variant(), duration, minf(0.3, (period - duration) * 0.8))
 			return
@@ -309,6 +309,10 @@ func _separate() -> void:
 
 func attack_reach(t) -> float:
 	return stats.attack_range + radius + t.radius
+
+
+func attack_windup_ratio() -> float:
+	return 0.32 if is_champion else 0.40
 
 
 func valid_target(t) -> bool:
@@ -375,8 +379,8 @@ func can_attack() -> bool:
 
 
 ## `over_attacks`: the ability may interrupt a basic attack that is about to land or recovering.
-func can_cast(over_attacks := false) -> bool:
-	return (over_attacks or not attack_action_locked()) and not dead and forced == null and not has_status("stun") and not has_status("silence") \
+func can_cast(over_attacks := false, during_dash := false) -> bool:
+	return (over_attacks or not attack_action_locked()) and not dead and (forced == null or (during_dash and forced.dash)) and not has_status("stun") and not has_status("silence") \
 		and not has_status("stasis") and not has_status("busy")
 
 
@@ -596,6 +600,10 @@ func take_damage(amount: float, source = null, dtype := "physical", hit := {}) -
 			amount *= _mitigation(stats.magic_resist, src, false)
 		# Item/passive hooks see the damage after armor/MR and may change it.
 		var info := {"amount": amount}
+		if src is Champion and src.rune_state != null:
+			src.rune_state.pre_damage(self, info, hit)
+		if self is Champion and self.rune_state != null and src is Unit:
+			self.rune_state.defend(src, info, hit)
 		var vars := _hit_vars(hit, amount, dtype, before_mit)
 		vars["dmg_info"] = info
 		if src != null:
@@ -632,6 +640,14 @@ func take_damage(amount: float, source = null, dtype := "physical", hit := {}) -
 				enter_combat()
 	world.on_damage(self, dealt, src, dtype, hit)
 	var raw_dealt := before_mit
+	if src is Champion and src.rune_state != null:
+		src.rune_state.dealt(self, dealt, hit)
+	if self is Champion and self.rune_state != null and src is Unit and src.team != team:
+		self.rune_state.grasp_combat()
+	if self is Champion and self.rune_state != null and src is Champion and src.team != team and hp > 0.0:
+		if self.rune_state.has(8444) and not hit.get("proc", false):
+			var amount_per_second: float = (3.0 + 0.04 * (stats.max_hp - hp)) / 10.0
+			add_status({"type": "hot", "time": 10.0, "tick": 1.0, "interval": 1.0, "amount": amount_per_second}, self, "rune:second_wind")
 	if src != null:
 		src.trigger("deal_damage", self, null, _hit_vars(hit, dealt, dtype, raw_dealt))
 	if not dead:
@@ -651,8 +667,9 @@ func take_damage(amount: float, source = null, dtype := "physical", hit := {}) -
 func _hit_vars(hit: Dictionary, amount: float, dtype: String, before_mit := -1.0) -> Dictionary:
 	var ab := str(hit.get("ability", ""))
 	return {"dmg": amount, "dtype": dtype, "crit_hit": bool(hit.get("crit", false)), "is_attack": bool(hit.get("attack", false)),
-		"is_ability": ab in ["q", "w", "e", "r"], "is_dot": bool(hit.get("dot", false)), "is_aoe": bool(hit.get("aoe", false)),
+		"is_ability": bool(hit.get("spell", ab in ["q", "w", "e", "r"])), "is_dot": bool(hit.get("dot", false)), "is_aoe": bool(hit.get("aoe", false)),
 		"is_proc": bool(hit.get("proc", false)), "hit_item": str(hit.get("item", "")), "onhit": bool(hit.get("onhit", false)),
+		"exclude_unique": str(hit.get("exclude_unique", "")),
 		"dmg_raw": before_mit if before_mit >= 0.0 else amount}
 
 
@@ -682,6 +699,8 @@ func heal(amount: float, _source = null, show := true, convert := true) -> float
 	if dead or puppet or amount <= 0.0:
 		return 0.0
 	amount *= 1.0 + stats.get("heal_received", 0.0)
+	if hp < stats.max_hp * 0.4 and ((self is Champion and self.rune_state != null and self.rune_state.has(8453)) or (_source is Champion and _source.rune_state != null and _source.rune_state.has(8453))):
+		amount *= 1.1
 	var g := 0.0
 	for s in statuses:
 		if s.type == "grievous":
@@ -701,6 +720,14 @@ func heal(amount: float, _source = null, show := true, convert := true) -> float
 		set_bond(bond - paid)
 	var before := hp
 	hp = minf(hp + amount, stats.max_hp)
+	if self is Champion and self.rune_state != null and self.rune_state.has(9102) and is_instance_valid(_source):
+		var excess := maxf(before + amount - float(stats.max_hp), 0.0)
+		if excess > 0.0:
+			for s in statuses:
+				if s.key == "rune:overheal":
+					excess += s.amount
+					break
+			add_status({"type": "shield", "id": "overheal", "time": 6.0, "amount": minf(excess, stats.max_hp * 0.11)}, self, "rune:overheal")
 	if Game.debug_log and hp - before >= 0.5:
 		print("[heal] t=%.2f %s +%.1f (raw %.1f)" % [world.time, display_name, hp - before, amount])
 	if show and hp - before >= 1.0 and (is_champion or self is Summon):
@@ -779,6 +806,11 @@ func add_status(s: Dictionary, source = null, key := "") -> void:
 		return
 	s["source"] = source if is_instance_valid(source) else null
 	s["key"] = key
+	if source is Champion and source.rune_state != null and s.type in ["slow", "root", "stun"]:
+		source.rune_state.crowd_control(self, s.type in ["root", "stun"])
+	if self is Champion and self.rune_state != null and self.rune_state.has(8401) and s.type == "shield":
+		self.rune_state.state.bash = s.amount
+		self.rune_state.state.bash_end = world.time + float(s.time) + 2.0
 	stats_dirty = true
 	if key != "":
 		for i in statuses.size():
@@ -887,7 +919,7 @@ func recompute_stats() -> void:
 		pre_mult = {}
 	for k in mult:
 		st[k] = float(st.get(k, 0.0)) * mult[k]
-	st.attack_speed = minf(st.attack_speed * maxf(1.0 + st.bonus_attack_speed, 0.1), st.attack_speed_cap)
+	_finish_attack_speed(st)
 	slow *= 1.0 - clampf(st.slow_resist, 0.0, 1.0)
 	var ms: float = st.move_speed * maxf(1.0 + st.move_speed_bonus, 0.0) * (1.0 - slow)
 	if ms > 490.0:
@@ -909,6 +941,10 @@ func recompute_stats() -> void:
 	set_radius(base_radius * st.size)
 	_refresh_attack()
 	stats_dirty = false
+
+
+func _finish_attack_speed(st: Dictionary) -> void:
+	st.attack_speed = minf(st.attack_speed * maxf(1.0 + st.bonus_attack_speed, 0.1), st.attack_speed_cap)
 
 
 ## Buffs with an "attack" override replace the basic attack while they last (the newest wins),
@@ -1004,7 +1040,15 @@ func start_dash(dir: Vector2, length: float, speed: float, e: Dictionary, ctx: D
 func _forced_process(delta: float) -> void:
 	var f: Dictionary = forced
 	velocity = f.vel
-	move_and_slide()
+	var phased: bool = f.dash and bool(f.e.get("phase_terrain", false))
+	var collided := false
+	if phased:
+		global_position += velocity * minf(delta, float(f.time))
+	elif f.dash and bool(f.e.get("precise_distance", false)):
+		collided = move_and_collide(velocity * minf(delta, float(f.time))) != null
+	else:
+		move_and_slide()
+		collided = get_slide_collision_count() > 0
 	f.time -= delta
 	if f.dash and f.e.has("on_hit"):
 		var e: Dictionary = f.e
@@ -1018,7 +1062,7 @@ func _forced_process(delta: float) -> void:
 			if bool(e.get("stop_on_hit", false)):
 				f.time = 0.0
 				break
-	if is_same(forced, f) and (f.time <= 0.0 or get_slide_collision_count() > 0):
+	if is_same(forced, f) and (f.time <= 0.0 or collided):
 		_end_forced()
 
 
@@ -1031,6 +1075,8 @@ func _end_forced() -> void:
 
 
 func teleport(p: Vector2) -> void:
+	if self is Champion and self.rune_state != null and p.distance_to(global_position) <= 1200.0:
+		self.rune_state.state.dash_end = world.time + 4.0
 	global_position = p
 	path = PackedVector2Array()
 	forced = null

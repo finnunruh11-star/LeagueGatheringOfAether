@@ -45,6 +45,12 @@ var autobuy := false
 var _built := {}               # build items autobuy already finished (not bought again after selling)
 var _shop_t := 0.0
 var summoners: Array = []      # summoner spell ids (D / F)
+var rune_state: RuneState
+var rune_page: Dictionary = {}
+var rune_biscuits := 0
+var rune_hexflash := false
+var rune_keystone := 0
+var rune_shoes := false
 var sum_cd := [0.0, 0.0]
 var sum_cd_total := [1.0, 1.0]
 var sum_recast := [false, false]   # the slot casts its recast right now (replicated)
@@ -59,6 +65,7 @@ var _trigger_depth := 0
 var _dynamic_stats := false
 var _dyn_t := 0.0
 var _energy_pos := Vector2.INF
+var zeri_charge := 0.0
 var bot_lane := 0
 var bot_plan: Array = []
 var bot_difficulty := "normal"  # brick / normal / scripting (see BotBrain)
@@ -92,7 +99,15 @@ func setup(d: Dictionary) -> void:
 	attack_def = def.attack
 	sprite_info = def.sprite
 	global_position = d.pos
+	if char_id == "zeri" and def.abilities.has("q"):
+		ranks.q = 1
+		skill_points = 0
+		zeri_charge = 100.0
 	gold = float(d.get("gold", 0.0))
+	if Runes.valid(d.get("runes")):
+		rune_page = Runes.canonical(d.runes)
+		if not puppet:
+			rune_state = RuneState.new(self, rune_page)
 	summoners = []
 	for s in d.get("summoners", []):
 		if Game.summoners.has(str(s)) and summoners.size() < 2:
@@ -116,6 +131,10 @@ func uses_mana() -> bool:
 
 func command(cmd: String, args: Array) -> void:
 	match cmd:
+		"rune":
+			if rune_state == null or args.is_empty() or not args[0] is String or not rune_state.action(args[0], args.slice(1)):
+				world.fx("notice", {"peer": peer, "text": "Rune action unavailable for this target or at this time"})
+			return
 		"rank_up":
 			if args.size() > 0 and args[0] is String:
 				rank_up(args[0])
@@ -165,6 +184,9 @@ func command(cmd: String, args: Array) -> void:
 				var d: Vector2 = args[0]
 				move_dir = d.limit_length(1.0) if d.is_finite() else Vector2.ZERO
 				if move_dir != Vector2.ZERO and not dead:
+					if casting != null and casting.ctx.get("hexflash", false):
+						casting = null
+						clear_windup()
 					cancel_attack_windup()
 					move_goal = null
 					amove = null
@@ -189,6 +211,9 @@ func command(cmd: String, args: Array) -> void:
 			return
 	if dead:
 		return
+	if casting != null and casting.ctx.get("hexflash", false) and cmd in ["move", "attack", "amove", "stop"]:
+		casting = null
+		clear_windup()
 	match cmd:
 		"move":
 			if args.size() > 0 and args[0] is Vector2:
@@ -236,8 +261,12 @@ func cast(slot: String, aim: Vector2, tid: int) -> bool:
 	var ab = active_ability(slot)
 	if ab == null or int(ranks.get(slot, 0)) <= 0 or dead or cooldowns.get(slot, 0.0) > 0.0 or casting != null:
 		return false
+	if char_id == "zeri" and slot == "e" and has_status("root"):
+		return false
 	var over_attacks := bool(ab.get("cancels_attacks", false))
-	if not can_cast(over_attacks):
+	var during_dash: bool = char_id == "zeri" and slot in ["w", "r"] and forced != null \
+		and forced.dash and forced.ctx.get("src_slot") == "e"
+	if not can_cast(over_attacks, during_dash):
 		return false
 	var is_recast := recasts.has(slot) and not is_same(ab, def.abilities.get(slot))
 	var ctx := _make_ctx(ab, aim, tid)
@@ -307,18 +336,32 @@ func ability_cooldown(ab: Dictionary, ctx := {}) -> float:
 	if ctx.is_empty():
 		ctx = {"caster": self, "rank": r}
 	var cd := Effects.num(ab.cooldown, ctx, 6.0)
+	if char_id == "zeri" and ab.slot == "q":
+		return cd
 	if ab.get("auto_rank", false):
 		cd *= 1.0 - (0.08 if ab.slot == "r" else 0.05) * (r - 1)
-	return maxf(cd * 100.0 / (100.0 + maxf(stats.ability_haste, -50.0)) * stats.cooldown_mult, 0.0)
+	var haste: float = stats.ability_haste
+	if rune_state != null:
+		if ab.slot == "r" and rune_state.has(8106): haste += 6 + 5 * rune_state.unique.size()
+		if ab.slot != "r" and rune_state.has(9105): haste += int(rune_state.state.get("legend", 0) / 25.0) * 1.5
+	return maxf(cd * 100.0 / (100.0 + maxf(haste, -50.0)) * stats.cooldown_mult, 0.0)
 
 
 func _execute(ab: Dictionary, ctx: Dictionary) -> void:
 	if dead:
 		return
-	ctx.origin = global_position
+	if char_id != "zeri" or ab.slot != "w":
+		ctx.origin = global_position
 	world.fx("cast", {"p": global_position, "c": color, "v": net_id, "d": Vector2(ctx.dir).angle(), "s": ab.slot})
-	Effects.run(ab.effects, ctx)
-	trigger("cast", self, ctx.pos, {"cast_slot": ab.slot, "amount": float(ctx.get("cost_paid", 0.0))})
+	if rune_state != null and rune_state.has(8359):
+		rune_state.state.klepto = 2
+		rune_state.state.klepto_end = world.time + 10.0
+	if char_id == "zeri":
+		ZeriKit.cast(self, ab, ctx)
+	else:
+		Effects.run(ab.effects, ctx)
+	trigger("cast", self, ctx.pos, {"cast_slot": ab.slot, "amount": float(ctx.get("cost_paid", 0.0)),
+		"exclude_unique": "spellblade_charge" if char_id == "zeri" and ab.slot == "q" else ""})
 	if ab.get("recast") is Dictionary and not dead:
 		_open_recast(ab, ctx)
 
@@ -528,9 +571,12 @@ func trigger(event: String, target = null, pos = null, extra := {}, only := "") 
 		return _status_triggers(event, target, pos, extra) if only == "" else false
 	var fired := false
 	var excl := str(extra.get("exclude", ""))
+	var excl_unique := str(extra.get("exclude_unique", ""))
 	for r in list:
 		var tr: Dictionary = r.tr
 		if (only != "" and r.key != only) or trigger_cds.get(r.key, 0.0) > 0.0 or (excl != "" and r.key == excl):
+			continue
+		if excl_unique != "" and tr.get("unique") == excl_unique:
 			continue
 		if extra.get("is_proc", false) and event in PROC_GUARDED and not tr.get("procs", false):
 			continue
@@ -556,7 +602,7 @@ func trigger(event: String, target = null, pos = null, extra := {}, only := "") 
 				continue
 		if tr.has("chance") and randf() > Effects.num(tr.chance, ctx, 1.0):
 			continue
-		trigger_cds[r.key] = Effects.num(tr.get("cooldown", 0.0), ctx, 0.0)
+		trigger_cds[r.key] = Effects.num(tr.get("cooldown", 0.0), ctx, 0.0) * (100.0 / (100.0 + stats.item_haste) if is_item else 1.0)
 		trigger_cd_total[r.key] = trigger_cds[r.key]
 		if Game.debug_log and event != "interval":
 			print("[proc] t=%.2f %s: %s '%s' on %s" % [world.time, display_name, r.key, str(tr.get("name", r.name)), event])
@@ -618,6 +664,8 @@ func _status_triggers(event: String, target, pos, extra: Dictionary) -> bool:
 
 
 func on_attack_hit(t, crit := false) -> void:
+	if rune_state != null and rune_state.has(8021):
+		rune_state.state.fleet = minf(float(rune_state.state.get("fleet", 0.0)) + 6.0, 100.0)
 	energy = minf(energy + 6.0, 100.0)
 	if energy >= 100.0 and trig_by_event.has("energized"):
 		energy = 0.0
@@ -633,6 +681,8 @@ func on_damaged(_amount: float, src) -> void:
 
 
 func on_kill(victim) -> void:
+	if rune_state != null:
+		rune_state.on_kill(victim)
 	var p: Vector2 = victim.global_position if is_instance_valid(victim) else global_position
 	if victim is Minion or victim is Monster or (victim is Summon and not victim.is_ward):
 		cs += 1
@@ -642,6 +692,8 @@ func on_kill(victim) -> void:
 
 
 func on_takedown(victim, assist: bool) -> void:
+	if rune_state != null:
+		rune_state.takedown(victim)
 	if assist:
 		assists += 1
 	trigger("takedown", victim, victim.global_position if is_instance_valid(victim) else global_position, {"amount": 0.0 if assist else 1.0})
@@ -736,7 +788,13 @@ func check_buy(id: String) -> String:
 	if level < int(it.min_level):
 		return "Requires level %d" % int(it.min_level)
 	var p := price_for(id)
-	if gold + 0.01 < p.cost:
+	if it.rarity == "boots" and has_page_rune(8304) and not (rune_state.state.get("shoes", false) if rune_state != null else rune_shoes):
+		return "Magical Footwear: wait for your free boots"
+	var fee := 0 if gold >= p.cost else 50
+	var credit := 0.0
+	if has_page_rune(8323) and world.time >= 120.0:
+		credit = 100.0 + 8.0 * floorf(world.time / 60.0)
+	if gold + credit + 0.01 < p.cost + (fee if credit > 0.0 and gold >= 0.0 else 0):
 		return "Not enough gold (%d needed)" % p.cost
 	var uses: Array = p.uses
 	for s in ITEM_SLOTS:
@@ -791,7 +849,11 @@ func buy(id: String) -> String:
 	if err != "":
 		return err
 	var p := price_for(id)
+	if gold >= 0.0 and gold < p.cost:
+		gold -= 50.0
 	gold -= p.cost
+	if rune_state != null and rune_state.has(8321) and Game.items[id].rarity == "legendary":
+		add_gold(Game.items[id].cost * 0.075)
 	var stack := _stack_slot(id)
 	if stack >= 0:
 		items[stack].n += 1
@@ -871,7 +933,7 @@ func use_item(slot: int, aim: Vector2, tid: int) -> bool:
 	if ab.has("requires") and Effects.num(ab.requires, ctx, 1.0) == 0.0:
 		world.fx("notice", {"peer": peer, "text": "%s can't be used on that" % it.name})
 		return false
-	var cd := maxf(Effects.num(ab.cooldown, ctx, 60.0), 0.0)
+	var cd: float = maxf(Effects.num(ab.cooldown, ctx, 60.0), 0.0) * 100.0 / (100.0 + stats.item_haste)
 	inst.cd = cd
 	inst.cd_total = maxf(cd, 0.01)
 	_cancel_recall()
@@ -885,7 +947,7 @@ func use_item(slot: int, aim: Vector2, tid: int) -> bool:
 		if inst.n <= 0 and it.charges <= 0:
 			items[slot] = null
 			_items_changed()
-	trigger("item_used", self, ctx.pos, {"cast_slot": inst.id})
+	trigger("item_used", self, ctx.pos, {"cast_slot": ctx.item})
 	return true
 
 
@@ -912,6 +974,8 @@ func _extra_stats(st: Dictionary, mult: Dictionary) -> void:
 		for k in mythic.mythic_stats:
 			var v = mythic.mythic_stats[k]
 			st[k] = float(st.get(k, 0.0)) + legendary * (v if v is float else Effects.num(v, {"caster": self, "target": self, "rank": level}, 0.0))
+	if rune_state != null:
+		rune_state.stats(st, mult)
 
 
 # -------------------------------------------------------------- summoners ---
@@ -920,11 +984,21 @@ func summoner_def(i: int):
 	return Game.summoners.get(summoners[i]) if i >= 0 and i < summoners.size() else null
 
 
+func has_page_rune(id: int) -> bool:
+	return id in rune_page.get("major", []) or id in rune_page.get("minor", [])
+
+
 ## The ability a summoner slot casts right now: its recast while you have the recast's status.
 func summoner_ability(i: int):
 	var sp = summoner_def(i)
 	if sp == null:
 		return null
+	if sp.id == "flash" and sum_cd[i] > 0.0 and rune_hexflash:
+		var hex: Dictionary = sp.active.duplicate()
+		hex.name = "Hexflash"
+		hex.cast_time = 2.0
+		hex.range = 275.0
+		return hex
 	return sp.recast if sp.recast != null and sum_recast[i] else sp.active
 
 
@@ -958,6 +1032,9 @@ func use_summoner(i: int, aim: Vector2, tid: int) -> bool:
 		casting = null
 		return false
 	var ab = summoner_ability(i)
+	var hex: bool = sp.id == "flash" and sum_cd[i] > 0.0 and rune_hexflash
+	if hex and (rune_state == null or not rune_state.ready(8306) or world.time - combat_t < 10):
+		return false
 	var is_recast: bool = ab != sp.active
 	if not can_use_summoner(ab) or (not is_recast and sum_cd[i] > 0.0):
 		return false
@@ -967,6 +1044,8 @@ func use_summoner(i: int, aim: Vector2, tid: int) -> bool:
 	ctx.ability = ab.name
 	ctx.src_slot = "summoner"
 	ctx.summoner = sp.id
+	ctx.summoner_slot = i
+	ctx.hexflash = hex
 	ctx.rank = level
 	ctx.color = sp.color
 	ctx.erase("rank_mult")
@@ -977,6 +1056,8 @@ func use_summoner(i: int, aim: Vector2, tid: int) -> bool:
 		var cd := summoner_cooldown(i, ctx)
 		sum_cd[i] = cd
 		sum_cd_total[i] = maxf(cd, 0.01)
+	if hex:
+		rune_state.proc(8306, 20.0)
 	_cancel_recall()
 	cancel_attack_windup()
 	if ab.targeting != "self":
@@ -998,6 +1079,8 @@ func _run_summoner(ab: Dictionary, ctx: Dictionary) -> void:
 	world.fx("cast", {"p": global_position, "c": ctx.color, "v": net_id, "d": Vector2(ctx.dir).angle(), "s": "summoner"})
 	Effects.run(ab.effects, ctx)
 	trigger("summoner", self, ctx.pos, {"cast_slot": str(ctx.summoner)})
+	if rune_state != null and not ctx.get("hexflash", false):
+		rune_state.used_summoner(int(ctx.summoner_slot))
 
 
 ## A channeled spell (Teleport) is done. It fails if its target died meanwhile.
@@ -1012,11 +1095,14 @@ func _finish_channel(c: Dictionary) -> void:
 
 ## An interrupted or cancelled channel gives back half of its cooldown.
 func _refund_channel(i: int) -> void:
+	if casting != null and casting.ctx.get("hexflash", false):
+		return
 	if i >= 0 and i < 2:
 		sum_cd[i] = minf(sum_cd[i], sum_cd_total[i] * 0.5)
 
 
 func _tick_summoners(delta: float) -> void:
+	rune_hexflash = rune_state != null and rune_state.ready(8306) and world.time - combat_t >= 10.0
 	for i in 2:
 		if sum_cd[i] > 0.0:
 			sum_cd[i] = maxf(sum_cd[i] - delta, 0.0)
@@ -1154,7 +1240,7 @@ static func recommended_build(d: Dictionary, shuffle := false) -> Array:
 func add_gold(amount: float, at = null) -> void:
 	if amount == 0.0 or puppet:
 		return
-	gold = maxf(gold + amount, 0.0)
+	gold = gold + amount if gold < 0.0 and amount >= 0.0 else maxf(gold + amount, 0.0)
 	if amount >= 1.0 and at is Vector2:
 		world.fx("gold", {"peer": peer, "p": at, "a": amount})
 
@@ -1179,6 +1265,8 @@ func cheat(what: String) -> void:
 # ------------------------------------------------------------------ think ---
 
 func _think(delta: float) -> void:
+	if rune_state != null:
+		rune_state.tick(delta)
 	for s in SLOTS:
 		if cooldowns[s] > 0.0:
 			cooldowns[s] = maxf(cooldowns[s] - delta, 0.0)
@@ -1189,7 +1277,10 @@ func _think(delta: float) -> void:
 		_update_recasts()
 	_tick_items(delta)
 	if _energy_pos != Vector2.INF:
-		energy = minf(energy + global_position.distance_to(_energy_pos) / 24.0, 100.0)
+		var distance := global_position.distance_to(_energy_pos)
+		energy = minf(energy + distance / 24.0, 100.0)
+		if char_id == "zeri":
+			zeri_charge = minf(zeri_charge + distance / 40.0, 100.0)
 	_energy_pos = global_position
 	if _dynamic_stats:
 		_dyn_t -= delta
@@ -1249,7 +1340,7 @@ func _tick_items(delta: float) -> void:
 
 
 func _act(delta: float) -> void:
-	if casting != null or recall_timer > 0.0 or has_status("stasis"):
+	if (casting != null and not _zeri_nova_casting()) or recall_timer > 0.0 or has_status("stasis"):
 		velocity = Vector2.ZERO
 		return
 	if move_dir != Vector2.ZERO and attack_target == null and not attack_starting and not attack_action_locked():
@@ -1263,10 +1354,38 @@ func _act(delta: float) -> void:
 
 ## WASD steering: an attack command interrupts it for one attack, then you keep walking.
 func perform_attack(t: Unit, elapsed_windup: float) -> void:
-	super.perform_attack(t, elapsed_windup)
+	if char_id == "zeri":
+		ZeriKit.zap(self, t)
+	else:
+		super.perform_attack(t, elapsed_windup)
 	if move_dir != Vector2.ZERO:
 		attack_target = null
 		amove = null
+
+
+func _zeri_nova_casting() -> bool:
+	return char_id == "zeri" and casting != null and not casting.has("summoner") and casting.ab.slot == "r"
+
+
+func can_attack() -> bool:
+	return not _zeri_nova_casting() and super.can_attack()
+
+
+func attack_reach(t) -> float:
+	if char_id == "zeri":
+		return float(base_stats.attack_range) + radius + t.radius
+	return super.attack_reach(t)
+
+
+func attack_windup_ratio() -> float:
+	return 0.15625 if char_id == "zeri" else super.attack_windup_ratio()
+
+
+func _finish_attack_speed(st: Dictionary) -> void:
+	if char_id == "zeri":
+		ZeriKit.finish_attack_speed(st)
+	else:
+		super._finish_attack_speed(st)
 
 
 ## An attack that will set off an "every N attacks" passive gets its own swing animation.
@@ -1343,9 +1462,15 @@ func _level_up() -> void:
 	if level <= SKILL_POINT_LEVELS:
 		skill_points += 1
 	var growth := 0.65 + 0.035 * level
-	for k in def.per_level:
-		base_stats[k] = float(base_stats.get(k, 0.0)) + def.per_level[k] * growth
+	if char_id != "zeri" or level <= 18:
+		for k in def.per_level:
+			base_stats[k] = float(base_stats.get(k, 0.0)) + def.per_level[k] * growth
 	recompute_stats()
+	if rune_state != null and rune_state.has(8313):
+		match level:
+			3: add_gold(40)
+			6: rune_state.buff(8313, 60.0, {"ability_power": 15.0} if stats.ability_power > rune_state.bonus_ad() else {"attack_damage": 9.0})
+			9: skill_points += 1
 	world.fx("levelup", {"p": global_position, "l": level, "v": net_id})
 	trigger("level_up", self)
 
@@ -1356,6 +1481,7 @@ func _on_death() -> void:
 	recall_timer = 0.0
 	amove = null
 	energy = 0.0
+	zeri_charge = 0.0
 	for slot in recasts.keys():
 		_close_recast(slot)
 	respawn_timer = world.respawn_time(level)
@@ -1380,6 +1506,8 @@ func respawn() -> void:
 	dead = false
 	statuses = statuses.filter(func(s): return s.get("persist", false))
 	teleport(world.map.spawn_point(team) + Vector2(randf_range(-40, 40), randf_range(-40, 40)))
+	if char_id == "zeri":
+		zeri_charge = 100.0
 	recompute_stats()
 	hp = stats.max_hp
 	mana = stats.max_mana
@@ -1430,6 +1558,16 @@ func net_state() -> PackedFloat32Array:
 		s.append_array([recast_left[k], recast_charges[k]])
 	s.append_array([sum_cd[0], sum_cd[1], sum_cd_total[0], sum_cd_total[1], 1.0 if sum_recast[0] else 0.0, 1.0 if sum_recast[1] else 0.0])
 	s.append_array(jungle_buff_times())
+	if char_id == "zeri":
+		s.append(zeri_charge)
+	var spell_codes := Game.summoners.keys()
+	spell_codes.sort()
+	for i in 2:
+		s.append(spell_codes.find(summoners[i]) if i < summoners.size() else -1)
+	s.append(float(rune_state.state.get("biscuits", 0)) if rune_state != null else 0.0)
+	s.append(1.0 if rune_hexflash else 0.0)
+	s.append(rune_state.rotation[rune_state.rotation_index] if rune_state != null and rune_state.keystone == 8358 else 0)
+	s.append(1.0 if rune_state != null and rune_state.state.get("shoes", false) else 0.0)
 	return s
 
 
@@ -1525,6 +1663,21 @@ func apply_net_state(s: PackedFloat32Array) -> void:
 	o += 6
 	if o + JUNGLE_BUFFS.size() <= s.size():
 		jungle_times = s.slice(o, o + JUNGLE_BUFFS.size())
+	if char_id == "zeri" and o + JUNGLE_BUFFS.size() < s.size():
+		zeri_charge = s[o + JUNGLE_BUFFS.size()]
+	o += JUNGLE_BUFFS.size() + (1 if char_id == "zeri" else 0)
+	if o + 6 <= s.size():
+		var spell_codes := Game.summoners.keys()
+		spell_codes.sort()
+		summoners.clear()
+		for i in 2:
+			var code := int(s[o + i])
+			if code >= 0 and code < spell_codes.size():
+				summoners.append(spell_codes[code])
+		rune_biscuits = int(s[o + 2])
+		rune_hexflash = s[o + 3] > 0.5
+		rune_keystone = int(s[o + 4])
+		rune_shoes = s[o + 5] > 0.5
 	if changed:
 		_rebuild_triggers()
 
@@ -1581,6 +1734,11 @@ func _draw_overlay(n: Node2D) -> void:
 		var mr := Rect2(-w * 0.5, top + bar_height() + 1.0, w, 3.0)
 		n.draw_rect(mr.grow(1.0), Color(0.04, 0.04, 0.07, 0.9))
 		n.draw_rect(Rect2(mr.position, Vector2(w * clampf(mana / stats.max_mana, 0.0, 1.0), mr.size.y)), Color(0.35, 0.6, 1.0))
+	if char_id == "zeri":
+		var battery := Rect2(-w * 0.5, top + bar_height() + 6.0, w, 3.0)
+		n.draw_rect(battery.grow(1.0), Color(0.04, 0.06, 0.04, 0.9))
+		battery.size.x *= zeri_charge / 100.0
+		n.draw_rect(battery, Color.GREEN_YELLOW if zeri_charge >= 100.0 else Color.DARK_SEA_GREEN)
 	var lx := -w * 0.5 - 20.0
 	n.draw_rect(Rect2(lx, top - 3, 17, 15), Color(0.06, 0.06, 0.09, 0.95))
 	n.draw_rect(Rect2(lx, top - 3, 17, 15), ring_color(), false, 1.0)

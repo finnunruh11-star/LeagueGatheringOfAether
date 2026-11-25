@@ -6,6 +6,23 @@ const CHAMPION_LEASH := 450.0
 const CHAMPION_DROP_RANGE := 700.0
 const RETURN_DISTANCE := 40.0
 
+const BODY_ART := [
+	{
+		"melee": preload("res://assets/minions/blue_melee.png"),
+		"ranged": preload("res://assets/minions/blue_ranged.png"),
+		"siege": preload("res://assets/minions/blue_siege.png"),
+		"super": preload("res://assets/minions/blue_super.png"),
+	},
+	{
+		"melee": preload("res://assets/minions/red_melee.png"),
+		"ranged": preload("res://assets/minions/red_ranged.png"),
+		"siege": preload("res://assets/minions/red_siege.png"),
+		"super": preload("res://assets/minions/red_super.png"),
+	},
+]
+const ART_ANCHOR := Vector2(0.5, 0.625)
+const SIZE_SCALE := 1.5
+
 const TYPES := {
 	"melee": {"max_hp": 465.0, "attack_damage": 11.0, "attack_speed": 1.25, "attack_range": 110.0, "move_speed": 310.0,
 		"armor": 0.0, "magic_resist": 0.0, "radius": 15.0, "xp": 62.0, "gold": 20.0, "ranged": false},
@@ -24,12 +41,15 @@ var think_t := 0.0
 var chase_start := Vector2.ZERO
 var chasing_champion := false
 var returning_to_lane := false
+var body_texture: Texture2D
 
 
 func setup(d: Dictionary) -> void:
 	kind = "minion"
 	team = int(d.team)
 	minion_type = str(d.get("type", "melee"))
+	if team >= 0 and team < BODY_ART.size():
+		body_texture = BODY_ART[team].get(minion_type)
 	var t: Dictionary = TYPES.get(minion_type, TYPES.melee)
 	var upgrades := clampi(int(d.get("upgrades", 0)), 0, 25)
 	for k in ["max_hp", "attack_damage", "attack_speed", "attack_range", "move_speed", "armor", "magic_resist"]:
@@ -41,7 +61,7 @@ func setup(d: Dictionary) -> void:
 	base_stats.max_hp += upgrades * float({"melee": 21, "ranged": 14, "siege": 50, "super": 80}.get(minion_type, 0))
 	base_stats.attack_damage += upgrades * (1.0 if minion_type == "melee" else 2.0)
 	base_stats.hp_regen = 0.0
-	base_radius = t.radius
+	base_radius = float(t.radius) * SIZE_SCALE
 	xp_value = t.xp
 	gold_value = t.gold + (upgrades if minion_type in ["siege", "super"] else 0)
 	base_stats.vision = 650.0
@@ -117,10 +137,21 @@ func _on_death() -> void:
 
 
 func attack_damage_against(t) -> float:
-	return stats.attack_damage * (0.6 if t.is_structure or t.is_champion else 1.0)
+	if t.is_structure:
+		return stats.attack_damage * 0.6 * stats.structure_damage_mult
+	return stats.attack_damage * (0.6 if t.is_champion else 1.0)
 
 
 func _draw_body() -> void:
+	if body_texture != null:
+		var size := Vector2.ONE * radius * 3.9
+		var tint := Color(0.8, 0.9, 1.0) if flags & F_SLOW else Color.WHITE
+		if flash > 0.0:
+			tint *= Color(1.6, 1.6, 1.6)
+		if facing < 0.0:
+			draw_set_transform(_body_offset(), 0.0, _squash_scale() * Vector2(-1, 1))
+		draw_texture_rect(body_texture, Rect2(-size * ART_ANCHOR, size), false, tint)
+		return
 	var c := body_color()
 	var r := radius
 	var f := facing
@@ -161,3 +192,7 @@ func bar_width() -> float:
 
 func bar_height() -> float:
 	return 4.0
+
+
+func bar_top() -> float:
+	return -radius * 1.35 - 18.0 if body_texture != null else super.bar_top()

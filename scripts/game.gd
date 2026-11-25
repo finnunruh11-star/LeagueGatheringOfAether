@@ -14,7 +14,7 @@ signal suggestions_changed
 signal suggestion_status_changed(text: String)
 
 const CharacterSuggestions = preload("res://scripts/character_suggestions.gd")
-const PROTOCOL := 6
+const PROTOCOL := 7
 const DEFAULT_PORT := 7777
 const MAX_APPROVED_SUGGESTIONS := 8
 const SUGGESTION_INTERVAL_MS := 3000
@@ -61,6 +61,7 @@ var prefs := {
 	"camera_locked": true,      # the camera follows your champion when a match starts
 	"autobuy": false,
 	"summoners": ["flash", "ignite"],
+	"runes": {},
 	"builds": {},               # character id -> [item ids]: what autobuy buys, in order
 	"bot_difficulty": "normal", # difficulty of new bots in the lobby: brick / normal / scripting
 }
@@ -152,6 +153,11 @@ func default_summoners(cid: String) -> Array:
 	return valid_summoners(["flash", {"mage": "ignite", "marksman": "heal"}.get(role, "ghost")])
 
 
+func default_runes(cid: String) -> Dictionary:
+	var def = characters.get(cid)
+	return Runes.preset(Champion.role_of(def) if def is Dictionary else "bruiser")
+
+
 func sorted_character_ids() -> Array:
 	var ids := characters.keys()
 	ids.sort_custom(func(a, b): return str(characters[a].name).naturalnocasecmp_to(str(characters[b].name)) < 0)
@@ -222,7 +228,8 @@ func leave(reload := true) -> void:
 func _init_lobby() -> void:
 	players.clear()
 	players[1] = {"name": player_name, "team": 0, "character": default_character(), "bot": false,
-		"summoners": valid_summoners(prefs.summoners)}
+		"summoners": valid_summoners(prefs.summoners),
+		"runes": Runes.canonical(prefs.runes) if Runes.valid(prefs.runes) else {}}
 	lobby_changed.emit()
 
 
@@ -453,6 +460,8 @@ func _rpc_lobby(p: Dictionary, s: Dictionary) -> void:
 	if first:
 		lobby_joined.emit()
 		request_change("summoners", prefs.summoners)
+		if Runes.valid(prefs.runes):
+			request_change("runes", prefs.runes)
 	lobby_changed.emit()
 
 
@@ -481,6 +490,11 @@ func _apply_change(pid: int, key: String, value) -> void:
 		"summoners":
 			if value is Array and value.size() == 2 and str(value[0]) != str(value[1]):
 				players[pid].summoners = valid_summoners(value)
+		"runes":
+			if not Runes.valid(value):
+				push_warning("Rejected invalid rune page from player %d" % pid)
+				return
+			players[pid].runes = Runes.canonical(value)
 		"difficulty":
 			if bool(players[pid].get("bot", false)):
 				players[pid].difficulty = BotBrain.level_name(value)
@@ -527,6 +541,8 @@ func start_match() -> void:
 		if not characters.has(players[pid].character):
 			players[pid].character = default_character()
 		players[pid].summoners = valid_summoners(players[pid].get("summoners", []))
+		if not Runes.valid(players[pid].get("runes")):
+			players[pid].runes = default_runes(players[pid].character)
 	match_count += 1
 	var config := {
 		"id": match_count,

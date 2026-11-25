@@ -21,6 +21,9 @@ func _ready() -> void:
 	if Game.cmdline.get("selftest") == "windup":
 		_test_windup()
 		return
+	if Game.cmdline.get("selftest") == "runes":
+		_test_runes()
+		return
 	if Game.cmdline.get("selftest") == "abilitytips":
 		await _test_ability_tips()
 		return
@@ -30,8 +33,14 @@ func _ready() -> void:
 	if Game.cmdline.get("selftest") == "league_units":
 		await _test_league_units()
 		return
+	if Game.cmdline.get("selftest") == "zeri":
+		await _test_zeri()
+		return
 	if Game.cmdline.get("selftest") == "rift":
 		_test_rift()
+		return
+	if Game.cmdline.get("selftest") == "classic_items":
+		await _test_classic_items()
 		return
 	for e in world.entities.values():
 		if e is Dummy:
@@ -106,6 +115,171 @@ func _ready() -> void:
 		dummy.statuses.clear()
 	print("[selftest] done")
 	get_tree().quit()
+
+
+func _test_runes() -> void:
+	var ok := true
+	var player := world.local_champion
+	var page := Runes.preset()
+	page.major = [8008, 9102, 9107, 8014]
+	ok = _check(Runes.valid(page), "live keystone and legacy minors can coexist") and ok
+	var invalid := page.duplicate(true)
+	invalid.minor = [8444, 8473]
+	ok = _check(not Runes.valid(invalid), "secondary picks from the same row are rejected") and ok
+	invalid = page.duplicate(true)
+	invalid.shards[0] = 5011
+	ok = _check(not Runes.valid(invalid), "out-of-row stat shards are rejected") and ok
+
+	var center := world.map.size * 0.5
+	var foe: Champion = world.spawn("champion", {"peer": -98, "team": 1, "character": player.char_id,
+		"pos": center + Vector2(90, 0)})
+	player.teleport(center)
+	player.rune_state = RuneState.new(player, page)
+	player.recompute_stats()
+	ok = _check(is_equal_approx(player.stats.max_hp, player.base_stats.max_hp + 65.0), "flat health shard is applied") and ok
+	var speed: float = player.stats.bonus_attack_speed
+	var previous_hp: float = foe.hp
+	for i in 6:
+		foe.take_damage(5.0, player, "true", {"attack": true})
+	player.recompute_stats()
+	ok = _check(float(player.stats.bonus_attack_speed) > speed and previous_hp - foe.hp > 30.0, "six Lethal Tempo hits grant speed and bonus damage") and ok
+	player.hp = player.stats.max_hp
+	player.heal(100.0, player)
+	ok = _check(not player.find_status("overheal").is_empty(), "excess healing creates the legacy Overheal shield") and ok
+
+	page = Runes.preset("mage")
+	page.major[0] = 8231
+	player.rune_state = RuneState.new(player, page)
+	for slot in ["q", "w", "e"]:
+		foe.take_damage(1.0, player, "true", {"ability": slot})
+	ok = _check(player.rune_state.timers.has(8231), "Phase Rush procs on three distinct hits even without burst damage") and ok
+	page.major[0] = 8230
+	player.rune_state = RuneState.new(player, page)
+	foe.hp = foe.stats.max_hp
+	foe.take_damage(foe.stats.max_hp * 0.26, player, "true", {"ability": "q"})
+	ok = _check(player.rune_state.timers.has(8230), "Stormraider's Surge procs on burst even with one hit") and ok
+
+	page = {"primary": "Inspiration", "secondary": "Precision", "major": [8360, 8306, 8317, 8347],
+		"minor": [9102, 9107], "shards": [5007, 5008, 5011]}
+	player.rune_page = page
+	player.rune_state = RuneState.new(player, page)
+	var editor := RunePageEditor.new()
+	add_child(editor)
+	editor.open("Rune test", page, func(_chosen): pass)
+	ok = _check(editor.fields.get_child_count() == 11, "rune editor offers both paths, six picks and three shards") and ok
+	editor.queue_free()
+	world.time = 361.0
+	player.summoners = ["flash", "ignite"]
+	player.sum_cd = [15.0, 60.0]
+	player.rune_state.action("spellbook", [1, "heal"])
+	ok = _check(player.summoners[1] == "heal" and player.sum_cd[1] == 0.0, "Spellbook equips a ready replacement") and ok
+	ok = _check(player.use_summoner(1, player.global_position, player.net_id) and player.summoners[1] == "ignite" and is_equal_approx(player.sum_cd[1], 60.0), "casting the replacement restores the original spell and cooldown") and ok
+	player._tick_summoners(0.0)
+	ok = _check(player.use_summoner(0, center + Vector2(250, 0), 0) and player.casting != null and player.casting.ctx.hexflash and is_equal_approx(player.sum_cd[0], 15.0), "Hexflash channels without resetting the original Flash cooldown") and ok
+	player.command("move", [center])
+	ok = _check(player.casting == null, "moving cancels the Hexflash channel") and ok
+	print("[runes] ", "passed" if ok else "failed")
+	get_tree().quit(0 if ok else 1)
+
+
+func _test_zeri() -> void:
+	var c := world.local_champion
+	if c == null or c.char_id != "zeri" or world.map.data.get("name") != "Training Arena":
+		push_error("[zeri] requires --char=zeri --map=arena")
+		get_tree().quit(1)
+		return
+	for u in world.units.duplicate():
+		if u is Dummy:
+			world.despawn(u)
+	var at := Vector2(700, 900)
+	c.teleport(at)
+	await get_tree().physics_frame
+	await get_tree().physics_frame
+	var primary: Dummy = world.spawn("dummy", {"pos": at + Vector2(300, 0), "hp": 1000})
+	var secondary: Dummy = world.spawn("dummy", {"pos": at + Vector2(550, 0), "hp": 1000})
+	var checks := {"starts with Q learned and a full battery": c.ranks.q == 1 and c.skill_points == 0 and c.zeri_charge == 100.0}
+	c.perform_attack(primary, 0.0)
+	checks["charged zap does 85 magic damage and consumes charge"] = is_equal_approx(primary.total_taken, 85.0) and c.zeri_charge == 0.0
+	var before := primary.total_taken
+	var cast_ok := c.cast("q", primary.global_position, 0)
+	await get_tree().create_timer(0.7).timeout
+	checks["normal burst deals 79.12 physical damage, charges battery, and stops at first target"] = (
+		cast_ok and is_equal_approx(primary.total_taken - before, 79.12) and secondary.total_taken == 0.0
+		and is_equal_approx(c.zeri_charge, 10.0))
+	c.ranks.e = 1
+	c.attack_cd = 1.0
+	checks["Spark Surge resets zap and Q timers"] = c.cast("e", at + Vector2(900, 0), 0) and c.cooldowns.q == 0.0 and c.attack_cd == 0.0
+	await get_tree().create_timer(0.55).timeout
+	checks["ground dash travels exactly 300 units"] = is_equal_approx(c.global_position.distance_to(at), 300.0)
+	c.teleport(at)
+	before = primary.total_taken
+	cast_ok = c.cast("q", primary.global_position, 0)
+	await get_tree().create_timer(0.7).timeout
+	checks["Spark Surge adds 22 magic damage up front and pierces for 80% behind"] = (
+		cast_ok and is_equal_approx(primary.total_taken - before, 101.12) and is_equal_approx(secondary.total_taken, 63.296))
+	c.teleport(Vector2(724, 380))
+	c.cooldowns.e = 0.0
+	c.mana = c.stats.max_mana
+	cast_ok = c.cast("e", Vector2(1200, 380), 0)
+	await get_tree().create_timer(0.55).timeout
+	checks["wall dash clears the far edge and lands on open ground"] = (
+		cast_ok and c.global_position.x >= 952.0 and not world.map.is_wall(c.global_position))
+	c.teleport(Vector2(550, 380))
+	primary.home = Vector2(1070, 380)
+	primary.teleport(primary.home)
+	c.mana = c.stats.max_mana
+	c.ranks.w = 1
+	before = primary.total_taken
+	cast_ok = c.cast("w", primary.global_position, 0)
+	await get_tree().create_timer(0.95).timeout
+	var waited := primary.total_taken == before
+	await get_tree().create_timer(0.95).timeout
+	checks["W hitting terrain fires the delayed laser, not the ordinary pulse"] = (
+		cast_ok and waited and is_equal_approx(primary.total_taken - before, 86.0))
+	world.despawn(secondary)
+	var foe: Champion = world.spawn("champion", {"peer": 1001, "team": 1, "character": "zeri", "name": "Target",
+		"pos": Vector2(1350, 900)})
+	c.teleport(Vector2(1000, 900))
+	c.ranks.r = 1
+	c.mana = c.stats.max_mana
+	cast_ok = c.cast("r", c.global_position, 0)
+	await get_tree().create_timer(0.4).timeout
+	checks["R on a champion starts Overcharge and adds 30% bonus attack speed"] = (
+		cast_ok and not c.find_status(ZeriKit.OVERCHARGE).is_empty() and is_equal_approx(c.stats.attack_speed, 0.8455))
+	var chain_target: Dummy = world.spawn("dummy", {"pos": Vector2(1360, 1120), "hp": 1000})
+	c.remove_status_id(ZeriKit.LIGHTNING_ROUNDS)
+	c.cooldowns.q = 0.0
+	var old_e_cd: float = c.cooldowns.e
+	var old_r_time: float = c.find_status(ZeriKit.OVERCHARGE).get("time", 0.0)
+	cast_ok = c.cast("q", foe.global_position, 0)
+	await get_tree().create_timer(0.55).timeout
+	checks["overcharged burst chains for 40% AD, adds a stack and refreshes the buff"] = (
+		cast_ok and is_equal_approx(chain_target.total_taken, 22.4)
+		and c.find_status(ZeriKit.HYPERCHARGE).get("stacks", 0) == 1
+		and float(c.find_status(ZeriKit.OVERCHARGE).get("time", 0.0)) > old_r_time - 0.3
+		and c.cooldowns.e < old_e_cd - 0.8)
+	world.despawn(foe)
+	c.remove_status_id(ZeriKit.OVERCHARGE)
+	for i in 17:
+		c._level_up()
+	checks["level 18 uses League growth, with no free AP"] = (
+		is_equal_approx(c.stats.max_hp, 2470.0) and is_equal_approx(c.stats.max_mana, 1015.0)
+		and is_equal_approx(c.stats.attack_damage, 90.0) and is_equal_approx(c.stats.magic_resist, 51.7)
+		and is_equal_approx(c.stats.attack_speed, 0.8705) and c.stats.ability_power == 0.0)
+	c.base_stats.bonus_attack_speed = 2.0
+	c.base_stats.ability_haste = 100.0
+	c.recompute_stats()
+	checks["excess attack speed becomes AD, and haste cannot shorten Q"] = (
+		is_equal_approx(c.stats.attack_speed, 1.5) and is_equal_approx(c.stats.attack_damage, 129.168)
+		and is_equal_approx(c.ability_cooldown(c.def.abilities.q), 2.0 / 3.0))
+	var passed := true
+	for label in checks:
+		if checks[label]:
+			print("[zeri] OK: ", label)
+		else:
+			push_error("[zeri] " + label)
+			passed = false
+	get_tree().quit(0 if passed else 1)
 
 
 func _test_league_units() -> void:
@@ -270,6 +444,13 @@ func _test_balance() -> void:
 			if u.minion_type == "siege":
 				cannons += 1
 	ok = _check(cannons == 4 and wave_units == 28, "third wave spawns three melee, three casters and one cannon per team per lane") and ok
+	var minion_radii := {"melee": 22.5, "ranged": 19.5, "siege": 33.0, "super": 36.0}
+	for type in minion_radii:
+		var minion: Minion = world.spawn("minion", {"team": 0, "type": type, "pos": world.map.lane(0, 0)[0]})
+		var shape := minion.collider.shape as CircleShape2D
+		ok = _check(is_equal_approx(minion.radius, minion_radii[type])
+			and is_equal_approx(shape.radius, float(minion_radii[type]) * 0.6), "%s minion has 50%% larger hitbox and collider" % type) and ok
+		world.despawn(minion)
 	lane_turrets.sort_custom(func(a, b): return a.order < b.order)
 	for s in lane_turrets:
 		s.take_damage(lethal, null, "true")
@@ -300,6 +481,44 @@ func _check(condition: bool, label: String) -> bool:
 	if not condition:
 		push_error("[balance] " + label)
 	return condition
+
+
+func _test_classic_items() -> void:
+	var player := world.local_champion
+	var start := Vector2(900, 750)
+	player.teleport(start)
+	var enemy: Champion = world.spawn("champion", {"team": 1, "peer": 999, "character": "sir_bonk",
+		"name": "Enemy", "pos": start + Vector2(150, 0)})
+	var cannon: Minion = world.spawn("minion", {"team": 0, "lane": 0, "type": "siege", "pos": start + Vector2(0, 250)})
+	var melee: Minion = world.spawn("minion", {"team": 0, "lane": 0, "type": "melee", "pos": start + Vector2(0, -250)})
+	var enemy_minion: Minion = world.spawn("minion", {"team": 1, "lane": 0, "type": "melee", "pos": start + Vector2(0, 350)})
+	var tower: Tower = world.spawn("tower", {"team": 1, "pos": start + Vector2(1000, 0)})
+	var structure_hit := tower.take_damage(10.0, player, "true", {"ability": "q"})
+	var cannon_hit := cannon.attack_damage_against(tower)
+	player.items[0] = player.new_instance("prowlers_claw")
+	player.items[1] = player.new_instance("hullbreaker")
+	player._items_changed()
+	await get_tree().create_timer(0.55).timeout
+	var ok := _check(is_equal_approx(tower.take_damage(10.0, player, "true", {"ability": "q"}), structure_hit * 1.2),
+		"Hullbreaker amplifies non-attack structure damage")
+	ok = _check(is_equal_approx(cannon.attack_damage_against(tower), cannon_hit * 3.0)
+		and cannon.stats.armor > cannon.base_stats.armor and is_equal_approx(melee.stats.armor, melee.base_stats.armor),
+		"Hullbreaker empowers siege minions but not melee minions") and ok
+	ok = _check(not player.use_item(0, enemy_minion.global_position, enemy_minion.net_id), "Sandswipe rejects enemy minions") and ok
+	var base_hit := enemy.take_damage(10.0, player, "true")
+	ok = _check(player.use_item(0, enemy.global_position, enemy.net_id), "Sandswipe accepts an enemy champion") and ok
+	await get_tree().create_timer(0.35).timeout
+	ok = _check(player.global_position.x > enemy.global_position.x
+		and is_equal_approx(enemy.take_damage(10.0, player, "true"), base_hit * 1.15),
+		"Sandswipe lands past its target and amplifies follow-up damage") and ok
+	world.spawn("champion", {"team": 0, "peer": 998, "character": "mender",
+		"name": "Ally", "pos": player.global_position + Vector2(0, 150)})
+	await get_tree().create_timer(0.6).timeout
+	ok = _check(is_equal_approx(tower.take_damage(10.0, player, "true", {"ability": "q"}), structure_hit)
+		and is_equal_approx(cannon.attack_damage_against(tower), cannon_hit),
+		"A nearby ally disables both Hullbreaker bonuses") and ok
+	print("[classic_items] ", "passed" if ok else "failed")
+	get_tree().quit(0 if ok else 1)
 
 
 func _test_match_fixes() -> void:

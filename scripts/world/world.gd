@@ -23,6 +23,7 @@ var entities := {}
 var units: Array = []
 var structures: Array = []
 var champions := {}
+var dematerializer_armed := false
 var next_id := 1
 var time := 0.0
 var started := false
@@ -178,7 +179,7 @@ func begin() -> void:
 			sums[1 if sums[0] == "flash" else 0] = "smite"  # bot junglers take Smite
 		var c = spawn("champion", {"peer": pid, "team": t, "character": p.character, "name": p.name, "gold": start_gold,
 			"bot": bool(p.get("bot", false)) or gone, "difficulty": str(p.get("difficulty", "normal")),
-			"pos": map.spawn_point(t) + off, "lane": role, "summoners": sums})
+			"pos": map.spawn_point(t) + off, "lane": role, "summoners": sums, "runes": p.get("runes", {})})
 		for k in int(map.data.get("start_level", 1)) - 1:
 			c.cheat("level")
 		per_team[t] += 1
@@ -745,6 +746,10 @@ func on_damage(victim: Unit, amount: float, src, dtype: String, hit := {}) -> vo
 
 
 func on_unit_died(u: Unit, killer) -> void:
+	if u is Minion or u is Monster:
+		for ch in champions.values():
+			if ch.team != u.team and not ch.dead and ch.rune_state != null and ch.rune_state.has(8451) and ch.global_position.distance_to(u.global_position) <= 1400:
+				ch.rune_state.count("growth")
 	var credit = killer
 	if is_instance_valid(credit) and credit is Summon and is_instance_valid(credit.owner_unit):
 		credit = credit.owner_unit
@@ -932,6 +937,9 @@ func _unhandled_input(event: InputEvent) -> void:
 					cam_zoom = clampf(cam_zoom / 1.1, 0.45, 1.8)
 				return
 			MOUSE_BUTTON_RIGHT:
+				if dematerializer_armed and mb.pressed:
+					dematerializer_armed = false
+					return
 				rmb_held = mb.pressed
 				if mb.pressed:
 					if aim_slot != "":
@@ -943,6 +951,12 @@ func _unhandled_input(event: InputEvent) -> void:
 			MOUSE_BUTTON_LEFT:
 				if mb.pressed:
 					var click_world := get_canvas_transform().affine_inverse() * mb.position
+					if dematerializer_armed:
+						dematerializer_armed = false
+						var target := pick_unit(click_world, local_team, true, 12.0, false)
+						if target is Minion:
+							send_command("rune", ["dematerialize", target.net_id])
+						return
 					if aim_slot != "":
 						_cast(aim_slot)
 						aim_slot = ""
@@ -961,7 +975,9 @@ func _unhandled_input(event: InputEvent) -> void:
 		var k := event as InputEventKey
 		if k.keycode == KEY_ESCAPE:
 			if k.pressed and not k.echo:
-				if aim_slot != "" or amove_armed:
+				if dematerializer_armed:
+					dematerializer_armed = false
+				elif aim_slot != "" or amove_armed:
 					aim_slot = ""
 					amove_armed = false
 				elif hud.shop_open():
