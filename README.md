@@ -31,6 +31,10 @@ work too; the bundled ones also have curated builds and skill orders.
 Default keys - **every key can be changed in Settings** (main menu, lobby, or Esc in a match).
 The bottom of the screen always shows your current keys.
 
+**Colorblind mode** (Settings > Accessibility) applies immediately and is saved locally. Your HP
+bar is gold, allies are blue, enemies are orange with a diamond next to their bar, and neutral
+units are gray. The HUD health bar and ground rings use the same palette.
+
 | | |
 |---|---|
 | Right mouse | move / attack (hold to keep moving) |

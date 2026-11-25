@@ -1,6 +1,6 @@
 class_name SettingsMenu
 extends Control
-## Player settings: movement mode, attack-move, autobuy, camera and key bindings. Changes apply and
+## Player settings: gameplay, accessibility, camera and key bindings. Changes apply and
 ## are saved right away. Opened from the main menu, the lobby and the in-game menu (Esc).
 
 signal closed
@@ -48,6 +48,11 @@ func _ready() -> void:
 	body.size_flags_horizontal = Control.SIZE_EXPAND_FILL
 	body.add_theme_constant_override("separation", 8)
 	scroll.add_child(body)
+
+	_section(body, "Accessibility")
+	_check(body, "Colorblind mode", "colorblind_mode")
+	var palette_hint := UiKit.label(body, "When on: gold = you, blue = allies, orange + diamond = enemies, gray = neutral.")
+	palette_hint.modulate = Color(1, 1, 1, 0.6)
 
 	_section(body, "Gameplay")
 	_option(body, "Movement", "move_mode", [["click", "Right-click to move (classic)"], ["wasd", "WASD keys (left click attacks)"]], _on_move_mode)

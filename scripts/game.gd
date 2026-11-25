@@ -59,6 +59,7 @@ var prefs := {
 	"edge_pan": true,
 	"camera_speed": 1.0,
 	"camera_locked": true,      # the camera follows your champion when a match starts
+	"colorblind_mode": false,
 	"autobuy": false,
 	"summoners": ["flash", "ignite"],
 	"runes": {},

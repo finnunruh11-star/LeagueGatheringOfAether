@@ -36,6 +36,11 @@ const CC_TYPES := ["stun", "root", "slow", "silence"]
 const COMBAT_TIME := 3.0
 const BOND_CAP := 2.0       # Bond of Life can't grow past this many times max HP (unless an effect sets "max")
 const BOND_COLOR := Color(0.9, 0.18, 0.38)
+const COLORBLIND_SELF := Color("f5d451")
+const COLORBLIND_ALLY := Color("56b4e9")
+const COLORBLIND_ENEMY := Color("ed873d")
+const COLORBLIND_NEUTRAL := Color("b3b3bd")
+const COLORBLIND_HP_TRACK := Color("24242e")
 
 var world: World
 var net_id := 0
@@ -1605,6 +1610,8 @@ func team_color() -> Color:
 
 ## Ring color from the local player's point of view: you, allies, enemies.
 func ring_color() -> Color:
+	if Game.prefs.colorblind_mode:
+		return bar_color()
 	if world == null:
 		return team_color()
 	if world.local_champion == self:
@@ -1723,13 +1730,14 @@ func bar_height() -> float:
 
 
 func bar_color() -> Color:
+	var colorblind: bool = Game.prefs.colorblind_mode
 	if world != null and world.local_champion == self:
-		return Color(0.35, 0.9, 0.35)
+		return COLORBLIND_SELF if colorblind else Color(0.35, 0.9, 0.35)
 	if team == 2:
-		return Color(0.95, 0.8, 0.3)
+		return COLORBLIND_NEUTRAL if colorblind else Color(0.95, 0.8, 0.3)
 	if world != null and team == world.local_team:
-		return Color(0.3, 0.6, 1.0)
-	return Color(0.95, 0.3, 0.25)
+		return COLORBLIND_ALLY if colorblind else Color(0.3, 0.6, 1.0)
+	return COLORBLIND_ENEMY if colorblind else Color(0.95, 0.3, 0.25)
 
 
 func bar_top() -> float:
@@ -1750,12 +1758,14 @@ func _draw_overlay(n: Node2D) -> void:
 	var top := bar_top()
 	var total := maxf(stats.max_hp, hp + shield)
 	var x := -w * 0.5
+	var colorblind: bool = Game.prefs.colorblind_mode
 	var col := Color(0.6, 0.6, 0.6) if flags & F_PROTECTED else bar_color()
 	var hw := w * clampf(hp / total, 0.0, 1.0)
 	n.draw_rect(Rect2(x - 2, top - 2, w + 4, h + 4), Color(0.04, 0.04, 0.07, 0.9))
-	n.draw_rect(Rect2(x, top, w, h), Color(0.2, 0.08, 0.08))
+	n.draw_rect(Rect2(x, top, w, h), COLORBLIND_HP_TRACK if colorblind else Color(0.2, 0.08, 0.08))
 	if hp_ghost > hp:
-		n.draw_rect(Rect2(x + hw, top, w * clampf((hp_ghost - hp) / total, 0.0, 1.0), h), Color(1.0, 0.88, 0.55, 0.9))
+		var ghost_color := Color("757580") if colorblind else Color(1.0, 0.88, 0.55, 0.9)
+		n.draw_rect(Rect2(x + hw, top, w * clampf((hp_ghost - hp) / total, 0.0, 1.0), h), ghost_color)
 	n.draw_rect(Rect2(x, top, hw, h), col)
 	n.draw_rect(Rect2(x, top, hw, maxf(h * 0.35, 1.0)), col.lightened(0.35))
 	if shield > 0.0:
@@ -1770,6 +1780,14 @@ func _draw_overlay(n: Node2D) -> void:
 			v += 100.0
 	if flags & F_PROTECTED:
 		n.draw_string(ThemeDB.fallback_font, Vector2(x, top - 3), "protected", HORIZONTAL_ALIGNMENT_CENTER, w, 12, Color(0.8, 0.8, 0.8))
+	if colorblind and world != null and team != 2 and team != world.local_team:
+		var marker := Vector2(w * 0.5 + 6.0, top + h * 0.5)
+		var diamond := PackedVector2Array([Vector2.UP, Vector2.RIGHT, Vector2.DOWN, Vector2.LEFT])
+		n.draw_set_transform(marker, 0.0, Vector2(6.0, 6.0))
+		n.draw_colored_polygon(diamond, Color("0a0a12"))
+		n.draw_set_transform(marker, 0.0, Vector2(4.0, 4.0))
+		n.draw_colored_polygon(diamond, COLORBLIND_ENEMY)
+		n.draw_set_transform(Vector2.ZERO)
 	_draw_status_icons(n, icon_y(top))
 
 

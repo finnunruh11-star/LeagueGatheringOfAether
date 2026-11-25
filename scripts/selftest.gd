@@ -42,6 +42,9 @@ func _ready() -> void:
 	if Game.cmdline.get("selftest") == "classic_items":
 		await _test_classic_items()
 		return
+	if Game.cmdline.get("selftest") == "colorblind":
+		await _test_colorblind()
+		return
 	for e in world.entities.values():
 		if e is Dummy:
 			world.despawn(e)
@@ -115,6 +118,52 @@ func _ready() -> void:
 		dummy.statuses.clear()
 	print("[selftest] done")
 	get_tree().quit()
+
+
+func _test_colorblind() -> void:
+	world.hud.open_settings()
+	var toggle: CheckButton = world.hud.settings_menu._controls.colorblind_mode
+	var player := world.local_champion
+	var ally := Unit.new()
+	var enemy := Unit.new()
+	var neutral := Unit.new()
+	# Check the palette from the red side, not just the default blue spawn.
+	var old_team := world.local_team
+	world.local_team = 1
+	ally.team = 1
+	enemy.team = 0
+	neutral.team = 2
+	var units: Array[Unit] = [player, ally, enemy, neutral]
+	toggle.button_pressed = false
+	var baseline: Array[Color] = []
+	for unit in units:
+		unit.world = world
+		baseline.append(unit.bar_color())
+	toggle.button_pressed = true
+	var track := Unit.COLORBLIND_HP_TRACK.srgb_to_linear().get_luminance()
+	var colors := {}
+	var ok := true
+	for i in units.size():
+		var fill := units[i].bar_color()
+		colors[fill] = true
+		var contrast := (fill.srgb_to_linear().get_luminance() + 0.05) / (track + 0.05)
+		ok = ok and fill != baseline[i] and contrast >= 3.0 and fill == units[i].ring_color()
+	ok = ok and colors.size() == units.size()
+	ok = ok and ally.bar_color().b > ally.bar_color().r and enemy.bar_color().r > enemy.bar_color().b
+	world.local_team = old_team
+	await get_tree().process_frame
+	toggle.button_pressed = false
+	world.local_team = 1
+	for i in units.size():
+		ok = ok and units[i].bar_color() == baseline[i]
+	world.local_team = old_team
+	ally.free()
+	enemy.free()
+	neutral.free()
+	if not ok:
+		push_error("[colorblind] expected distinct, high-contrast HP colors from the red side and the original palette after disabling")
+	print("[colorblind] ", "passed" if ok else "failed")
+	get_tree().quit(0 if ok else 1)
 
 
 func _test_runes() -> void:

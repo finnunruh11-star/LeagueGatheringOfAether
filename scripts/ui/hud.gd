@@ -770,8 +770,9 @@ func _draw_bar(c: Control) -> void:
 			c.draw_rect(Rect2(x0 + k * (pw + 3.0), 80, pw, 6), Color(1, 0.82, 0.35) if on else Color(0.22, 0.23, 0.27))
 	var hb := Rect2(SLOT_X, 92, bw, 17)
 	var total := maxf(ch.stats.max_hp, ch.hp + ch.shield)
-	c.draw_rect(hb, Color(0.18, 0.06, 0.06))
-	c.draw_rect(Rect2(hb.position, Vector2(hb.size.x * ch.hp / total, hb.size.y)), Color(0.25, 0.75, 0.3))
+	var colorblind: bool = Game.prefs.colorblind_mode
+	c.draw_rect(hb, Unit.COLORBLIND_HP_TRACK if colorblind else Color(0.18, 0.06, 0.06))
+	c.draw_rect(Rect2(hb.position, Vector2(hb.size.x * ch.hp / total, hb.size.y)), ch.bar_color() if colorblind else Color(0.25, 0.75, 0.3))
 	if ch.shield > 0.0:
 		c.draw_rect(Rect2(hb.position + Vector2(hb.size.x * ch.hp / total, 0), Vector2(hb.size.x * ch.shield / total, hb.size.y)), Color(0.9, 0.9, 0.95))
 	if ch.bond > 0.0:
@@ -783,8 +784,14 @@ func _draw_bar(c: Control) -> void:
 			c.draw_rect(hb.grow(1.0), Color(Unit.BOND_COLOR.lightened(0.3), 0.55 + 0.45 * sin(Time.get_ticks_msec() / 125.0)), false, 2.0)
 		c.draw_string_outline(font, hb.position + Vector2(4, 13), "Bond %d%%" % roundi(bf * 100.0), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, 3, Color.BLACK)
 		c.draw_string(font, hb.position + Vector2(4, 13), "Bond %d%%" % roundi(bf * 100.0), HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Unit.BOND_COLOR.lightened(0.6))
-	c.draw_string(font, hb.position + Vector2(0, 13), "%d / %d" % [int(ch.hp), int(ch.stats.max_hp)], HORIZONTAL_ALIGNMENT_CENTER, hb.size.x, 13)
-	c.draw_string(font, hb.position + Vector2(0, 13), "+%.1f " % ch.stats.get("hp_regen", 0.0), HORIZONTAL_ALIGNMENT_RIGHT, hb.size.x, 11, Color(0.8, 1, 0.8, 0.8))
+	var hp_text := "%d / %d" % [int(ch.hp), int(ch.stats.max_hp)]
+	var regen_text := "+%.1f " % ch.stats.get("hp_regen", 0.0)
+	var hp_text_pos := hb.position + Vector2(0, 13)
+	if colorblind:
+		c.draw_string_outline(font, hp_text_pos, hp_text, HORIZONTAL_ALIGNMENT_CENTER, hb.size.x, 13, 4, Color.BLACK)
+		c.draw_string_outline(font, hp_text_pos, regen_text, HORIZONTAL_ALIGNMENT_RIGHT, hb.size.x, 11, 3, Color.BLACK)
+	c.draw_string(font, hp_text_pos, hp_text, HORIZONTAL_ALIGNMENT_CENTER, hb.size.x, 13)
+	c.draw_string(font, hp_text_pos, regen_text, HORIZONTAL_ALIGNMENT_RIGHT, hb.size.x, 11, Color.WHITE if colorblind else Color(0.8, 1, 0.8, 0.8))
 	var mb := Rect2(SLOT_X, 112, bw, 13)
 	if ch.stats.max_mana > 0.0:
 		c.draw_rect(mb, Color(0.06, 0.08, 0.2))
