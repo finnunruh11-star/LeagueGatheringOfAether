@@ -638,7 +638,7 @@ static func _sprite(spec, def: Dictionary, errors: PackedStringArray):
 	if frames.has_animation("default"):
 		frames.remove_animation("default")
 	var info := {"frames": frames, "clips": {}, "scale": 1.0, "offset": Vector2.ZERO, "faces_left": false, "dirs": 1,
-		"first_dir": 0.0, "blend": 0.0, "linear": false, "procedural": true, "shadow": true, "top": 0.0}
+		"first_dir": 0.0, "blend": 0.0, "linear": false, "procedural": true, "shadow": true, "top": 0.0, "sets": []}
 	if spec is String:
 		var tex := texture(def, spec)
 		if tex == null:
@@ -664,11 +664,15 @@ static func _sprite(spec, def: Dictionary, errors: PackedStringArray):
 			if not (a is Dictionary):
 				continue
 			var key: String = anim_name if built.is_empty() else "%s#%d" % [anim_name, built.size()]
-			var clip = _sprite_clip(frames, key, a, spec, dirs, def, errors, anim_name in LOOPING_ANIMS)
+			var clip = _sprite_clip(frames, key, a, spec, dirs, def, errors, anim_name.get_slice("@", 0) in LOOPING_ANIMS)
 			if clip != null:
 				built.append(clip)
 		if not built.is_empty():
 			info.clips[anim_name] = built
+			var set_name: String = anim_name.get_slice("@", 1) if anim_name.contains("@") else ""
+			if set_name != "" and not info.sets.has(set_name):
+				info.sets.append(set_name)
+	info.sets.sort()
 	if not info.clips.has("idle"):
 		errors.append(def.id + ": sprite needs at least an 'idle' animation")
 		return null

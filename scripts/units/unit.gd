@@ -6,6 +6,7 @@ extends CharacterBody2D
 enum { ANIM_IDLE, ANIM_WALK, ANIM_ATTACK, ANIM_CAST, ANIM_DEAD }
 const ACT_FINISHER := 63    # anim_variant of a basic attack that sets off an "every N attacks" passive
 const ACT_CHANNEL := 5      # anim_variant of a channeled summoner spell (Teleport)
+const ACT_RECAST := 8       # anim_variant of a Q/W/E/R recast is ACT_RECAST + 0..3 (clips "cast_q_recast"...)
 
 const F_STUN := 1
 const F_ROOT := 2
@@ -89,7 +90,8 @@ var anim_lock_kind := ANIM_IDLE
 # The latest attack/cast animation (replicated, see start_action).
 var anim_seq := 0
 var anim_act := ANIM_IDLE   # ANIM_ATTACK or ANIM_CAST
-var anim_variant := 0       # attacks: which swing (or ACT_FINISHER); casts: 1-4 = Q-R, 0 = other
+var anim_variant := 0       # attacks: which swing (or ACT_FINISHER); casts: 1-4 = Q-R, 0 = other, ACT_RECAST + 0-3 = recasts
+var anim_set := ""          # sprite animation set from a buff's "anim_set": clips named "<name>@<set>" replace "<name>"
 var anim_windup := 0.0      # seconds from its start to its hit frame
 var anim_span := 0.0        # attacks: the recovery after the hit; casts: the dash it started
 var _action_time := -100.0
@@ -122,7 +124,8 @@ var _row := 0
 var _seen_seq := 0
 var _synced := false
 var _act_on := false
-var _oneshot := ""          # spawn / hurt / fidget
+var _oneshot := ""          # spawn / hurt / fidget / enter@<set> / exit@<set>
+var _shown_set := ""
 var _idle_t := 0.0
 var _fidget_at := 9.0
 var _move_phase := 0.0
@@ -895,12 +898,17 @@ func recompute_stats() -> void:
 	stats_dirty = false
 
 
-## Buffs with an "attack" override replace the basic attack while they last (the newest wins).
+## Buffs with an "attack" override replace the basic attack while they last (the newest wins),
+## and buffs with an "anim_set" switch the sprite's animation set the same way.
 func _refresh_attack() -> void:
 	var ov = null
+	var aset := ""
 	for s in statuses:
 		if s.type == "buff" and s.has("attack"):
 			ov = s.attack
+		if s.type == "buff" and s.has("anim_set"):
+			aset = str(s.anim_set)
+	anim_set = aset
 	if ov == null:
 		if own_attack != null:
 			attack_def = own_attack
@@ -1036,7 +1044,11 @@ func _update_anim() -> void:
 # ---------------------------------------------------------------- network ---
 
 func net_state() -> PackedFloat32Array:
-	return PackedFloat32Array([global_position.x, global_position.y, hp, stats.max_hp, shield, flags, facing, anim, stats.size, bond,
+	# anim (0-4) and the animation set (index into sprite_info.sets, 0 = none) share one value.
+	var set_idx := 0
+	if anim_set != "" and sprite_info != null:
+		set_idx = sprite_info.get("sets", []).find(anim_set) + 1
+	return PackedFloat32Array([global_position.x, global_position.y, hp, stats.max_hp, shield, flags, facing, anim + 8 * set_idx, stats.size, bond,
 		windup_left, windup_duration, windup_dir.x, windup_dir.y, windup_marker.x, windup_marker.y,
 		stats.attack_damage, stats.armor, stats.magic_resist, stats.move_speed, stats.attack_range,
 		face_angle, anim_act + 4 * anim_variant + 256 * anim_seq, anim_windup, anim_span])
@@ -1056,7 +1068,10 @@ func apply_net_state(s: PackedFloat32Array) -> void:
 	shield = s[4]
 	flags = int(s[5])
 	facing = s[6]
-	anim = int(s[7])
+	anim = int(s[7]) % 8
+	var set_idx := int(s[7]) / 8
+	var sets: Array = sprite_info.get("sets", []) if sprite_info != null else []
+	anim_set = sets[set_idx - 1] if set_idx > 0 and set_idx <= sets.size() else ""
 	if absf(stats.size - s[8]) > 0.001:
 		stats.size = s[8]
 		set_radius(base_radius * s[8])
@@ -1080,6 +1095,7 @@ func apply_net_state(s: PackedFloat32Array) -> void:
 	if not _synced:
 		_synced = true
 		_seen_seq = anim_seq
+		_shown_set = anim_set
 	dead = flags & F_DEAD != 0
 
 
@@ -1110,7 +1126,7 @@ func hit_react(ang: float, amount: float) -> void:
 	if not is_structure:
 		kick = Vector2.from_angle(ang) * clampf(2.0 + amount / 25.0, 2.0, 9.0)
 	# Big hits make an idle character flinch.
-	if sprite != null and not dead and anim == ANIM_IDLE and not _act_on and sprite_info.clips.has("hurt") \
+	if sprite != null and not dead and anim == ANIM_IDLE and not _act_on and _clips("hurt") != null \
 			and amount >= maxf(40.0, stats.max_hp * 0.04) and _oneshot != "spawn":
 		_oneshot = "hurt"
 		_clip_state = ""
@@ -1238,12 +1254,19 @@ func _update_status_fx() -> void:
 	status_fx.emitting = true
 
 
+## The clips named `k` in the current animation set: "k@set" when the sheet has it, else "k" (null if neither).
+func _clips(k: String):
+	var clips: Dictionary = sprite_info.clips
+	if anim_set != "" and clips.has(k + "@" + anim_set):
+		return clips[k + "@" + anim_set]
+	return clips.get(k)
+
+
 ## Sprite player: picks what to show by priority (death, stun, the latest attack/cast, recall,
 ## moving, one-shots like spawn/hurt/fidget, guard while shielded, idle), maps attack/cast clips
 ## onto their windup and dash, and cross-fades from the previous pose whenever the animation or
 ## direction changes. Runs the same on every peer from the replicated state.
 func _update_sprite(delta: float) -> void:
-	var clips: Dictionary = sprite_info.clips
 	if _vis_pos != Vector2.INF and delta > 0.0:
 		_vis_speed = lerpf(_vis_speed, global_position.distance_to(_vis_pos) / delta, minf(delta * 15.0, 1.0))
 	_vis_pos = global_position
@@ -1254,7 +1277,17 @@ func _update_sprite(delta: float) -> void:
 	if dead != _was_dead:
 		_was_dead = dead
 		_act_on = false
-		_oneshot = "spawn" if not dead and clips.has("spawn") else ""
+		_oneshot = "spawn" if not dead and _clips("spawn") != null else ""
+		_shown_set = anim_set       # sets change silently across death and respawn
+	if anim_set != _shown_set:
+		# switching animation sets plays "exit@<old set>" (or else "enter@<new set>") once, e.g. holstering a pistol
+		var was := _shown_set
+		_shown_set = anim_set
+		if not dead and _oneshot != "spawn":
+			if was != "" and _clips("exit@" + was) != null:
+				_oneshot = "exit@" + was
+			elif anim_set != "" and _clips("enter@" + anim_set) != null:
+				_oneshot = "enter@" + anim_set
 	var pick := _sprite_state()
 	if pick[0] != _clip_state:
 		_clip_state = pick[0]
@@ -1275,7 +1308,7 @@ func _update_sprite(delta: float) -> void:
 		frame = maxi(_state_frame(pick[0], pick[1], 0.0), 0)
 	if pick[0] == "idle":
 		_idle_t += delta
-		if _idle_t >= _fidget_at and clips.has("fidget"):
+		if _idle_t >= _fidget_at and _clips("fidget") != null:
 			_oneshot = "fidget"
 			_fidget_at = randf_range(7.0, 12.0)
 	else:
@@ -1285,13 +1318,12 @@ func _update_sprite(delta: float) -> void:
 
 ## [state name, clip] to show right now.
 func _sprite_state() -> Array:
-	var clips: Dictionary = sprite_info.clips
 	if dead:
-		return ["death", clips.death[0]] if clips.has("death") else ["idle", clips.idle[0]]
-	if flags & F_STUN and clips.has("stun"):
+		return ["death", _clips("death")[0]] if _clips("death") != null else ["idle", _clips("idle")[0]]
+	if flags & F_STUN and _clips("stun") != null:
 		_act_on = false
 		_oneshot = ""
-		return ["stun", clips.stun[0]]
+		return ["stun", _clips("stun")[0]]
 	if _act_on:
 		var c = _action_clip()
 		if c != null and not _action_cancelled(c):
@@ -1300,23 +1332,23 @@ func _sprite_state() -> Array:
 		_act_on = false
 	var recall: bool = flags & F_RECALL != 0
 	if recall or (anim_act == ANIM_CAST and anim_variant == ACT_CHANNEL and anim == ANIM_CAST):
-		var k := "recall" if recall or not clips.has("channel") else "channel"
-		if not clips.has(k):
-			k = "channel" if clips.has("channel") else ""
+		var k := "recall" if recall or _clips("channel") == null else "channel"
+		if _clips(k) == null:
+			k = "channel" if _clips("channel") != null else ""
 		if k != "":
 			_oneshot = ""
-			return [k, clips[k][0]]
+			return [k, _clips(k)[0]]
 	if anim == ANIM_WALK:
 		var m = _move_clip()
 		if m != null:
 			_oneshot = ""
 			return ["move", m]
-	if _oneshot != "" and clips.has(_oneshot):
-		return [_oneshot, clips[_oneshot][0]]
+	if _oneshot != "" and _clips(_oneshot) != null:
+		return [_oneshot, _clips(_oneshot)[0]]
 	_oneshot = ""
-	if shield > 0.0 and clips.has("guard"):
-		return ["guard", clips.guard[0]]
-	return ["idle", clips.idle[0]]
+	if shield > 0.0 and _clips("guard") != null:
+		return ["guard", _clips("guard")[0]]
+	return ["idle", _clips("idle")[0]]
 
 
 ## Frame of the current state's clip, or -1 when a one-shot is over.
@@ -1325,6 +1357,9 @@ func _state_frame(state: String, c: Dictionary, delta: float) -> int:
 	if state.begins_with("act"):
 		var f := _action_frame(c, _clip_t)
 		return int(f) if f >= 0.0 else -1
+	if state.begins_with("exit@") or state.begins_with("enter@"):
+		var t := int(_clip_t * c.fps)
+		return t if t < n else -1
 	match state:
 		"move":
 			var rate := clampf(stats.move_speed / c.speed, 0.5, 2.0) if c.speed > 0.0 else 1.0
@@ -1357,18 +1392,21 @@ func _loop_frame(c: Dictionary, t: float) -> int:
 
 ## The clip of the latest attack/cast (null if the sprite has none for it).
 func _action_clip():
-	var clips: Dictionary = sprite_info.clips
 	if anim_act == ANIM_ATTACK:
-		if anim_variant == ACT_FINISHER and clips.has("attack_finisher"):
-			return clips.attack_finisher[0]
-		if clips.has("attack"):
-			return clips.attack[anim_variant % clips.attack.size()]
+		if anim_variant == ACT_FINISHER and _clips("attack_finisher") != null:
+			return _clips("attack_finisher")[0]
+		if _clips("attack") != null:
+			return _clips("attack")[anim_variant % _clips("attack").size()]
 	elif anim_act == ANIM_CAST and anim_variant != ACT_CHANNEL:
 		var k: String = "cast_" + "qwer"[anim_variant - 1] if anim_variant >= 1 and anim_variant <= 4 else "cast"
-		if clips.has(k):
-			return clips[k][0]
-		if clips.has("cast"):
-			return clips.cast[0]
+		if anim_variant >= ACT_RECAST and anim_variant < ACT_RECAST + 4:
+			k = "cast_" + "qwer"[anim_variant - ACT_RECAST]
+			if _clips(k + "_recast") != null:
+				return _clips(k + "_recast")[0]
+		if _clips(k) != null:
+			return _clips(k)[0]
+		if _clips("cast") != null:
+			return _clips("cast")[0]
 	return null
 
 
@@ -1414,8 +1452,8 @@ func _move_clip():
 	var best = null
 	var bd := INF
 	for k in ["run", "walk"]:
-		if sprite_info.clips.has(k):
-			var c: Dictionary = sprite_info.clips[k][0]
+		if _clips(k) != null:
+			var c: Dictionary = _clips(k)[0]
 			var d := absf(log(maxf(stats.move_speed, 1.0) / c.speed)) if c.speed > 0.0 else 1.0
 			if d < bd:
 				bd = d

@@ -260,6 +260,7 @@ func cast(slot: String, aim: Vector2, tid: int) -> bool:
 	cancel_attack_windup()
 	face(ctx.pos)
 	var ct := Effects.num(ab.cast_time, ctx, 0.0)
+	var variant := (ACT_RECAST if is_recast else 1) + SLOTS.find(slot)
 	world.note_cast(self, slot, is_recast, "", ctx, ct)
 	if ab.get("start_effects") is Array:
 		Effects.run(ab.start_effects, ctx)
@@ -267,10 +268,10 @@ func cast(slot: String, aim: Vector2, tid: int) -> bool:
 		casting = {"ab": ab, "ctx": ctx, "time": ct}
 		var marker: Vector2 = ctx.dir * ctx.range if ab.targeting == "direction" else ctx.pos - global_position
 		begin_windup(ANIM_CAST, ct, Vector2.ZERO if ab.targeting == "self" else ctx.dir, marker)
-		start_action(ANIM_CAST, SLOTS.find(slot) + 1, ct)
+		start_action(ANIM_CAST, variant, ct)
 	else:
 		set_anim_lock(ANIM_CAST, 0.25)
-		start_action(ANIM_CAST, SLOTS.find(slot) + 1, 0.0)
+		start_action(ANIM_CAST, variant, 0.0)
 		_execute(ab, ctx)
 	return true
 

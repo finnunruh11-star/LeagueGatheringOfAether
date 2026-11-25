@@ -614,6 +614,8 @@ static func _one(e: Dictionary, ctx: Dictionary) -> void:
 				if e.get("attack") is Dictionary:
 					s.attack = Content.attack_override(e.attack, str(ctx.get("char", "")))
 					s.attack.rank = int(ctx.get("rank", 1))
+				if e.has("anim_set"):
+					s.anim_set = str(e.anim_set)
 				_add(u, s, e, ctx)
 				var c := _caster(ctx)
 				if c and u != c and u.is_champion and u.team == c.team:

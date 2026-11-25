@@ -3,6 +3,36 @@
   "title": "Champion Duelist",
   "description": "Sword in one hand, pistol in the other. Night Vigil turns her attacks into pistol shots that build Bond of Life, and her lunge cashes it in for damage and healing. Sword, Q and W scale with AD; pistol and R with AP; the lunge with whichever is higher.",
   "color": "#6f5bd6",
+  "portrait": "portrait.png",
+  "sprite": {"directions": 8, "scale": 1.0, "offset": [0, 49], "top": 125, "blend": 0.1, "filter": "linear", "shadow": false,
+    "animations": {
+      "idle": {"sheet": "sprites/idle.webp", "frame_width": 152, "frame_height": 182, "frames": 20, "fps": 10, "anchor": [79.0, 127.2]},
+      "run": {"sheet": "sprites/run.webp", "frame_width": 133, "frame_height": 167, "frames": 12, "fps": 18, "anchor": [69.0, 123.2], "speed": 269},
+      "attack": [
+        {"sheet": "sprites/attack.webp", "frame_width": 293, "frame_height": 258, "frames": 14, "fps": 20, "anchor": [154.0, 153.2], "hit": 6},
+        {"sheet": "sprites/attack_slash.webp", "frame_width": 216, "frame_height": 236, "frames": 14, "fps": 20, "anchor": [114.0, 162.2], "hit": 5}
+      ],
+      "cast_q": {"sheet": "sprites/cast_q.webp", "frame_width": 215, "frame_height": 227, "frames": 17, "fps": 20, "anchor": [107.0, 163.2]},
+      "cast_w": {"sheet": "sprites/cast_w.webp", "frame_width": 306, "frame_height": 266, "frames": 24, "fps": 20, "anchor": [160.0, 156.2]},
+      "cast_e": {"sheet": "sprites/cast_e.webp", "frame_width": 165, "frame_height": 191, "frames": 14, "fps": 20, "anchor": [88.0, 127.2]},
+      "cast_e_recast": {"sheet": "sprites/cast_e_recast.webp", "frame_width": 305, "frame_height": 262, "frames": 14, "fps": 20, "anchor": [160.0, 152.2], "hit": 2, "land": 6},
+      "cast_r": {"sheet": "sprites/cast_r.webp", "frame_width": 248, "frame_height": 249, "frames": 24, "fps": 20, "anchor": [133.0, 156.2]},
+      "hurt": {"sheet": "sprites/hurt.webp", "frame_width": 149, "frame_height": 180, "frames": 8, "fps": 20, "anchor": [77.0, 127.2]},
+      "stun": {"sheet": "sprites/stun.webp", "frame_width": 149, "frame_height": 177, "frames": 14, "fps": 10, "anchor": [77.0, 126.2], "loop_from": 4},
+      "death": {"sheet": "sprites/death.webp", "frame_width": 312, "frame_height": 252, "frames": 20, "fps": 14, "anchor": [156.0, 139.2]},
+      "spawn": {"sheet": "sprites/spawn.webp", "frame_width": 206, "frame_height": 230, "frames": 18, "fps": 15, "anchor": [108.0, 152.2]},
+      "recall": {"sheet": "sprites/recall.webp", "frame_width": 99, "frame_height": 169, "frames": 16, "fps": 8, "anchor": [57.0, 128.2]},
+      "fidget": {"sheet": "sprites/fidget.webp", "frame_width": 150, "frame_height": 189, "frames": 24, "fps": 15, "anchor": [78.0, 135.2]},
+      "idle@vigil": {"sheet": "sprites/idle_vigil.webp", "frame_width": 149, "frame_height": 181, "frames": 16, "fps": 10, "anchor": [81.0, 123.2]},
+      "run@vigil": {"sheet": "sprites/run_vigil.webp", "frame_width": 141, "frame_height": 177, "frames": 12, "fps": 18, "anchor": [77.0, 123.2], "speed": 269},
+      "attack@vigil": {"sheet": "sprites/attack_vigil.webp", "frame_width": 188, "frame_height": 205, "frames": 10, "fps": 24, "anchor": [94.0, 143.2], "hit": 2},
+      "cast_q@vigil": {"sheet": "sprites/cast_q_vigil.webp", "frame_width": 215, "frame_height": 227, "frames": 16, "fps": 20, "anchor": [107.0, 163.2]},
+      "cast_w@vigil": {"sheet": "sprites/cast_w_vigil.webp", "frame_width": 306, "frame_height": 266, "frames": 24, "fps": 20, "anchor": [160.0, 156.2]},
+      "cast_r@vigil": {"sheet": "sprites/cast_r_vigil.webp", "frame_width": 248, "frame_height": 249, "frames": 24, "fps": 20, "anchor": [133.0, 156.2]},
+      "hurt@vigil": {"sheet": "sprites/hurt_vigil.webp", "frame_width": 149, "frame_height": 181, "frames": 8, "fps": 20, "anchor": [81.0, 123.2]},
+      "exit@vigil": {"sheet": "sprites/exit_vigil.webp", "frame_width": 153, "frame_height": 185, "frames": 10, "fps": 18, "anchor": [81.0, 127.2]}
+    }
+  },
   "stats": {
     "max_hp": 620,
     "hp_regen": 1.6,
@@ -79,7 +109,7 @@
       "cooldown": [16, 15, 14, 13, 12],
       "targeting": "self",
       "effects": [
-        {"type": "buff", "target": "self", "id": "night_vigil", "duration": 7,
+        {"type": "buff", "target": "self", "id": "night_vigil", "duration": 7, "anim_set": "vigil",
           "add": {"attack_range": 300, "bonus_attack_speed": "[1.0, 1.15, 1.3, 1.45, 1.6][rank - 1]", "attack_speed_cap": 0.5, "heal_to_bond": 1},
           "attack": {
             "ranged": true, "projectile_speed": 2200, "projectile_color": "#c9a2ff", "projectile_size": 5, "hit_vfx": "streaks",

@@ -461,6 +461,15 @@ Sir Bonk (`sir_bonk/`) uses an 8-direction sheet set made from the "2D HD Charac
   `pingpong` plays it back and forth.
 - Moving or casting cancels attack animations right away (it may jump a little); everything else
   cross-fades over `blend` seconds.
+- **Recasts:** `cast_e_recast` (etc.) plays when an ability is recast; without it the recast uses `cast_e`.
+- **Animation sets:** a `buff` effect with `"anim_set": "vigil"` switches the sprite to its `@vigil`
+  animations while the buff lasts: `idle@vigil`, `run@vigil`, `attack@vigil`, `cast_q@vigil`... replace
+  the plain ones (anything without an `@vigil` version stays as is). When the set ends, `exit@vigil`
+  plays once if you have it (e.g. holstering a weapon); `enter@vigil` plays when it starts.
+
+Clorinde (`clorinde/`) is pre-rendered from a 3D model that is built, rigged and animated entirely by
+Python scripts for Blender 4.5 (`clorinde/art/`, see the header of `clorinde_render.py`), then packed
+into sheets by `clorinde_sheets.py` - a template for making your own 3D-rendered character.
 
 ## Testing your character
 Run the self-test, which casts each ability at a training dummy and prints damage dealt:

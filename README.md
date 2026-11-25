@@ -145,7 +145,8 @@ traps, knockbacks, beams, zones...), passives and sprites. The six example chara
 - **Honk Lord** - a goose. Custom pixel-art sprite sheet and goslings.
 - **Clorinde** - Genshin Impact's duelist: a recast ability (Night Vigil turns her sword into piercing
   pistol shots, recast to lunge), Bond of Life (healing debt that heal bonuses turn into huge heals),
-  a parry that stuns if it blocked a champion, and adaptive AD/AP damage
+  a parry that stuns if it blocked a champion, and adaptive AD/AP damage. 3D-rendered 8-direction
+  sprites with a second animation set while her pistol is drawn.
 
 Ember and Clorinde show explicit per-rank numbers (`[70, 105, 140, 175, 210]`); the others scale automatically.
 
@@ -231,6 +232,12 @@ particles, telegraphs, the map art) is drawn procedurally.
 Sir Bonk's sprites come from the "2D HD Character Knight" pack (also `.gdignore`d). Its
 `build_sir_bonk.py` (Python + Pillow) crops the sheets he uses into `characters/sir_bonk/knight/`
 (lossless WebP, about 3 MB, since characters are sent to every client) and makes his portrait.
+
+Clorinde's sprites are rendered from an original 3D model that Python scripts build, rig and animate in
+Blender 4.5 (`characters/clorinde/art/`: model, IK pose solver with cloth/hair simulation, 23
+animations, weapon trails and muzzle flashes). `clorinde_render.py` renders the 8 directions and
+`clorinde_sheets.py` packs them into `characters/clorinde/sprites/` (lossy WebP) and updates the
+sprite block of her character.json. Godot ignores the `.py` files.
 
 ## How it works (for tinkering)
 - `scripts/game.gd` - lobby, networking (Godot ENet), sends characters to clients
