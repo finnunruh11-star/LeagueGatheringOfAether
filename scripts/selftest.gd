@@ -21,6 +21,9 @@ func _ready() -> void:
 	if Game.cmdline.get("selftest") == "windup":
 		_test_windup()
 		return
+	if Game.cmdline.get("selftest") == "rift":
+		_test_rift()
+		return
 	for e in world.entities.values():
 		if e is Dummy:
 			world.despawn(e)
@@ -222,3 +225,203 @@ func _test_windup() -> void:
 	print("[windup] ", "passed" if ok else "failed")
 	await get_tree().create_timer(1.0, true, false, true).timeout
 	get_tree().quit(0 if ok else 1)
+
+
+## Aether Rift: layout invariants, brush vision and the jungle (aggro, leash, rewards, objectives).
+##   godot --headless --path . -- --auto=practice --map=rift --char=ember --selftest=rift
+func _test_rift() -> void:
+	var m := world.map
+	var jg := world.jungle
+	var blue := world.local_champion
+	if not _check(jg != null and m.mirror_mode == "rotate" and blue != null, "rift test requires --map=rift"):
+		get_tree().quit(1)
+		return
+	var ok := true
+	var per_team := [0, 0]
+	var on_lane := true
+	for s in world.structures:
+		per_team[s.team] += 1
+		if s.lane >= 0:
+			on_lane = on_lane and m.nearest_lane(s.global_position) == s.lane
+	ok = _check(per_team == [15, 15], "each team has a Nexus, two Nexus turrets, three inhibitors and nine lane turrets") and ok
+	ok = _check(m.lane_count() == 3 and on_lane, "three lanes, and every mirrored turret/inhibitor guards the lane it stands on") and ok
+	ok = _check(m.spawn_point(1).is_equal_approx(m.size - m.spawn_point(0)), "the red base is the blue base rotated 180 degrees") and ok
+	for i in m.lane_count():
+		var l: PackedVector2Array = m.lanes[i]
+		ok = _check(_reachable(l[0], l[l.size() - 1]), "%s lane connects both bases" % m.lane_name(i)) and ok
+	for c in m.camps:
+		ok = _check(not m.is_wall(c.pos) and _reachable(m.spawn_point(0), c.pos), "%s camp (side %d) is reachable" % [c.kind, c.side]) and ok
+
+	# ---- brush
+	var red: Champion = world.spawn("champion", {"peer": 4242, "team": 1, "character": blue.char_id, "name": "Red", "pos": m.size * 0.5})
+	var b: PackedVector2Array = m.brushes[0]
+	var spot := Vector2.ZERO
+	for p in b:
+		spot += p
+	spot /= b.size()
+	var outside := Vector2.INF
+	for k in 16:
+		var q := spot + Vector2.from_angle(TAU * k / 16.0) * 450.0
+		if m.brush_at(q) == 0 and not m.is_wall(q) and m.sight_clear(q, spot):
+			outside = q
+			break
+	ok = _check(m.brush_at(spot) > 0 and outside != Vector2.INF, "brush has an inside and a clear outside") and ok
+	red.teleport(spot)
+	blue.teleport(outside)
+	_vision()
+	ok = _check(not world.can_see(red, 0) and world.can_see(blue, 1), "a champion in brush is hidden from enemies outside, and still sees out") and ok
+	var ward: Summon = world.spawn("summon", {"team": 0, "pos": spot + Vector2(0, 20), "ward": true, "stationary": true, "stats": {"vision": 900.0}})
+	_vision()
+	ok = _check(world.can_see(red, 0), "a ward inside the brush reveals it") and ok
+	world.despawn(ward)
+	blue.teleport(spot + Vector2(0, -20))
+	_vision()
+	ok = _check(world.can_see(red, 0), "standing in the same brush reveals who is inside") and ok
+	blue.teleport(outside)
+	blue.take_damage(20.0, red, "physical", {"attack": true})
+	red.flags = red._compute_flags()
+	_vision()
+	ok = _check(world.can_see(red, 0), "damaging a champion from brush reveals the attacker") and ok
+	red._update_statuses(World.BRUSH_REVEAL + 0.1)
+	red.flags = red._compute_flags()
+	_vision()
+	ok = _check(not world.can_see(red, 0), "the brush reveal wears off") and ok
+	world.fog.dark = false
+	red.teleport(m.spawn_point(1))
+	red.add_status({"type": "stealth", "time": 5.0}, red, "test_stealth")
+	red.flags = red._compute_flags()
+	_vision()
+	ok = _check(not world.can_see(red, 0), "with fog of war off, stealth still hides champions outside brush") and ok
+	red.statuses.clear()
+	red.flags = red._compute_flags()
+	_vision()
+	ok = _check(world.can_see(red, 0), "with fog of war off, champions outside brush are visible") and ok
+	world.fog.dark = true
+	red.teleport(m.spawn_point(1))
+
+	# ---- jungle camps
+	world.time = 90.0
+	jg.tick(0.01)
+	var bc := _camp("blue", 0)
+	var sentinel: Monster = bc.alive[0] if not bc.alive.is_empty() else null
+	ok = _check(sentinel != null and sentinel.kind_id == "blue_sentinel", "Blue Sentinel spawns at 1:30") and ok
+	if sentinel == null:
+		get_tree().quit(1)
+		return
+	blue.teleport(sentinel.home + Vector2(0, 250))
+	sentinel.take_damage(50.0, blue, "physical", {"attack": true})
+	ok = _check(sentinel.attack_target == blue, "a monster fights back when hit") and ok
+	blue.teleport(m.nearest_open(sentinel.home + Vector2(0, 2600)))
+	sentinel._think(0.3)
+	ok = _check(sentinel.resetting, "leaving the leash range makes the monster reset") and ok
+	sentinel.global_position = sentinel.home
+	sentinel._think(0.1)
+	ok = _check(not sentinel.resetting and is_equal_approx(sentinel.hp, sentinel.stats.max_hp), "a reset monster is back at full health") and ok
+	var wc := _camp("wolves", 0)
+	blue.teleport(wc.pos + Vector2(0, 250))
+	wc.alive[0].take_damage(10.0, blue, "physical", {"attack": true})
+	ok = _check(wc.alive.size() == 3 and wc.alive.all(func(w): return w.attack_target == blue), "hitting one wolf aggroes the whole camp") and ok
+	blue.teleport(sentinel.home + Vector2(0, 250))
+	var gold := blue.gold
+	var xp := blue.xp + blue.level * 10000.0
+	sentinel.take_damage(1.0e6, blue, "true")
+	ok = _check(not blue.find_status("crest_of_insight").is_empty(), "killing Blue Sentinel grants Crest of Insight") and ok
+	ok = _check(blue.gold - gold >= 89.9 and blue.xp + blue.level * 10000.0 > xp, "monsters give gold and experience to their killer") and ok
+	ok = _check(is_equal_approx(float(bc.next), world.time + 300.0), "Blue Sentinel respawns after five minutes") and ok
+	var bram: Monster = _camp("red", 0).alive[0]
+	blue.summoners = ["flash", "smite"]
+	blue.sum_cd = [0.0, 0.0]
+	blue.teleport(bram.global_position + Vector2(0, 300))
+	_vision()
+	var before := bram.hp
+	ok = _check(blue.use_summoner(1, bram.global_position, bram.net_id) and before - bram.hp >= 599.0, "Smite deals 600 true damage to a monster") and ok
+	bram.take_damage(1.0e6, blue, "true")
+	ok = _check(not blue.find_status("crest_of_cinders").is_empty(), "killing Red Brambleback grants Crest of Cinders") and ok
+	var wolf: Monster = wc.alive[1]
+	blue.teleport(m.spawn_point(0))
+	var minion: Minion = world.spawn("minion", {"team": 1, "lane": 0, "type": "melee", "pos": wolf.global_position + Vector2(60, 0)})
+	ok = _check(minion._find_target() == null, "minions ignore jungle monsters") and ok
+	world.despawn(minion)
+	red.teleport(blue.global_position + Vector2(120, 0))
+	jg.give_buff(red, "blue")
+	blue.find_status("crest_of_insight").time = 5.0
+	blue.take_damage(1.0e6, red, "true")
+	ok = _check(blue.dead and not red.find_status("crest_of_insight").is_empty() and not red.find_status("crest_of_cinders").is_empty(),
+		"killing a buff holder takes over their buffs") and ok
+	ok = _check(float(red.find_status("crest_of_insight").time) > 100.0, "taking over a shorter buff keeps your own longer one") and ok
+	blue.respawn()
+	red.teleport(m.spawn_point(1))
+
+	# ---- Rift Scuttler, Drakes, Elder, Baron
+	world.time = 210.0
+	jg.tick(0.01)
+	var crab: Monster = _camp("scuttle", 0).alive[0]
+	blue.teleport(crab.global_position + Vector2(0, 150))
+	crab.take_damage(1.0e6, blue, "true")
+	var shrine: Summon = null
+	for e in world.entities.values():
+		if e is Summon and e.display_name == "Speed Shrine" and e.team == 0:
+			shrine = e
+	shrine.flags = shrine._compute_flags() if shrine != null else 0
+	ok = _check(shrine != null and not shrine.targetable(), "killing the Rift Scuttler leaves an untargetable vision shrine") and ok
+	world.time = 300.0
+	jg.tick(0.01)
+	var ally: Champion = world.spawn("champion", {"peer": 4243, "team": 0, "character": blue.char_id, "name": "Ally", "pos": m.spawn_point(0)})
+	ally.take_damage(1.0e6, red, "true")
+	var dc := _camp("dragon", -1)
+	var taken := []
+	for k in 4:
+		var d: Monster = dc.alive[0]
+		taken.append(d.element)
+		blue.teleport(m.nearest_open(d.global_position + Vector2(0, 300)))
+		d.take_damage(1.0e6, blue, "true")
+		world.time = float(dc.next)
+		jg.tick(0.01)
+	ok = _check(jg.drakes[0] == taken and jg.soul[0] == taken[3], "four drakes grant the team their Dragon Soul (%s)" % str(taken)) and ok
+	ok = _check(int(blue.find_status("drake_" + str(taken[0])).get("stacks", 0)) == taken.count(taken[0]), "drake bonuses stack per element") and ok
+	ally.respawn()
+	ok = _check(ally.find_status("drake_" + str(taken[0])).get("stacks", 0) == taken.count(taken[0]) and not ally.find_status("dragon_soul").is_empty(),
+		"a teammate who was dead during the drakes gets the stacks and Soul on respawn") and ok
+	var elder: Monster = dc.alive[0]
+	ok = _check(elder.kind_id == "elder_dragon", "the Elder Dragon replaces drakes once a soul is claimed") and ok
+	blue.teleport(m.nearest_open(elder.global_position + Vector2(0, 300)))
+	elder.take_damage(1.0e6, blue, "true")
+	red.teleport(blue.global_position + Vector2(150, 0))
+	red.hp = red.stats.max_hp * 0.15
+	red.take_damage(5.0, blue, "physical", {"attack": true})
+	ok = _check(red.dead, "Aspect of the Elder executes champions below 20% health") and ok
+	red.respawn()
+	world.time = 1200.0
+	jg.tick(0.01)
+	var baron: Monster = _camp("baron", -1).alive[0]
+	ok = _check(baron.kind_id == "baron", "Baron Nashor spawns at 20:00") and ok
+	blue.teleport(m.nearest_open(baron.global_position + Vector2(0, 400)))
+	baron.take_damage(1.0e6, blue, "true")
+	ok = _check(not blue.find_status("hand_of_baron").is_empty(), "killing Baron grants Hand of Baron") and ok
+	blue.start_recall()
+	ok = _check(is_equal_approx(blue.recall_timer, 4.0), "Hand of Baron empowers recall (4s)") and ok
+	blue._cancel_recall()
+	var mn: Minion = world.spawn("minion", {"team": 0, "lane": 1, "type": "melee", "pos": blue.global_position + Vector2(80, 0)})
+	jg._auras()
+	ok = _check(mn.statuses.any(func(s): return s.key == "baron_aura"), "Hand of Baron empowers nearby minions") and ok
+	print("[rift] ", "passed" if ok else "failed")
+	await get_tree().create_timer(1.0, true, false, true).timeout
+	get_tree().quit(0 if ok else 1)
+
+
+func _camp(kind: String, side: int) -> Dictionary:
+	for c in world.jungle.camps:
+		if c.kind == kind and (side < 0 or int(c.side) == side):
+			return c
+	return {}
+
+
+func _reachable(a: Vector2, b: Vector2) -> bool:
+	var m := world.map
+	return not m.astar.get_id_path(m._nearest_open_cell(m.cell_of(a)), m._nearest_open_cell(m.cell_of(b))).is_empty()
+
+
+func _vision() -> void:
+	for t in 2:
+		world.fog._collect(t)
+		world.fog._compute(t)

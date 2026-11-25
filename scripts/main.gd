@@ -143,6 +143,14 @@ func _process(delta: float) -> void:
 	if a.has("autopilot") and Game.world != null and Game.world.local_champion != null and not Game.world.local_champion.get_meta("auto", false):
 		Game.world.local_champion.set_meta("auto", true)
 		Game.world.send_command("autopilot", [true] if str(a.autopilot) == "true" else [true, str(a.autopilot)])
+	if a.has("cam") and Game.world != null and Game.world.camera != null:
+		var xy := str(a.cam).split(",")
+		if xy.size() == 2:
+			Game.world.cam_locked = false
+			Game.world.edge_pan = false
+			Game.world.camera.global_position = Vector2(float(xy[0]), float(xy[1]))
+		if a.has("zoom"):
+			Game.world.cam_zoom = float(a.zoom)
 	if not _shots.is_empty() and _clock >= _shots[0]:
 		var t: float = _shots.pop_front()
 		_screenshot("%s_%s.png" % [str(a.get("shot", "user://shot")), String.num(t, 1)])
@@ -193,6 +201,13 @@ func _report() -> void:
 		if not s.dead and s.team <= 1:
 			standing[s.team] += 1
 	print("[auto]   winner=%d structures standing blue/red=%d/%d" % [w.winner, standing[0], standing[1]])
+	if w.jungle != null:
+		var up := 0
+		for i in w.jungle.camps.size():
+			if w.jungle.respawn_in(i) <= 0.0 and float(w.jungle.camps[i].next) < 0.0:
+				up += 1
+		print("[auto]   jungle: camps up=%d/%d drakes blue=%s red=%s soul=%s next=%s" % [up, w.jungle.camps.size(),
+			str(w.jungle.drakes[0]), str(w.jungle.drakes[1]), str(w.jungle.soul), w.jungle.next_drake])
 	for c in w.champions.values():
 		var who: String = ("bot:" + c.bot_difficulty) if c.is_bot else "player"
 		print("[auto]   %s %s %s team=%d lvl=%d hp=%d/%d pos=%s k/d/a=%d/%d/%d cs=%d dead=%s" % [c.player_name, c.char_id, who, c.team, c.level,

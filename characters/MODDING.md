@@ -147,6 +147,7 @@ dashes, delays and repeats contain their own effect lists. Any effect may also h
 | `at_base` | 1 while you stand in your fountain |
 | `t_summon` | 1 if the target is a summon (turrets, wards, pets...) |
 | `t_ward` | 1 if the target is a ward |
+| `t_monster`, `t_large_monster`, `t_epic` | 1 if the target is a jungle monster / a large one (buffs, Gromp, big camp monsters, Dragon, Baron) / an epic one (Dragon, Baron) |
 | `bond`, `t_bond` | your / the target's Bond of Life (in HP, so `bond >= max_hp` means 100%) |
 
 Functions: `has('id')` (you have a status/mark with that id or type), `t_has('id')` (target has it, from
@@ -375,7 +376,7 @@ ability (targeting, range, `cooldown`, `effects`, `requires`, `cast_time`, `star
 - `bot` hints: `escape` (Flash away when low), `defend` (self-cast when low and enemies are near),
   `kill` (on an enemy champion below 30%), `fight` (on a nearby enemy champion in a fight), `chase`,
   `cleanse` (when stunned/rooted/slowed), `mana` (below 25% mana), `travel` (Teleport from the
-  fountain to the farthest allied tower), `smite` (enemy minion/summon with <= 600 HP), `dash`
+  fountain to the farthest allied tower), `smite` (a large/epic monster, or an enemy minion/summon, with <= 600 HP), `dash`
   (recasts). Anything else: bots don't use it.
 
 Test them with the item test harness: `--summoners=flash,ignite --steps=sum:0,sum_self:1,sum_tower:0`.

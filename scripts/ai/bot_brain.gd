@@ -50,6 +50,7 @@ var foe_units: Array = []     # visible enemy minions and summons
 var ally_units: Array = []    # allied minions and summons
 var foe_towers: Array = []    # living enemy structures
 var ally_towers: Array = []
+var monsters: Array = []      # visible jungle monsters
 var seen := {}                # enemy champion net_id -> {pos, t} (last time we saw it)
 
 # decisions
@@ -64,6 +65,7 @@ var plan: Array = []
 var think_t := 0.0
 
 var _lane_for := -1
+var _camp_id := -1            # jungle camp the jungler is clearing / walking to
 var _planned := false
 var _push := false
 var _dodge_dir := Vector2.ZERO
@@ -172,6 +174,8 @@ func _think() -> void:
 			_do_recall()
 		"roam":
 			_do_roam()
+		"jungle":
+			_do_jungle()
 		_:
 			_do_lane()
 	_use_summoners()
@@ -209,6 +213,7 @@ func _perceive() -> void:
 	ally_units.clear()
 	foe_towers.clear()
 	ally_towers.clear()
+	monsters.clear()
 	for u in world.units:
 		if u.dead or u == me:
 			continue
@@ -217,6 +222,9 @@ func _perceive() -> void:
 				ally_towers.append(u)
 			else:
 				foe_towers.append(u)
+		elif u is Monster:
+			if world.can_see(u, me.team):
+				monsters.append(u)
 		elif u is Champion:
 			if u.team == me.team:
 				friends.append(u)
@@ -327,6 +335,10 @@ func _predict(t: Unit, dt: float) -> Vector2:
 func _choose_lane() -> void:
 	var n := world.map.lane_count()
 	if n == 0:
+		return
+	if _jungler():
+		if _lane_for < 0:
+			_set_lane(world.map.nearest_lane(me.global_position))
 		return
 	var want := posmod(me.bot_lane, n)
 	if cfg.macro:
@@ -750,6 +762,9 @@ func _decide() -> void:
 			return
 	if _should_recall():
 		mode = "recall"
+		return
+	if world.jungle != null and (_objective() != null or (_jungler() and _pick_camp() >= 0)):
+		mode = "jungle"
 		return
 	mode = "roam" if world.map.lane_count() == 0 else "lane"
 
@@ -1279,6 +1294,131 @@ func _do_roam() -> void:
 	var dir := (me.global_position - e.global_position).normalized()
 	stand = _choose_spot(e.global_position + dir * keep, {"unit": e, "lo": keep - e.radius - me.radius - 40.0,
 		"hi": keep - e.radius - me.radius + 40.0, "champ": true})
+
+
+# ----------------------------------------------------------------- jungle ---
+
+func _jungler() -> bool:
+	return me.bot_lane < 0 and world.jungle != null
+
+
+func _camp_mobs(id: int) -> Array:
+	return world.jungle.camps[id].alive.filter(func(m): return is_instance_valid(m) and not m.dead)
+
+
+## The jungler's next camp: the closest one on our side (or a Scuttler) that is up or spawns
+## by the time we get there; buffs come first. -1 = nothing worth walking to (go gank).
+func _pick_camp() -> int:
+	var jg := world.jungle
+	if _camp_id >= 0 and (not _camp_mobs(_camp_id).is_empty() or jg.respawn_in(_camp_id) > 0.0 and jg.respawn_in(_camp_id) < 8.0):
+		return _camp_id
+	var best := -1
+	var bs := INF
+	var speed := maxf(me.stats.move_speed, 100.0)
+	for c in jg.camps:
+		if c.def.get("epic", false) or (c.kind != "scuttle" and int(c.side) != me.team):
+			continue
+		var up := not _camp_mobs(c.id).is_empty()
+		var wait := jg.respawn_in(c.id)
+		if not up and wait <= 0.0:
+			continue
+		var travel := me.global_position.distance_to(c.pos) / speed
+		if not up and wait > travel + (100.0 if world.time < 100.0 else 10.0):
+			continue
+		var score := maxf(travel, wait) - (8.0 if c.kind in ["blue", "red"] else 0.0)
+		if c.kind == "scuttle" and difficulty == "brick":
+			score += 30.0
+		if score < bs:
+			bs = score
+			best = c.id
+	_camp_id = best
+	return best
+
+
+## An epic monster to take right now: one an ally is already fighting nearby, one our jungler
+## called the team to, or (jungler) one that's safe enough to start.
+func _objective() -> Monster:
+	if world.jungle == null:
+		return null
+	var call: Dictionary = world.jungle.calls[clampi(me.team, 0, 1)]
+	if not call.is_empty() and world.time < float(call.until) and _valid(call.m) and me.hp > me.stats.max_hp * 0.5 \
+			and call.m.global_position.distance_to(me.global_position) < 6000.0:
+		return call.m
+	for c in world.jungle.camps:
+		if not c.def.get("epic", false):
+			continue
+		for m in _camp_mobs(c.id):
+			var d: float = m.global_position.distance_to(me.global_position)
+			var t = m.attack_target
+			if d < 3500.0 and is_instance_valid(t) and t is Champion and t.team == me.team:
+				return m
+			if _jungler() and d < 6000.0 and _epic_ok(m):
+				world.jungle.calls[clampi(me.team, 0, 1)] = {"m": m, "until": world.time + 40.0}
+				return m
+	return null
+
+
+func _epic_ok(m: Monster) -> bool:
+	if me.hp < me.stats.max_hp * 0.7 or _foes_near(m.global_position, 2200.0) > 0 or (difficulty == "brick" and randf() < 0.8):
+		return false
+	var levels := float(me.level)
+	for a in friends:
+		if a.hp > a.stats.max_hp * 0.5 and a.global_position.distance_to(m.global_position) < 5000.0:
+			levels += a.level
+	match m.kind_id:
+		"baron":
+			return levels >= 40.0
+		"elder_dragon":
+			return levels >= 34.0
+	return levels >= 18.0 and me.level >= 6
+
+
+func _do_jungle() -> void:
+	var mobs: Array = []
+	var where := Vector2.INF
+	var obj := _objective()
+	if obj != null:
+		mobs = [obj]
+		where = obj.global_position
+	else:
+		var id := _pick_camp() if _jungler() else -1
+		if id < 0:
+			_set_lane(world.map.nearest_lane(me.global_position))
+			_do_lane()
+			return
+		where = world.jungle.camps[id].pos
+		mobs = _camp_mobs(id)
+	atk = null
+	if mobs.is_empty():
+		# Wait for the spawn at the edge of the camp, on our side.
+		stand = where + (world.map.spawn_point(me.team) - where).normalized() * 260.0
+		_travel(where)
+		return
+	var best: Monster = null
+	var bs := INF
+	for m in mobs:
+		var s: float = m.hp + (0.0 if m.attack_target == me else 3000.0) - (1500.0 if m.large else 0.0)
+		if s < bs:
+			bs = s
+			best = m
+	atk = best
+	_jungle_smite(mobs)
+	_cast_best("jungle", best)
+	stand = _attack_spot(best)
+	_travel(where)
+
+
+## Smite a buff or epic monster as soon as Smite kills it.
+func _jungle_smite(mobs: Array) -> void:
+	if cfg.summoners == "none":
+		return
+	var i := me.summoners.find("smite")
+	if i < 0 or me.sum_cd[i] > 0.0:
+		return
+	for m in mobs:
+		if (m.large or m.epic) and m.hp <= 600.0 and me.global_position.distance_to(m.global_position) <= 500.0 + m.radius + me.radius:
+			me.use_summoner(i, m.global_position, m.net_id)
+			return
 
 
 ## Fountain-side shortcut: Teleport toward a far away lane.
@@ -2050,6 +2190,12 @@ func _evaluate(c: Dictionary, intent: String, t) -> Dictionary:
 			best = _better(best, _farm(c))
 		"siege":
 			best = _better(best, _siege_cast(c, t))
+		"jungle":
+			if _valid(t) and (str(c.slot) != "r" or t.epic):
+				var o := _offense(c, t, "fight")
+				if float(o.get("score", 0.0)) > 0.0:
+					o.score = 0.3 + float(o.score)
+					best = _better(best, o)
 	if c.kind == "ability" and me.uses_mana() and float(best.score) > 0.0:
 		var cost := me.ability_cost(c.ab)
 		var reserve := 0.0
@@ -2060,6 +2206,8 @@ func _evaluate(c: Dictionary, intent: String, t) -> Dictionary:
 				reserve = 0.5
 			"siege":
 				reserve = 0.4
+			"jungle":
+				reserve = 0.25
 		if me.mana - cost < me.stats.max_mana * reserve:
 			best.score = 0.0
 	return best
@@ -2675,6 +2823,10 @@ func _smart_summoner(i: int, ab: Dictionary, hint: String) -> bool:
 			if me.uses_mana() and me.mana < me.stats.max_mana * 0.2 and not _at_fountain():
 				return me.use_summoner(i, me.global_position, me.net_id)
 		"smite":
+			for m in monsters:
+				if (m.large or m.epic) and m.hp <= 600.0 and me.global_position.distance_to(m.global_position) <= rng + m.radius + me.radius \
+						and me.use_summoner(i, m.global_position, m.net_id):
+					return true
 			for u in foe_units:
 				if u.is_ward or u.hp > 600.0 or me.global_position.distance_to(u.global_position) > rng + u.radius + me.radius:
 					continue
@@ -2720,7 +2872,13 @@ func _hint_summoner(i: int, ab: Dictionary, hint: String) -> bool:
 			if foe != null and fd < 900.0 and (low or foe.hp < foe.stats.max_hp * 0.4):
 				target = me
 		"smite":
+			for m in monsters:
+				if (m.large or m.epic) and m.hp <= 600.0 and me.global_position.distance_to(m.global_position) <= rng + m.radius:
+					target = m
+					break
 			for u in foe_units:
+				if target != null:
+					break
 				if u is Minion and u.minion_type == "siege" and u.hp <= 600.0 and me.global_position.distance_to(u.global_position) <= rng + u.radius:
 					target = u
 					break
@@ -2787,11 +2945,11 @@ func _make_plan() -> Array:
 	var b = BotKit.BUILDS.get(me.char_id)
 	if b == null:
 		if fresh:
-			out += BotKit.ROLE_START.get(role, [])
+			out += _jungle_start(role) if _jungler() else BotKit.ROLE_START.get(role, [])
 		out += Champion.recommended_build(me.def)
 	else:
 		if fresh:
-			out += b.start
+			out += _jungle_start(role) if _jungler() else b.start
 		var items: Array = b.items
 		if b.has("support") and _lane_partner():
 			items = b.support
@@ -2802,11 +2960,18 @@ func _make_plan() -> Array:
 	return out.filter(func(id): return Game.items.has(id))
 
 
+## Junglers start with a jungle pet (it grows with camps and powers up Smite) and a potion.
+func _jungle_start(role: String) -> Array:
+	return [{"bruiser": "mosstomper_seedling", "marksman": "scorchclaw_pup"}.get(role, "gustwalker_hatchling"), "health_potion"]
+
+
 ## Another allied champion shares our lane (supports build for the team then).
 func _lane_partner() -> bool:
 	var n := world.map.lane_count()
+	if me.bot_lane < 0 and n > 1:
+		return false
 	for c in world.champions.values():
-		if c != me and c.team == me.team and (n <= 1 or posmod(c.bot_lane, n) == posmod(me.bot_lane, n)):
+		if c != me and c.team == me.team and c.bot_lane >= 0 and (n <= 1 or posmod(c.bot_lane, n) == posmod(me.bot_lane, n)):
 			return true
 	return false
 

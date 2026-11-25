@@ -22,14 +22,17 @@ var paths: Array = []  # [polyline, half width]: lanes, base connectors, dummy p
 var bands: Array = []  # [polygons, texture key, modulate], drawn in order
 var plazas: Array = []  # [team, rim, floor]
 var cliffs: Array = []
+var water: Array = []  # merged river polygons
+var floors: Array = []  # [polygon, kind]: trampled camp spots and pit floors
 var flat: Array = []  # [dest, src, modulate] ground clutter
 var tall: Array = []  # bushes, boulders and trees, drawn above the cliffs
+var leaves: Array = []  # brush foliage, drawn over the ground (units stand "in" it)
 
 
 func build(m: GameMap) -> void:
 	map = m
 	rng.seed = hash(str(m.data.get("name", "")) + str(m.size))
-	var key := m.ground.to_html() + m.lane_color.to_html() + m.wall_color.to_html()
+	var key := m.ground.to_html() + m.lane_color.to_html() + m.wall_color.to_html() + str(m.data.get("river_color", ""))
 	if not _cache.has(key):
 		_cache[key] = _make_textures()
 	tex = _cache[key]
@@ -37,9 +40,10 @@ func build(m: GameMap) -> void:
 	_make_shapes()
 	_scatter()
 	tall.sort_custom(func(a, b): return a[0].end.y < b[0].end.y)
+	leaves.sort_custom(func(a, b): return a[0].end.y < b[0].end.y)
 	texture_repeat = CanvasItem.TEXTURE_REPEAT_ENABLED
 	_layer(self, _draw_far)
-	_bake([_draw_ground, _draw_soft, _draw_paths, _draw_sprites.bind(flat), _draw_cliffs, _draw_cliff_shade, _draw_sprites.bind(tall)])
+	_bake([_draw_ground, _draw_soft, _draw_paths, _draw_sprites.bind(flat), _draw_brush, _draw_cliffs, _draw_cliff_shade, _draw_sprites.bind(tall)])
 	for t in 2:
 		var spin := FountainSpin.new()
 		var sparks := FountainSparks.new()
@@ -96,7 +100,7 @@ func _make_shapes() -> void:
 		if s.kind == "nexus":
 			nexus[s.team] = s.pos
 	for l in map.lanes:
-		paths.append([l, 75.0])
+		paths.append([l, map.lane_width])
 	for t in 2:
 		var sp: Vector2 = map.spawns[t]
 		var hub: Vector2 = sp if nexus[t] == null else nexus[t]
@@ -122,6 +126,14 @@ func _make_shapes() -> void:
 	bands = [[worn, "grass", Color(1.16, 1.08, 0.78)], [rim, "dirt", Color(0.78, 0.76, 0.74)], [fill, "dirt", Color.WHITE]]
 	for r in map.walls:
 		cliffs.append(_cliff(r))
+	for p in map.polys:
+		cliffs.append(_cliff_poly(p))
+	water = _union(map.rivers.duplicate())
+	for c in map.camps:
+		if c.kind == "scuttle":
+			continue
+		var pit: bool = c.kind in ["dragon", "baron", "elder"]
+		floors.append([_circle(c.pos, 560.0 if pit else 250.0, 40), "pit" if pit else "camp"])
 
 
 ## Cliff = jagged outline (always inside the collision rect) split along a
@@ -163,6 +175,79 @@ func _rock_outline(r: Rect2) -> PackedVector2Array:
 		for i in 5:
 			pts.append(ends[k] + Vector2.from_angle(-PI / 2.0 + (k + i / 5.0) * PI / 2.0) * rc)
 	return pts
+
+
+## Polygon cliff: like _cliff, but the front face is wherever the outline faces down: the lit
+## top is the outline intersected with itself raised by FACE, the face is the rest.
+func _cliff_poly(p: PackedVector2Array) -> Dictionary:
+	var outline := _rock_outline_poly(p)
+	if not _drawable(outline):
+		outline = p
+	var inner := _grow(outline, -2.0)
+	var raised := Transform2D(0.0, Vector2(0.0, -FACE)) * inner
+	var faces := []
+	for f in _outer(Geometry2D.clip_polygons(inner, raised)):
+		var vs := PackedFloat32Array()
+		for q in f:
+			vs.append(_face_v(q, inner))
+		faces.append([f, vs])
+	return {"outline": outline, "top": _outer(Geometry2D.intersect_polygons(inner, raised)), "faces": faces, "box": GameMap._box(p)}
+
+
+## Drawable outer polygons of a clipping result (holes have the opposite winding of the largest
+## polygon; thin slivers that can't be triangulated are dropped).
+static func _outer(list: Array) -> Array:
+	var ref := 0.0
+	for q in list:
+		if absf(_area(q)) > absf(ref):
+			ref = _area(q)
+	return list.filter(func(q): return signf(_area(q)) == signf(ref) and _drawable(q))
+
+
+static func _drawable(p: PackedVector2Array) -> bool:
+	return p.size() >= 3 and not Geometry2D.triangulate_polygon(p).is_empty()
+
+
+## Face texture row at `q`: 0 at the lip, 1 at the foot of the cliff (FACE further down).
+static func _face_v(q: Vector2, poly: PackedVector2Array) -> float:
+	var d := 0.0
+	while d < FACE and Geometry2D.is_point_in_polygon(q + Vector2(0.0, d + 2.0), poly):
+		d += 4.0
+	return clampf(1.0 - d / FACE, 0.0, 1.0)
+
+
+## Jagged rock outline a little inside polygon `p` (edges subdivided and nudged inward).
+func _rock_outline_poly(p: PackedVector2Array) -> PackedVector2Array:
+	var g := Geometry2D.offset_polygon(p, -3.0, Geometry2D.JOIN_ROUND)
+	var base: PackedVector2Array = p
+	var best := 0.0
+	for q in g:
+		var a := absf(_area(q))
+		if a > best:
+			best = a
+			base = q
+	var sgn := signf(_area(base))
+	var pts := PackedVector2Array()
+	var n := base.size()
+	for i in n:
+		var a := base[i]
+		var b := base[(i + 1) % n]
+		var inward := -(b - a).normalized().orthogonal() * sgn
+		var steps := maxi(1, int(a.distance_to(b) / 22.0))
+		for k in steps:
+			pts.append(a.lerp(b, float(k) / steps) + (inward * rng.randf_range(0.0, 5.0) if k > 0 else Vector2.ZERO))
+	return pts
+
+
+## Shoelace area (positive = clockwise on screen, y down).
+static func _area(p: PackedVector2Array) -> float:
+	var s := 0.0
+	var n := p.size()
+	for i in n:
+		var a := p[i]
+		var b := p[(i + 1) % n]
+		s += a.x * b.y - b.x * a.y
+	return s * 0.5
 
 
 static func _circle(c: Vector2, r: float, n: int, rot := 0.0) -> PackedVector2Array:
@@ -250,7 +335,72 @@ func _scatter() -> void:
 			for k in int(r.size.x * (cut - r.position.y) / 45000.0):
 				var p := Vector2(rng.randf_range(r.position.x + 24.0, r.end.x - 24.0), rng.randf_range(r.position.y + 34.0, cut - 12.0))
 				_add(tall, "rock" if rng.randf() < 0.65 else "bush", p)
+	for ci in range(map.walls.size(), cliffs.size()):
+		_dress_poly(cliffs[ci])
+	_plant_brush()
 	_plant_forest()
+
+
+## Bushes and boulders along a polygon cliff's foot (bottom and side edges), a few on top.
+func _dress_poly(cl: Dictionary) -> void:
+	var o: PackedVector2Array = cl.outline
+	var sgn := signf(_area(o))
+	var n := o.size()
+	var carry := rng.randf_range(4.0, 30.0)
+	for i in n:
+		var a := o[i]
+		var b := o[(i + 1) % n]
+		var seg := a.distance_to(b)
+		if seg < 0.5:
+			continue
+		var out := (b - a).normalized().orthogonal() * sgn
+		var d := carry
+		while d < seg:
+			var foot := a.lerp(b, d / seg)
+			if out.y > 0.35:
+				_dress(foot + out * rng.randf_range(3.0, 9.0), 0.5)
+				d += rng.randf_range(24.0, 52.0)
+			else:
+				if absf(out.x) > 0.6:
+					_dress(foot + out * 5.0 + Vector2(0.0, 6.0), 0.35)
+				d += rng.randf_range(30.0, 60.0)
+		carry = d - seg
+	for top: PackedVector2Array in cl.top:
+		var box := GameMap._box(top)
+		for k in int(absf(_area(top)) / 45000.0):
+			var p := Vector2(rng.randf_range(box.position.x, box.end.x), rng.randf_range(box.position.y, box.end.y))
+			if Geometry2D.is_point_in_polygon(p, top) and Geometry2D.is_point_in_polygon(p + Vector2(0.0, -30.0), top):
+				_add(tall, "rock" if rng.randf() < 0.65 else "bush", p)
+		# Jungle walls are forested: trees fill the interior, away from the cliff edges.
+		var deep := Geometry2D.offset_polygon(top, -70.0)
+		for d in deep:
+			var dbox := GameMap._box(d)
+			var y := dbox.position.y + rng.randf_range(0.0, 40.0)
+			while y < dbox.end.y + 60.0:
+				var x := dbox.position.x + rng.randf_range(0.0, 60.0)
+				while x < dbox.end.x:
+					var p := Vector2(x + rng.randf_range(-18.0, 18.0), y + rng.randf_range(-12.0, 12.0))
+					if Geometry2D.is_point_in_polygon(p, d) and rng.randf() < 0.8:
+						_add(tall, "tree", p, _tree_tint(rng.randf_range(0.78, 1.0)))
+					x += rng.randf_range(52.0, 70.0)
+				y += rng.randf_range(40.0, 52.0)
+
+
+## Dense leafy clumps filling every brush.
+func _plant_brush() -> void:
+	for b in map.brushes:
+		var box := GameMap._box(b)
+		var step := 24.0
+		var y := box.position.y + step * 0.5
+		while y < box.end.y + step:
+			var x := box.position.x + rng.randf_range(0.0, step)
+			while x < box.end.x + step:
+				var p := Vector2(x + rng.randf_range(-6.0, 6.0), y + rng.randf_range(-5.0, 5.0))
+				if Geometry2D.is_point_in_polygon(p - Vector2(0.0, 8.0), b):
+					var k := rng.randf_range(0.82, 1.12)
+					_add(leaves, "leafy", p, Color(k, k * rng.randf_range(0.97, 1.05), k * 0.95))
+				x += step
+			y += step * 0.8
 
 
 func _dress(p: Vector2, chance: float) -> void:
@@ -288,8 +438,18 @@ func _free(p: Vector2, m: float, walls := true) -> bool:
 		for r in map.walls:
 			if r.grow(m).has_point(p):
 				return false
+		if not map.polys.is_empty() and _near_wall(p, m):
+			return false
+	if map.brush_at(p) > 0:
+		return false
+	for wp in water:
+		if Geometry2D.is_point_in_polygon(p, wp):
+			return false
+	for fl in floors:
+		if fl[1] == "pit" and Geometry2D.is_point_in_polygon(p, fl[0]):
+			return false
 	for t in 2:
-		if p.distance_to(map.spawns[t]) < map.fountain_radius + m:
+		if p.distance_to(map.spawns[t]) < map.fountain_radius + m or p.distance_to(map.shops[t]) < 110.0 + m:
 			return false
 	for st in map.structures:
 		if p.distance_to(st.pos) < (120.0 if st.kind == "nexus" else 60.0) + m:
@@ -303,6 +463,17 @@ func _free(p: Vector2, m: float, walls := true) -> bool:
 			if p.distance_to(Geometry2D.get_closest_point_to_segment(p, line[i], line[i + 1])) < pth[1] + m:
 				return false
 	return true
+
+
+## Whether a polygon wall is within `m` of `p` (sampled on the map's sight grid).
+func _near_wall(p: Vector2, m: float) -> bool:
+	for k in 9:
+		var q := p if k == 8 else p + Vector2.from_angle(TAU * k / 8.0) * m
+		var x := int(q.x / GameMap.SIGHT_CELL)
+		var y := int(q.y / GameMap.SIGHT_CELL)
+		if x >= 0 and y >= 0 and x < map.sight_cols and y < map.sight_rows and map.sight[y * map.sight_cols + x] == GameMap.SIGHT_WALL:
+			return true
+	return false
 
 
 ## Sprites are anchored at their bottom centre ("foot"), snapped to the texel grid.
@@ -361,6 +532,8 @@ func _draw_paths(c: CanvasItem) -> void:
 	for b in bands:
 		for p in b[0]:
 			_tiled(c, p, tex[b[1]], b[2])
+	_draw_water(c)
+	_draw_floors(c)
 	var edge := Color(0.17, 0.16, 0.17)
 	var curb := Color(0.62, 0.6, 0.56)
 	for pl in plazas:
@@ -391,31 +564,102 @@ func _draw_paths(c: CanvasItem) -> void:
 		_tiled(c, _circle(sp, 50.0, 8, PI / 8.0), tex.stone, Color(1.1, 1.1, 1.1))
 		c.draw_colored_polygon(_circle(sp, 38.0, 8, PI / 8.0), edge)
 		c.draw_colored_polygon(_circle(sp, 35.0, 8, PI / 8.0), tc.darkened(0.55))
+		if map.shops[t].distance_to(sp) > 60.0:
+			_draw_shop(c, map.shops[t], tc)
+
+
+## River: muddy bank, water, a lighter foam line along the shore.
+func _draw_water(c: CanvasItem) -> void:
+	var bank := map.lane_color.darkened(0.25)
+	for wp: PackedVector2Array in water:
+		c.draw_colored_polygon(_grow(wp, 14.0), bank)
+	for wp: PackedVector2Array in water:
+		_tiled(c, wp, tex.water)
+		var loop := _grow(wp, -6.0).duplicate()
+		loop.append(loop[0])
+		c.draw_polyline(loop, Color(0.75, 0.88, 0.95, 0.35), 3.0)
+
+
+## Trampled camp spots and the stone floors of the Dragon/Baron pits.
+func _draw_floors(c: CanvasItem) -> void:
+	for fl in floors:
+		if fl[1] == "pit":
+			c.draw_colored_polygon(_grow(fl[0], 14.0), map.lane_color.darkened(0.45))
+			_tiled(c, fl[0], tex.dirt, Color(0.8, 0.74, 0.68))
+			_tiled(c, _grow(fl[0], -180.0), tex.stone, Color(0.68, 0.66, 0.64))
+			var ctr := GameMap._box(fl[0]).get_center()
+			c.draw_arc(ctr, 380.0, 0.0, TAU, 64, Color(0.95, 0.78, 0.45, 0.22), 6.0)
+			c.draw_arc(ctr, 240.0, 0.0, TAU, 48, Color(0.95, 0.78, 0.45, 0.16), 4.0)
+		else:
+			_tiled(c, fl[0], tex.grass, Color(1.12, 1.06, 0.8))
+			_tiled(c, _grow(fl[0], -90.0), tex.dirt, Color(0.92, 0.9, 0.86))
+
+
+## The item shop: a market stall with a team-coloured awning.
+func _draw_shop(c: CanvasItem, at: Vector2, tc: Color) -> void:
+	var wood := Color(0.42, 0.29, 0.18)
+	var edge := Color(0.12, 0.09, 0.07)
+	c.draw_rect(Rect2(at + Vector2(-84, -10), Vector2(168, 60)), edge)
+	c.draw_rect(Rect2(at + Vector2(-80, -8), Vector2(160, 54)), wood)
+	for i in 4:
+		c.draw_rect(Rect2(at + Vector2(-76 + i * 40, -4), Vector2(34, 22)), Color(0.55, 0.4, 0.25))
+	c.draw_rect(Rect2(at + Vector2(-90, -70), Vector2(180, 8)), edge)
+	for i in 6:
+		var col := tc if i % 2 == 0 else Color(0.92, 0.9, 0.84)
+		c.draw_colored_polygon(PackedVector2Array([at + Vector2(-90 + i * 30, -64), at + Vector2(-60 + i * 30, -64),
+			at + Vector2(-60 + i * 30, -24), at + Vector2(-90 + i * 30, -30)]), col)
+	c.draw_rect(Rect2(at + Vector2(-86, -64), Vector2(6, 112)), edge)
+	c.draw_rect(Rect2(at + Vector2(80, -64), Vector2(6, 112)), edge)
+	c.draw_circle(at + Vector2(-40, 30), 9.0, Color(0.95, 0.8, 0.3))
+	c.draw_circle(at + Vector2(-22, 33), 7.0, Color(0.95, 0.85, 0.4))
+	c.draw_colored_polygon(_circle(at + Vector2(30, 28), 10.0, 6), Color(0.45, 0.75, 0.95))
+	c.draw_rect(Rect2(at + Vector2(-26, -108), Vector2(52, 30)), edge)
+	c.draw_rect(Rect2(at + Vector2(-23, -105), Vector2(46, 24)), Color(0.86, 0.74, 0.42))
+	c.draw_circle(at + Vector2(0, -93), 7.0, Color(0.95, 0.8, 0.25))
+
+
+## Brush: a dark, lush patch with dense leafy clumps on top.
+func _draw_brush(c: CanvasItem) -> void:
+	for b in map.brushes:
+		c.draw_colored_polygon(_grow(b, 10.0), Color(0.08, 0.14, 0.08, 0.55))
+		_tiled(c, b, tex.grass, Color(0.62, 0.78, 0.55))
+	_draw_sprites(c, leaves)
 
 
 func _draw_cliffs(c: CanvasItem) -> void:
 	for w in cliffs:
-		var r: Rect2 = w.rect.grow(-3.0)
-		c.draw_rect(Rect2(r.position + Vector2(8, 10), r.size), Color(0, 0, 0, 0.2))
-		c.draw_rect(Rect2(r.position + Vector2(16, 20), r.size), Color(0, 0, 0, 0.13))
+		if w.has("rect"):
+			var r: Rect2 = w.rect.grow(-3.0)
+			c.draw_rect(Rect2(r.position + Vector2(8, 10), r.size), Color(0, 0, 0, 0.2))
+			c.draw_rect(Rect2(r.position + Vector2(16, 20), r.size), Color(0, 0, 0, 0.13))
+		else:
+			c.draw_colored_polygon(Transform2D(0.0, Vector2(8, 10)) * w.outline, Color(0, 0, 0, 0.2))
+			c.draw_colored_polygon(Transform2D(0.0, Vector2(16, 20)) * w.outline, Color(0, 0, 0, 0.13))
 	var top_col := map.wall_color.lightened(0.14)
 	var edge := _tone(map.wall_color, -0.7)
 	var rim := _tone(top_col, 0.22)
 	var lip := _tone(top_col, 0.42)
 	for w in cliffs:
 		c.draw_colored_polygon(w.outline, edge)
-		var h: float = w.bottom - w.cut
-		for p in w.face:
-			var uv := PackedVector2Array()
-			for v in p:
-				uv.append(Vector2(v.x / (64.0 * PX), clampf((v.y - w.cut) / h, 0.0, 1.0)))
-			c.draw_colored_polygon(p, Color.WHITE, uv, tex.face)
+		if w.has("faces"):
+			for f in w.faces:
+				var uv := PackedVector2Array()
+				for i in f[0].size():
+					uv.append(Vector2(f[0][i].x / (64.0 * PX), f[1][i]))
+				c.draw_colored_polygon(f[0], Color.WHITE, uv, tex.face)
+		else:
+			var h: float = w.bottom - w.cut
+			for p in w.face:
+				var uv := PackedVector2Array()
+				for v in p:
+					uv.append(Vector2(v.x / (64.0 * PX), clampf((v.y - w.cut) / h, 0.0, 1.0)))
+				c.draw_colored_polygon(p, Color.WHITE, uv, tex.face)
 		for p in w.top:
 			_tiled(c, p, tex.rock)
 			var loop: PackedVector2Array = p.duplicate()
 			loop.append(loop[0])
 			c.draw_polyline(loop, rim, 2.0)
-		for l in w.lip:
+		for l in w.get("lip", []):
 			c.draw_polyline(l, lip, 2.0)
 
 
@@ -423,6 +667,13 @@ func _draw_cliffs(c: CanvasItem) -> void:
 func _draw_cliff_shade(c: CanvasItem) -> void:
 	var k := macro.get_size() / map.size
 	for w in cliffs:
+		if not w.has("rect"):
+			for p: PackedVector2Array in w.top:
+				var uv := PackedVector2Array()
+				for v in p:
+					uv.append(v / map.size)
+				c.draw_colored_polygon(p, Color(1, 1, 1, 1.6), uv, macro)
+			continue
 		var r: Rect2 = w.rect
 		var top := Rect2(r.position, Vector2(r.size.x, w.cut - r.position.y))
 		c.draw_texture_rect_region(macro, top, Rect2(top.position * k, top.size * k), Color(1, 1, 1, 1.6))
@@ -458,9 +709,31 @@ func _make_textures() -> Dictionary:
 		"rock": _rock_tex(r, map.wall_color.lightened(0.14)),
 		"face": _face_tex(r, map.wall_color),
 		"stone": _stone_tex(r, Color(0.5, 0.49, 0.47)),
+		"water": _water_tex(r, Content.parse_color(map.data.get("river_color"), Color("2c6680"))),
 	}
 	d.merge(_atlas(r))
 	return d
+
+
+## Calm water: soft depth noise with short horizontal glints.
+func _water_tex(r: RandomNumberGenerator, c: Color) -> ImageTexture:
+	var s := 128
+	var a := _noise(r, s, s, 4, 4)
+	var b := _noise(r, s, s, 12, 6)
+	var idx := PackedByteArray()
+	idx.resize(s * s)
+	for y in s:
+		for x in s:
+			var i := y * s + x
+			var v: float = (a[i] * 0.55 + b[i] * 0.45) / 255.0 + _dither(x, y) * 0.1
+			idx[i] = 0 if v < 0.36 else (1 if v < 0.56 else 2)
+	for k in 70:
+		var x := r.randi() % s
+		var y := r.randi() % s
+		for j in r.randi_range(2, 5):
+			idx[_at(s, x + j, y)] = 3
+		idx[_at(s, x + 1, y + 1)] = 1
+	return _image(idx, s, s, [_tone(c, -0.25), c, _tone(c, 0.1), _tone(c, 0.45)])
 
 
 ## Seamless value noise: random cells blown up by a cubic resize of a 3x3
@@ -676,6 +949,10 @@ func _atlas(r: RandomNumberGenerator) -> Dictionary:
 		_canopy(img, _slot(spr, "tree", cur, sz, sz), sz, sz, leaf, r, r.randi_range(6, 8), 0.5, 0.42)
 	for i in 2:
 		_canopy(img, _slot(spr, "bush", cur, 14, 13), 14, 13, bush, r, 3, 0.4, 0.62)
+	var lush := g.lerp(Color(0.16, 0.4, 0.18), 0.45)
+	var leafy := [_tone(lush, -0.66), _tone(lush, -0.3), _tone(lush, -0.04), _tone(lush, 0.16), _tone(lush, 0.32)]
+	for i in 3:
+		_canopy(img, _slot(spr, "leafy", cur, 18, 16), 18, 16, leafy, r, 4, 0.45, 0.6)
 	for i in 2:
 		_blob(img, _slot(spr, "rock", cur, 12, 10), 12, 10, stone, r)
 	for i in 3:

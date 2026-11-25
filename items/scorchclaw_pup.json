@@ -8,13 +8,13 @@
   "group": "jungle",
   "display": "counter('scorchclaw_pup_charge') if counter('scorchclaw_pup_treats') >= 40 else counter('scorchclaw_pup_treats')",
   "stats": {},
-  "description": "No jungle in this game: the pet grows from minion kills and champion takedowns, monster effects work on minions and Smite is this item's active.",
+  "description": "The pet grows from monster and minion kills and champion takedowns, monster effects also work on minions (for maps without a jungle) and Smite is this item's active.",
   "passives": [
     {
       "name": "Jungle Companions",
-      "description": "Your Scorchclaw grows by 1 treat per minion kill and per champion takedown (shown on the slot). At 20 treats Smite becomes Unleashed Smite, at 40 the pet is fully grown.",
+      "description": "Your Scorchclaw grows by 1 treat per monster or minion kill and per champion takedown (shown on the slot). At 20 treats Smite becomes Unleashed Smite, at 40 the pet is fully grown.",
       "on": "kill",
-      "if": "t_minion and counter('scorchclaw_pup_treats') < 40",
+      "if": "(t_monster or t_minion) and counter('scorchclaw_pup_treats') < 40",
       "effects": [
         {
           "type": "counter",
@@ -71,7 +71,7 @@
     },
     {
       "name": "Recoup",
-      "description": "Away from enemies (no enemy unit within 1000 range, standing in for the jungle), restore 8-18 (by level) mana per second.",
+      "description": "Away from enemies (no enemy champion, minion or summon within 1000 range; jungle monsters don't count), restore 8-18 (by level) mana per second.",
       "on": "interval",
       "interval": 1,
       "if": "near_units(1000) == 0",
@@ -135,7 +135,7 @@
   ],
   "active": {
     "name": "Smite",
-    "description": "Deal 600 true damage to an enemy minion or summon (900 from 20 treats, 1200 when fully grown). From 20 treats it can also hit an enemy champion for 20-160 (by level) true damage and a 25% slow that fades over 2s.",
+    "description": "Deal 600 true damage to a monster or an enemy minion or summon (900 from 20 treats, 1200 when fully grown). From 20 treats it can also hit an enemy champion for 20-160 (by level) true damage and a 25% slow that fades over 2s.",
     "cooldown": 45,
     "targeting": "unit",
     "range": 500,

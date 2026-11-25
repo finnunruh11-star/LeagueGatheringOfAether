@@ -190,11 +190,14 @@ func _ready() -> void:
 	minimap.draw_func = _draw_minimap
 	var mw := 300.0
 	var mh := mw * world.map.size.y / world.map.size.x
+	if mh > 270.0:
+		mw *= 270.0 / mh
+		mh = 270.0
 	_place(minimap, 1.0, 1.0, -mw - 12, -mh - 36, mw, mh)
 	minimap.gui_input.connect(_minimap_input)
 	minimap.clip_contents = true
 	root.add_child(minimap)
-	if world.fog != null and world.fog.enabled:
+	if world.fog != null and world.fog.dark:
 		var mf := TextureRect.new()
 		mf.texture = world.fog.mask_texture()
 		mf.material = world.fog.minimap_mat
@@ -203,7 +206,7 @@ func _ready() -> void:
 		mf.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 		mf.mouse_filter = Control.MOUSE_FILTER_IGNORE
 		# The fog texture covers whole texels, slightly more than the map.
-		var cover: Vector2 = Vector2(world.fog.vp.size) * FogOfWar.SCALE / world.map.size
+		var cover: Vector2 = Vector2(world.fog.vp.size) * world.fog.texel / world.map.size
 		mf.anchor_right = cover.x
 		mf.anchor_bottom = cover.y
 		minimap.add_child(mf)
@@ -393,6 +396,8 @@ func announce_rich(bbcode: String) -> void:
 func _process(_delta: float) -> void:
 	var t := int(world.time)
 	top_label.text = "%s %d  :  %d %s      %02d:%02d" % [Game.TEAM_NAMES[0], world.kills[0], world.kills[1], Game.TEAM_NAMES[1], t / 60, t % 60]
+	if world.jungle != null:
+		top_label.text += "      Drakes %d : %d" % [world.jungle.drakes[0].size(), world.jungle.drakes[1].size()]
 	var now := Time.get_ticks_msec()
 	var before := feed.size()
 	feed = feed.filter(func(f): return now - f[1] < 10000)
@@ -637,6 +642,38 @@ func _draw_bar(c: Control) -> void:
 	c.draw_string(font, Vector2(gx + 22, 38), str(int(ch.gold)), HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color(1, 0.88, 0.4))
 	if ch.can_shop():
 		c.draw_string(font, Vector2(gx, 60), "can shop", HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(0.6, 1, 0.6, 0.8))
+	_draw_jungle_pills(c, ch)
+
+
+const PILLS := [["Blue", Color(0.3, 0.55, 1.0)], ["Red", Color(1.0, 0.4, 0.25)], ["Baron", Color(0.7, 0.4, 1.0)], ["Elder", Color(0.8, 0.75, 1.0)]]
+const DRAKE_COLORS := {"infernal": Color(0.95, 0.4, 0.15), "mountain": Color(0.75, 0.58, 0.35), "ocean": Color(0.25, 0.65, 0.9), "cloud": Color(0.82, 0.9, 0.97)}
+
+
+## Jungle buffs with their time left, then your team's drakes (and Soul), above the stats panel.
+func _draw_jungle_pills(c: Control, ch: Champion) -> void:
+	if world.jungle == null:
+		return
+	var x := 6.0
+	var times := ch.jungle_buff_times()
+	for i in mini(times.size(), PILLS.size()):
+		if times[i] <= 0.0:
+			continue
+		var label := "%s %d:%02d" % [PILLS[i][0], int(times[i]) / 60, int(times[i]) % 60]
+		var w := font.get_string_size(label, HORIZONTAL_ALIGNMENT_LEFT, -1, 12).x + 14.0
+		c.draw_rect(Rect2(x, -48, w, 19), Color(0.05, 0.06, 0.08, 0.9))
+		c.draw_rect(Rect2(x, -48, w, 19), PILLS[i][1], false, 2.0)
+		c.draw_string(font, Vector2(x + 7, -34), label, HORIZONTAL_ALIGNMENT_LEFT, -1, 12, PILLS[i][1].lightened(0.4))
+		x += w + 6.0
+	var team := clampi(ch.team, 0, 1)
+	for e in world.jungle.drakes[team]:
+		var col: Color = DRAKE_COLORS.get(e, Color.WHITE)
+		var p := Vector2(x + 8, -38)
+		c.draw_colored_polygon(PackedVector2Array([p + Vector2(0, -8), p + Vector2(7, 0), p + Vector2(0, 8), p + Vector2(-7, 0)]), col)
+		c.draw_polyline(PackedVector2Array([p + Vector2(0, -8), p + Vector2(7, 0), p + Vector2(0, 8), p + Vector2(-7, 0), p + Vector2(0, -8)]), Color.BLACK, 1.5)
+		x += 18.0
+	var soul: String = world.jungle.soul[team]
+	if soul != "":
+		c.draw_string(font, Vector2(x + 4, -34), "%s Soul" % soul.capitalize(), HORIZONTAL_ALIGNMENT_LEFT, -1, 12, DRAKE_COLORS.get(soul, Color.WHITE))
 
 
 func _draw_item_slot(c: Control, i: int) -> void:
@@ -818,14 +855,21 @@ func _draw_summoner(c: Control, i: int) -> void:
 func _draw_minimap(c: Control) -> void:
 	var m := world.map
 	var sc := c.size.x / m.size.x
+	var xf := Transform2D(0.0, Vector2(sc, sc), 0.0, Vector2.ZERO)
 	c.draw_rect(Rect2(Vector2.ZERO, c.size), m.ground.darkened(0.2))
 	for l in m.lanes:
 		var pts := PackedVector2Array()
 		for p in l:
 			pts.append(p * sc)
-		c.draw_polyline(pts, m.lane_color, 5.0)
+		c.draw_polyline(pts, m.lane_color, maxf(5.0, m.lane_width * 2.0 * sc))
+	for p in m.rivers:
+		c.draw_colored_polygon(xf * p, Color(0.2, 0.42, 0.55))
+	for p in m.brushes:
+		c.draw_colored_polygon(xf * p, m.ground.darkened(0.45))
 	for r in m.walls:
 		c.draw_rect(Rect2(r.position * sc, r.size * sc), m.wall_color)
+	for p in m.polys:
+		c.draw_colored_polygon(xf * p, m.wall_color)
 	for t in 2:
 		c.draw_circle(m.spawns[t] * sc, 7.0, Color(Game.TEAM_COLORS[t], 0.6))
 
@@ -834,9 +878,13 @@ func _draw_minimap(c: Control) -> void:
 func _draw_minimap_units(c: Control) -> void:
 	var sc := c.size.x / world.map.size.x
 	var lt := world.local_team
+	if world.jungle != null:
+		_draw_minimap_camps(c, sc)
 	for u in world.units:
 		if u.dead and not u.is_structure:
 			continue
+		if u is Monster and not u.epic:
+			continue  # camps have their own icons
 		if u.team != lt and not u.is_structure and not world.ended and not world.can_see(u, lt):
 			continue
 		var p: Vector2 = u.global_position * sc
@@ -853,6 +901,34 @@ func _draw_minimap_units(c: Control) -> void:
 	var vs := get_viewport().get_visible_rect().size / world.camera.zoom
 	c.draw_rect(Rect2((world.camera.get_screen_center_position() - vs * 0.5) * sc, vs * sc), Color(1, 1, 1, 0.7), false, 1.0)
 	c.draw_rect(Rect2(Vector2.ZERO, c.size), Color(0.3, 0.32, 0.38), false, 2.0)
+
+
+const CAMP_COLORS := {"blue": Color(0.3, 0.55, 1.0), "red": Color(1.0, 0.4, 0.25), "scuttle": Color(0.45, 0.85, 0.9),
+	"baron": Color(0.7, 0.4, 1.0)}
+
+
+## Jungle camp icons: coloured while up, grey with the respawn countdown while down.
+func _draw_minimap_camps(c: Control, sc: float) -> void:
+	var jg := world.jungle
+	for i in jg.camps.size():
+		var cp: Dictionary = jg.camps[i]
+		var p: Vector2 = cp.pos * sc
+		var epic: bool = cp.def.get("epic", false)
+		var r := 6.0 if epic else 4.0
+		var wait := jg.respawn_in(i)
+		var col: Color = CAMP_COLORS.get(cp.kind, Color(0.95, 0.82, 0.35))
+		if cp.kind == "dragon":
+			col = DRAKE_COLORS.get(jg.next_drake, col) if not jg.elder_time() else Color(0.8, 0.75, 1.0)
+		if wait > 0.0:
+			c.draw_circle(p, r, Color(0.15, 0.15, 0.17, 0.85))
+			c.draw_arc(p, r, 0, TAU, 12, Color(col, 0.5), 1.5)
+			if wait < 600.0 or epic:
+				var txt := str(ceili(wait)) if wait < 100.0 else "%d:%02d" % [int(wait) / 60, int(wait) % 60]
+				c.draw_string_outline(font, p + Vector2(-20, -r - 2), txt, HORIZONTAL_ALIGNMENT_CENTER, 40, 10, 3, Color.BLACK)
+				c.draw_string(font, p + Vector2(-20, -r - 2), txt, HORIZONTAL_ALIGNMENT_CENTER, 40, 10, Color(0.9, 0.9, 0.9))
+		elif cp.kind != "scuttle":
+			c.draw_circle(p, r + 1.5, Color.BLACK)
+			c.draw_circle(p, r, col)
 
 
 func _minimap_input(event: InputEvent) -> void:

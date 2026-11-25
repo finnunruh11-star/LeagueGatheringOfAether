@@ -10,11 +10,13 @@ const XP_RANGE := 1400.0
 const KILL_GOLD := 300.0
 const ASSIST_GOLD := 150.0
 const TOWER_GOLD := 50.0
+const BRUSH_REVEAL := 2.0       # seconds a champion stays revealed after damaging a champion from brush
 
 var config := {}
 var online := false
 var is_server := true
 var map: GameMap
+var jungle: Jungle = null
 var entities := {}
 var units: Array = []
 var structures: Array = []
@@ -83,6 +85,8 @@ func start(cfg: Dictionary) -> void:
 	map.z_index = -10
 	add_child(map)
 	map.build(cfg.map_data)
+	if not map.camps.is_empty():
+		jungle = Jungle.new(self)
 	zone_layer = _layer(-5, false)
 	under_layer = _layer(-4, false)
 	unit_layer = _layer(0, true)
@@ -163,16 +167,21 @@ func begin() -> void:
 		var t := clampi(int(p.team), 0, 1)
 		var off := Vector2(0, 70).rotated(per_team[t] * 2.1) if per_team[t] > 0 else Vector2.ZERO
 		var gone: bool = online and pid != 1 and not bool(p.get("bot", false)) and not Game.players.has(pid)
+		var role := map.role_lane(per_team[t])
+		var sums: Array = p.get("summoners", Game.default_summoners(p.character)).duplicate()
+		if role < 0 and bool(p.get("bot", false)) and jungle != null and Game.summoners.has("smite") and not "smite" in sums and sums.size() == 2:
+			sums[1 if sums[0] == "flash" else 0] = "smite"  # bot junglers take Smite
 		var c = spawn("champion", {"peer": pid, "team": t, "character": p.character, "name": p.name, "gold": start_gold,
 			"bot": bool(p.get("bot", false)) or gone, "difficulty": str(p.get("difficulty", "normal")),
-			"pos": map.spawn_point(t) + off, "lane": per_team[t],
-			"summoners": p.get("summoners", Game.default_summoners(p.character))})
+			"pos": map.spawn_point(t) + off, "lane": role, "summoners": sums})
 		for k in int(map.data.get("start_level", 1)) - 1:
 			c.cheat("level")
 		per_team[t] += 1
 	for dpos in map.dummies:
 		spawn("dummy", {"pos": dpos})
 	wave_timer = map.first_wave
+	if jungle != null:
+		sync_jungle()
 
 
 @rpc("authority", "call_remote", "reliable")
@@ -206,6 +215,7 @@ func _create(kind: String, id: int, data: Dictionary) -> Node:
 		"tower": e = Tower.new()
 		"summon": e = Summon.new()
 		"dummy": e = Dummy.new()
+		"monster": e = Monster.new()
 		"projectile":
 			e = Projectile.new()
 			layer = proj_layer
@@ -531,6 +541,8 @@ func _physics_process(delta: float) -> void:
 	_waves(delta)
 	_fountain(delta)
 	_trickle(delta)
+	if jungle != null:
+		jungle.tick(delta)
 	_frame += 1
 	if online and _frame % SNAP_EVERY == 0:
 		_send_snapshot()
@@ -716,6 +728,10 @@ func on_damage(victim: Unit, amount: float, src, dtype: String, hit := {}) -> vo
 		for t in structures:
 			if t.team == victim.team and t.global_position.distance_to(victim.global_position) < t.stats.attack_range + 300.0:
 				t.aggro(src)
+		# Damaging a champion from brush gives your position away for a moment.
+		if victim.team != src.team and victim.team <= 1 and fog != null and fog.enabled and fog.in_brush(src):
+			src.add_status({"type": "reveal", "team": victim.team, "time": float(map.data.get("brush_reveal", BRUSH_REVEAL))},
+				src, "brush_reveal")
 
 
 func on_unit_died(u: Unit, killer) -> void:
@@ -738,6 +754,8 @@ func on_unit_died(u: Unit, killer) -> void:
 			ck.add_gold(KILL_GOLD, u.global_position)
 			ck.on_kill(u)
 			ck.on_takedown(u, false)
+			if jungle != null:
+				jungle.transfer_buffs(u, ck)
 		for h in helpers:
 			h.add_gold(ASSIST_GOLD / helpers.size(), u.global_position)
 			h.on_takedown(u, true)
@@ -748,7 +766,13 @@ func on_unit_died(u: Unit, killer) -> void:
 			if u.gold_value > 0.0:
 				credit.add_gold(u.gold_value, u.global_position)
 			credit.on_kill(u)
-		if u.xp_value > 0.0:
+		if u is Monster:
+			# Monster experience goes to the killer's team nearby.
+			if is_instance_valid(credit) and credit is Champion and u.xp_value > 0.0:
+				_give_xp(u.global_position, 1 - credit.team, u.xp_value, credit)
+			if jungle != null:
+				jungle.on_monster_died(u, credit)
+		elif u.xp_value > 0.0:
 			_give_xp(u.global_position, u.team, u.xp_value, null)
 	if u is Tower:
 		fx("announce", {"text": "%s %s destroyed!" % [Game.TEAM_NAMES[u.team], u.display_name], "color": Game.TEAM_COLORS[1 - u.team]})
@@ -783,6 +807,18 @@ func end_match(win_team: int) -> void:
 	_finish(win_team)
 	if online:
 		_rpc_end.rpc(win_team, _build_snapshot())
+
+
+## Host: sends camp timers and the Dragon state to the clients (HUD/minimap).
+func sync_jungle() -> void:
+	if online and is_server and jungle != null:
+		_rpc_jungle.rpc(jungle.state())
+
+
+@rpc("authority", "call_remote", "reliable")
+func _rpc_jungle(s: Dictionary) -> void:
+	if jungle != null and not closing:
+		jungle.apply_state(s)
 
 
 @rpc("authority", "call_remote", "reliable")
@@ -832,11 +868,14 @@ func query_line(a: Vector2, b: Vector2, half_w: float, team: int, affects := "en
 	return out
 
 
-func nearest_enemy(pos: Vector2, team: int, max_d: float, champs_only := false, structs := false) -> Unit:
+## Closest visible enemy. `neutral` = false skips jungle monsters (pets don't start camps).
+func nearest_enemy(pos: Vector2, team: int, max_d: float, champs_only := false, structs := false, neutral := true) -> Unit:
 	var best: Unit = null
 	var bd := max_d
 	for u in units:
 		if u.team == team or u.dead or not u.targetable() or (u.is_structure and not structs) or (champs_only and not u.is_champion):
+			continue
+		if not neutral and u is Monster:
 			continue
 		if not can_see(u, team):
 			continue

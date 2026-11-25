@@ -3,6 +3,13 @@ extends Unit
 ## Defensive tower or Nexus. Towers shoot minions first, champions last
 ## (unless a champion attacks an allied champion nearby). Destroy the enemy Nexus to win.
 
+const TURRET_ART := preload("res://assets/structures/turret.svg")
+const NEXUS_ART := preload("res://assets/structures/nexus.svg")
+const CRYSTAL_ART := preload("res://assets/structures/crystal.svg")
+const TURRET_ART_SIZE := Vector2(120, 140)
+const NEXUS_ART_SIZE := Vector2(208, 146)
+const NEXUS_CORE_Y := -77.0
+
 var is_nexus := false
 var is_inhibitor := false
 var is_nexus_turret := false
@@ -91,7 +98,7 @@ func _pick() -> Unit:
 	var best: Unit = null
 	var best_score := INF
 	for u in world.units:
-		if u.team == team or u.dead or u.is_structure or u.is_ward or not u.targetable() or not u.visible_to(team):
+		if u.team == team or u.team > 1 or u.dead or u.is_structure or u.is_ward or not u.targetable() or not u.visible_to(team):
 			continue
 		var d := global_position.distance_to(u.global_position)
 		if d > attack_reach(u):
@@ -148,7 +155,7 @@ func _restore_inhibitor() -> void:
 
 
 func bar_width() -> float:
-	return 130.0 if is_nexus else 90.0
+	return 156.0 if is_nexus else (90.0 if is_inhibitor else 106.0)
 
 
 func bar_height() -> float:
@@ -156,16 +163,24 @@ func bar_height() -> float:
 
 
 func bar_top() -> float:
-	return -radius * (1.35 if is_nexus else 2.35) - 10.0
+	if is_inhibitor:
+		return -radius * 2.35 - 10.0
+	return -(142.0 if is_nexus else 114.0) * _art_scale() - 10.0
+
+
+func _art_scale() -> float:
+	return radius / (62.0 if is_nexus else 38.0)
 
 
 func _ready() -> void:
 	super._ready()
+	if not is_inhibitor:
+		texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR_WITH_MIPMAPS
 	glow = Sprite2D.new()
 	glow.texture = Vfx.glow()
 	glow.material = Vfx.add_material()
 	glow.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
-	glow.position = Vector2(0, -radius * 0.2) if is_nexus else Vector2(0, -radius * 1.75)
+	glow.position = Vector2(0, NEXUS_CORE_Y * _art_scale()) if is_nexus else Vector2(0, -radius * 1.75)
 	add_child(glow)
 
 
@@ -175,6 +190,8 @@ func _process(delta: float) -> void:
 	var pulse := 0.5 + 0.5 * sin(life * (2.0 if is_nexus else 3.0))
 	glow.modulate = Color(team_color().lightened(0.2), 0.45 + 0.25 * pulse)
 	glow.scale = Vector2.ONE * radius * (3.2 if is_nexus else 1.9) / 64.0 * (0.9 + 0.15 * pulse)
+	if is_nexus:
+		glow.position.y = _nexus_core().y
 
 
 func _draw_body() -> void:
@@ -187,7 +204,9 @@ func _draw_body() -> void:
 		return
 	var c := tc.lerp(Color.WHITE, 0.55) if flash > 0.0 else tc
 	var stone := Color(0.42, 0.42, 0.47) if flash <= 0.0 else Color(0.8, 0.8, 0.85)
-	if is_nexus or is_inhibitor:
+	if is_nexus:
+		_draw_nexus_art(c)
+	elif is_inhibitor:
 		draw_circle(Vector2(0, r * 0.15), r * 1.05, stone.darkened(0.35))
 		draw_circle(Vector2.ZERO, r * 0.95, stone)
 		draw_arc(Vector2.ZERO, r * 0.78, life * 0.6, life * 0.6 + TAU, 48, Color(c, 0.7), 3.0, true)
@@ -199,15 +218,54 @@ func _draw_body() -> void:
 		draw_colored_polygon(crystal, c.darkened(0.15))
 		draw_colored_polygon(PackedVector2Array([Vector2(0, -h), Vector2(r * 0.42, -r * 0.2), Vector2(0, -r * 0.05)]), c.lightened(0.35))
 	else:
-		draw_rect(Rect2(-r, -r * 0.55, r * 2.0, r * 1.25), stone.darkened(0.35))
-		draw_rect(Rect2(-r, -r * 0.75, r * 2.0, r * 1.05), stone)
-		draw_rect(Rect2(-r * 0.55, -r * 1.7, r * 1.1, r * 1.3), stone.lightened(0.08))
-		draw_rect(Rect2(-r * 0.55, -r * 1.7, r * 0.22, r * 1.3), stone.darkened(0.2))
-		draw_rect(Rect2(-r * 0.38, -r * 1.35, r * 0.76, r * 0.42), c.darkened(0.25))
-		var h := -r * 1.75 + sin(life * 3.0) * 2.0
-		var gem := PackedVector2Array([Vector2(0, h - r * 0.55), Vector2(r * 0.3, h), Vector2(0, h + r * 0.35), Vector2(-r * 0.3, h)])
-		draw_colored_polygon(gem, c)
-		draw_colored_polygon(PackedVector2Array([Vector2(0, h - r * 0.55), Vector2(r * 0.3, h), Vector2(0, h)]), c.lightened(0.45))
+		_draw_turret_art(c)
+
+
+func _draw_turret_art(c: Color) -> void:
+	var s := _art_scale()
+	var core := Vector2(0, -radius * 1.75)
+	var stone_tint := Color(1.15, 1.15, 1.15) if flash > 0.0 else Color.WHITE
+	draw_texture_rect(TURRET_ART, Rect2(core - Vector2(60, 47) * s, TURRET_ART_SIZE * s), false, stone_tint)
+	var energy := c.lightened(0.35 if target_id != 0 else 0.18)
+	draw_arc(core, 11.5 * s, 0.0, TAU, 32, Color(energy, 0.8), 1.6 * s, true)
+	_draw_crystal(core, Vector2(16, 22) * s, energy)
+	_draw_crystal(core + Vector2(0, 32) * s, Vector2(12, 21) * s, c)
+
+
+func _nexus_core() -> Vector2:
+	return Vector2(0, NEXUS_CORE_Y + sin(life * 1.9) * 5.0) * _art_scale()
+
+
+func _draw_nexus_art(c: Color) -> void:
+	var s := _art_scale()
+	var core := _nexus_core()
+	var stone_tint := Color(1.15, 1.15, 1.15) if flash > 0.0 else Color.WHITE
+	draw_texture_rect(NEXUS_ART, Rect2(Vector2(-104, -101) * s, NEXUS_ART_SIZE * s), false, stone_tint)
+	var orbit := core + Vector2(0, 14) * s
+	_draw_nexus_orbit(orbit, c, false)
+	_draw_crystal(core, Vector2(73, 110) * s, c.lightened(0.28))
+	_draw_nexus_orbit(orbit, c, true)
+	_draw_crystal(Vector2(0, 15) * s, Vector2(15, 20) * s, c.lightened(0.35))
+	for side in [-1.0, 1.0]:
+		_draw_crystal(Vector2(82 * side, -57) * s, Vector2(12, 16) * s, c)
+
+
+func _draw_crystal(center: Vector2, dimensions: Vector2, tint: Color) -> void:
+	draw_texture_rect(CRYSTAL_ART, Rect2(center - dimensions * 0.5, dimensions), false, tint)
+
+
+func _draw_nexus_orbit(center: Vector2, c: Color, front: bool) -> void:
+	var radii := Vector2(58, 18) * _art_scale()
+	var start := 0.0 if front else PI
+	var color := Color(c.lightened(0.5), 0.75 if front else 0.42)
+	var points := PackedVector2Array()
+	for i in 25:
+		points.append(center + Vector2.from_angle(start + PI * i / 24.0) * radii)
+	draw_polyline(points, color, 2.0 * _art_scale(), true)
+	for i in 3:
+		var offset := Vector2.from_angle(fposmod(life * 0.9 + TAU * i / 3.0, TAU)) * radii
+		if (offset.y >= 0.0) == front:
+			_draw_crystal(center + offset, Vector2(11, 15) * _art_scale(), c.lightened(0.5))
 
 
 ## Range warning and targeting line (not affected by hit squash).
