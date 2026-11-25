@@ -506,7 +506,7 @@ static func _one(e: Dictionary, ctx: Dictionary) -> void:
 				if c:
 					amt *= 1.0 + c.stats.get("heal_power", 0.0)
 					if c is Champion and c.rune_state != null and c.rune_state.has(8224) and ctx.get("src_slot") == "r":
-						amt *= 1.12
+						amt *= 1.14
 				var healed := u.heal(amt, c, bool(e.get("show", true)), bool(e.get("convert", true)))
 				if c and u != c and u.is_champion and healed > 0.0:
 					c.trigger("heal_ally", u, null, {"amount": healed, "is_proc": bool(ctx.get("proc", false))})
@@ -527,7 +527,9 @@ static func _one(e: Dictionary, ctx: Dictionary) -> void:
 				if c:
 					amt *= 1.0 + c.stats.get("heal_power", 0.0)
 					if c is Champion and c.rune_state != null and c.rune_state.has(8224) and ctx.get("src_slot") == "r":
-						amt *= 1.12
+						amt *= 1.14
+				if u is Champion and u != c and u.rune_state != null and u.rune_state.has(8453):
+					amt *= 1.05
 				if u.hp < u.stats.max_hp * 0.4 and ((u is Champion and u.rune_state != null and u.rune_state.has(8453)) or (c is Champion and c.rune_state != null and c.rune_state.has(8453))):
 					amt *= 1.1
 				for s in u.statuses:
@@ -593,10 +595,6 @@ static func _one(e: Dictionary, ctx: Dictionary) -> void:
 				var iv := maxf(num(e.get("interval"), ctx, 0.5), 0.1)
 				var amount := num(e.get("amount"), ctx, 20.0) * rmult
 				var duration := num(e.get("duration"), ctx, 3.0)
-				var c := _caster(ctx)
-				if type == "hot" and c is Champion and c.rune_state != null and c.rune_state.has(8352) and str(ctx.get("item", "")).ends_with("_potion"):
-					u.heal(amount * duration * 0.4, c)
-					amount *= 0.6
 				_add(u, {"type": type, "amount": amount, "interval": iv, "tick": iv,
 					"time": duration, "dtype": str(e.get("damage_type", "magic")), "col": _color(e, ctx),
 					"src_slot": str(ctx.get("src_slot", "")), "item": str(ctx.get("item", "")), "raw": bool(e.get("raw", false)),
@@ -846,6 +844,11 @@ static func _add(u: Unit, s: Dictionary, e: Dictionary, ctx: Dictionary) -> void
 		s.keep_longer = true
 	if str(ctx.get("item", "")) != "":
 		s.item = str(ctx.item)
+		var caster := _caster(ctx)
+		if u == caster and caster is Champion and caster.rune_state != null and caster.rune_state.has(8352) and s.type in ["hot", "buff"]:
+			if s.item.ends_with("_potion") or s.item.begins_with("elixir_"):
+				s.time *= 1.20
+				caster.rune_state.buff(8352, float(s.time), {"move_speed_bonus": 0.05})
 	if bool(e.get("persist", false)):
 		s.persist = true
 	if s.has("triggers"):
@@ -1037,7 +1040,7 @@ static func _knockback(type: String, e: Dictionary, ctx: Dictionary) -> void:
 	if dist > 0.0:
 		u.knockback(dir * dist, dur)
 		if c is Champion and c.rune_state != null:
-			c.rune_state.crowd_control(u, true)
+			c.rune_state.crowd_control(u, true, dur)
 		_cc_event(type, u, ctx)
 
 

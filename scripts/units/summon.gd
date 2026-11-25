@@ -4,6 +4,7 @@ extends Unit
 
 var owner_unit = null
 var lifetime := 10.0
+var ghost_poro := false
 var max_life := 10.0
 var stationary := false
 var think_t := 0.0
@@ -72,12 +73,21 @@ func can_move() -> bool:
 func _think(delta: float) -> void:
 	lifetime -= delta
 	if lifetime <= 0.0:
+		if is_ward and display_name not in ["Ghost Poro", "Zombie Ward"] and owner_unit is Champion and is_instance_valid(owner_unit) and owner_unit.rune_state != null and owner_unit.rune_state.has(8120):
+			owner_unit.rune_state.ward_spawn(global_position, true)
 		die(null)
 		return
 	think_t -= delta
 	if think_t > 0.0:
 		return
 	think_t = 0.2
+	if ghost_poro:
+		for enemy in world.query(global_position, 450.0, team):
+			if enemy.is_champion:
+				if is_instance_valid(owner_unit) and owner_unit is Champion and owner_unit.rune_state != null:
+					owner_unit.rune_state.count("vision_stacks", 1, 10)
+				die(null)
+				return
 	var o = owner_unit if is_instance_valid(owner_unit) and not owner_unit.dead else null
 	var limit: float = (stats.attack_range + radius + 40.0) if stationary else 650.0
 	if o != null and is_instance_valid(o.attack_target) and valid_target(o.attack_target) \

@@ -119,12 +119,14 @@ a bot jungler swaps a summoner spell for Smite and starts with a jungle pet.
 ## Rune pages
 Choose **Runes** in the lobby to set your primary and secondary paths and three stat shards.
 The host can select a bot's name to edit its page. Unedited pages use a preset for the champion's role.
-The roster follows Summoner's Rift patch 26.23, with nine additional legacy choices, including
-Phase Rush alongside Stormraider's Surge and the live version of Lethal Tempo. Rune effects use
-CusOba's combat, shop and vision rules; they aren't exact League reproductions.
+The roster mixes historical League patches. Hover a rune in the editor to see its version.
+Phase Rush and Stormraider's Surge are separate choices. Lethal Tempo uses the 12.19 version:
+six stacks increase range and lift the attack speed cap. Effects are adapted to CusOba's
+combat, shop, and vision systems.
 
-Hold **Tab** and click **Rune actions** to use Biscuits, Predator, Minion Dematerializer, or
-Unsealed Spellbook. Hexflash uses your normal Flash key while Flash is on cooldown.
+Hold **Tab** and click **Rune actions** to use Biscuits, Predator, Minion Dematerializer,
+Unsealed Spellbook, Perfect Timing's Stopwatch, or Triple Tonic's elixirs.
+Hexflash uses your normal Flash key while Flash is on cooldown.
 
 ## Playing with friends
 1. Host: **Host game** (default UDP port 7777). The lobby shows your local IPs.

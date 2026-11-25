@@ -421,7 +421,7 @@ func show_scores(on: bool) -> void:
 	scores.visible = on
 	var ch := world.local_champion
 	var picks: Array = ch.rune_page.major + ch.rune_page.minor if ch != null and not ch.rune_page.is_empty() else []
-	rune_actions.visible = on and picks.any(func(id): return id in [8345, 8317, 8124, 8360, 8358])
+	rune_actions.visible = on and picks.any(func(id): return id in [8345, 8317, 8124, 8360, 8358, 8313, 8324])
 
 
 func _open_rune_actions() -> void:
@@ -457,6 +457,15 @@ func _open_rune_actions() -> void:
 			show_scores(false)
 			notice("Click an enemy lane minion; right-click to cancel")
 			dialog.queue_free())
+	if 8324 in picks:
+		UiKit.button(box, "Use Stopwatch (6 min)", func():
+			world.send_command("rune", ["stopwatch"])
+			dialog.queue_free()).disabled = world.time < 360.0
+	if 8313 in picks:
+		for tonic in [[3, "Avarice"], [6, "Force"], [9, "Skill"]]:
+			UiKit.button(box, "Drink Elixir of %s (level %d)" % [tonic[1], tonic[0]], func():
+				world.send_command("rune", ["tonic", tonic[0]])
+				dialog.queue_free()).disabled = ch.level < tonic[0]
 	if 8360 in picks:
 		for i in ch.summoners.size():
 			var picker := OptionButton.new()

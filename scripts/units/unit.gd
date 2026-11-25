@@ -486,6 +486,8 @@ func perform_attack(t: Unit, _elapsed_windup: float) -> void:
 	if crit:
 		dmg *= stats.crit_damage
 	trigger("attack_launch", t, null, {"crit_hit": crit})
+	if self is Champion and self.rune_state != null:
+		self.rune_state.launch_attack(t)
 	if a.ranged:
 		var p = world.spawn("projectile", {
 			"pos": muzzle(), "dir": (t.global_position - global_position).normalized(), "team": team,
@@ -594,21 +596,31 @@ func take_damage(amount: float, source = null, dtype := "physical", hit := {}) -
 		amount = 1.0 if hit.get("attack", false) else 0.0
 		raw = true
 	var before_mit := amount
+	var converted_ratio := 0.0
 	if not raw:
 		if src != null:
 			amount *= src.stats.get("damage_mult", 1.0)
 		amount *= stats.get("damage_taken_mult", 1.0)
+		if not find_status("press_the_attack").is_empty():
+			amount *= 1.12
 		before_mit = amount
+		var mitigation := 1.0
 		if dtype == "physical":
-			amount *= _mitigation(stats.armor, src, true)
+			mitigation = _mitigation(stats.armor, src, true)
 		elif dtype == "magic":
-			amount *= _mitigation(stats.magic_resist, src, false)
+			mitigation = _mitigation(stats.magic_resist, src, false)
+		if is_champion and src is Champion and src.team != team and src.rune_state != null and src.rune_state.conqueror_active() and not hit.get("proc", false):
+			converted_ratio = 0.1 / (0.9 * mitigation + 0.1)
+			mitigation = 0.9 * mitigation + 0.1
+		amount *= mitigation
 		# Item/passive hooks see the damage after armor/MR and may change it.
 		var info := {"amount": amount}
 		if src is Champion and src.rune_state != null:
 			src.rune_state.pre_damage(self, info, hit)
 		if self is Champion and self.rune_state != null and src is Unit:
-			self.rune_state.defend(src, info, hit)
+			self.rune_state.defend(src, info, hit, dtype)
+		elif self is Champion and self.rune_state != null:
+			self.rune_state.check_orb(float(info.amount), dtype)
 		var vars := _hit_vars(hit, amount, dtype, before_mit)
 		vars["dmg_info"] = info
 		if src != null:
@@ -620,8 +632,11 @@ func take_damage(amount: float, source = null, dtype := "physical", hit := {}) -
 		return 0.0
 	var dealt := amount
 	for s in statuses:
-		if s.type == "shield" and amount > 0.0 and (str(s.get("dtype", "all")) == "all" or s.dtype == dtype):
-			var a := minf(s.amount, amount)
+		if s.type == "shield" and amount > 0.0 and (str(s.get("dtype", "all")) == "all" or s.dtype == dtype or (s.dtype == "true" and converted_ratio > 0.0)):
+			var eligible := amount
+			if str(s.get("dtype", "all")) != "all" and dtype != "true":
+				eligible = amount * (converted_ratio if s.dtype == "true" else 1.0 - converted_ratio)
+			var a := minf(s.amount, eligible)
 			s.amount -= a
 			amount -= a
 	hp -= amount
@@ -632,6 +647,10 @@ func take_damage(amount: float, source = null, dtype := "physical", hit := {}) -
 		if src is Summon and is_instance_valid(src.owner_unit):
 			credit = src.owner_unit
 		var vamp: float = src.stats.get("omnivamp", 0.0)
+		if credit is Champion and credit.rune_state != null and credit.rune_state.has(8132) and credit.team != team and not is_structure and not is_ward:
+			credit.heal(dealt * (0.01 + 0.02 * credit.rune_state.unique.size()) * (1.0 / 3.0 if src is Summon or hit.get("aoe", false) else 1.0), credit, false)
+		if converted_ratio > 0.0:
+			src.heal(dealt * converted_ratio, src, false)
 		if hit.get("attack", false) or hit.get("onhit", false):
 			vamp += src.stats.get("lifesteal", 0.0)
 		if vamp > 0.0 and not is_structure:
@@ -651,7 +670,7 @@ func take_damage(amount: float, source = null, dtype := "physical", hit := {}) -
 		self.rune_state.grasp_combat()
 	if self is Champion and self.rune_state != null and src is Champion and src.team != team and hp > 0.0:
 		if self.rune_state.has(8444) and not hit.get("proc", false):
-			var amount_per_second: float = (3.0 + 0.04 * (stats.max_hp - hp)) / 10.0
+			var amount_per_second: float = (6.0 + 0.04 * (stats.max_hp - hp)) / 10.0
 			add_status({"type": "hot", "time": 10.0, "tick": 1.0, "interval": 1.0, "amount": amount_per_second}, self, "rune:second_wind")
 	if src != null:
 		src.trigger("deal_damage", self, null, _hit_vars(hit, dealt, dtype, raw_dealt))
@@ -704,6 +723,8 @@ func heal(amount: float, _source = null, show := true, convert := true) -> float
 	if dead or puppet or amount <= 0.0:
 		return 0.0
 	amount *= 1.0 + stats.get("heal_received", 0.0)
+	if self is Champion and self.rune_state != null and self.rune_state.has(8453):
+		amount *= 1.05
 	if hp < stats.max_hp * 0.4 and ((self is Champion and self.rune_state != null and self.rune_state.has(8453)) or (_source is Champion and _source.rune_state != null and _source.rune_state.has(8453))):
 		amount *= 1.1
 	var g := 0.0
@@ -725,14 +746,16 @@ func heal(amount: float, _source = null, show := true, convert := true) -> float
 		set_bond(bond - paid)
 	var before := hp
 	hp = minf(hp + amount, stats.max_hp)
+	if self is Champion and self.rune_state != null:
+		self.rune_state.sustain(hp - before)
 	if self is Champion and self.rune_state != null and self.rune_state.has(9102) and is_instance_valid(_source):
-		var excess := maxf(before + amount - float(stats.max_hp), 0.0)
+		var excess := maxf(before + amount - float(stats.max_hp), 0.0) * lerpf(0.40, 1.0, self.rune_state.progress())
 		if excess > 0.0:
 			for s in statuses:
 				if s.key == "rune:overheal":
 					excess += s.amount
 					break
-			add_status({"type": "shield", "id": "overheal", "time": 6.0, "amount": minf(excess, stats.max_hp * 0.11)}, self, "rune:overheal")
+			add_status({"type": "shield", "id": "overheal", "time": 6.0, "amount": minf(excess, 10.0 + stats.max_hp * 0.10)}, self, "rune:overheal")
 	if Game.debug_log and hp - before >= 0.5:
 		print("[heal] t=%.2f %s +%.1f (raw %.1f)" % [world.time, display_name, hp - before, amount])
 	if show and hp - before >= 1.0 and (is_champion or self is Summon):
@@ -812,7 +835,9 @@ func add_status(s: Dictionary, source = null, key := "") -> void:
 	s["source"] = source if is_instance_valid(source) else null
 	s["key"] = key
 	if source is Champion and source.rune_state != null and s.type in ["slow", "root", "stun"]:
-		source.rune_state.crowd_control(self, s.type in ["root", "stun"])
+		source.rune_state.crowd_control(self, s.type in ["root", "stun"], float(s.time))
+	if self is Champion and self.rune_state != null and s.type == "shield":
+		self.rune_state.sustain(0.0, true)
 	if self is Champion and self.rune_state != null and self.rune_state.has(8401) and s.type == "shield":
 		self.rune_state.state.bash = s.amount
 		self.rune_state.state.bash_end = world.time + float(s.time) + 2.0
@@ -927,6 +952,9 @@ func recompute_stats() -> void:
 	_finish_attack_speed(st)
 	slow *= 1.0 - clampf(st.slow_resist, 0.0, 1.0)
 	var ms: float = st.move_speed * maxf(1.0 + st.move_speed_bonus, 0.0) * (1.0 - slow)
+	if self is Champion and self.rune_state != null and self.rune_state.has(8234):
+		var unslowed: float = st.move_speed * maxf(1.0 + st.move_speed_bonus, 0.0)
+		self.rune_state.adaptive(st, maxf(unslowed - base_stats.move_speed, 0.0) * 0.16)
 	if ms > 490.0:
 		ms = 475.0 + (ms - 490.0) * 0.5
 	elif ms > 415.0:

@@ -343,7 +343,8 @@ func ability_cooldown(ab: Dictionary, ctx := {}) -> float:
 	var haste: float = stats.ability_haste
 	if rune_state != null:
 		if ab.slot == "r" and rune_state.has(8106): haste += 6 + 5 * rune_state.unique.size()
-		if ab.slot != "r" and rune_state.has(9105): haste += int(rune_state.state.get("legend", 0) / 25.0) * 1.5
+		if ab.slot != "r" and rune_state.has(9105): haste += mini(floori(int(rune_state.state.get("legend", 0)) / 25.0), 10) * 1.5
+		if ab.slot == "r" and rune_state.has(8243): cd *= 0.95 - 0.02 * int(rune_state.state.get("hat", 0))
 	return maxf(cd * 100.0 / (100.0 + maxf(haste, -50.0)) * stats.cooldown_mult, 0.0)
 
 
@@ -353,9 +354,18 @@ func _execute(ab: Dictionary, ctx: Dictionary) -> void:
 	if char_id != "zeri" or ab.slot != "w":
 		ctx.origin = global_position
 	world.fx("cast", {"p": global_position, "c": color, "v": net_id, "d": Vector2(ctx.dir).angle(), "s": ab.slot})
-	if rune_state != null and rune_state.has(8359):
-		rune_state.state.klepto = 2
-		rune_state.state.klepto_end = world.time + 10.0
+	if rune_state != null:
+		if rune_state.has(8359):
+			rune_state.state.klepto = 1
+			rune_state.state.klepto_end = world.time + 10.0
+		if rune_state.ready(8226) and uses_mana() and ab.cost_type != "health":
+			rune_state.proc(8226, 60.0)
+			restore_mana(float(ctx.get("cost_paid", 0.0)))
+			restore_mana((stats.max_mana - mana) * 0.08)
+		if ab.slot == "r" and rune_state.has(8243): rune_state.count("hat", 1, 5)
+		var ally = ctx.get("target")
+		if ally is Champion and ally != self and ally.team == team and rune_state.has(8465):
+			rune_state.state["guard_%d" % ally.net_id] = world.time + 2.5
 	if char_id == "zeri":
 		ZeriKit.cast(self, ab, ctx)
 	else:
@@ -603,6 +613,8 @@ func trigger(event: String, target = null, pos = null, extra := {}, only := "") 
 		if tr.has("chance") and randf() > Effects.num(tr.chance, ctx, 1.0):
 			continue
 		trigger_cds[r.key] = Effects.num(tr.get("cooldown", 0.0), ctx, 0.0) * (100.0 / (100.0 + stats.item_haste) if is_item else 1.0)
+		if r.src == "guardian_angel" and has_page_rune(8324):
+			trigger_cds[r.key] *= 0.85
 		trigger_cd_total[r.key] = trigger_cds[r.key]
 		if Game.debug_log and event != "interval":
 			print("[proc] t=%.2f %s: %s '%s' on %s" % [world.time, display_name, r.key, str(tr.get("name", r.name)), event])
@@ -759,6 +771,9 @@ func price_for(id: String) -> Dictionary:
 		return {"cost": 999999, "uses": []}
 	var used := []
 	var discount := _discount(it, used)
+	if it.rarity == "boots" and id != "boots" and has_page_rune(8304) and (rune_state.state.get("shoes", false) if rune_state != null else rune_shoes):
+		var boots_slot := used.any(func(slot): return items[slot] != null and items[slot].id == "boots")
+		if boots_slot: discount += 50
 	return {"cost": maxi(it.cost - discount, 0), "uses": used}
 
 
@@ -793,7 +808,7 @@ func check_buy(id: String) -> String:
 	var fee := 0 if gold >= p.cost else 50
 	var credit := 0.0
 	if has_page_rune(8323) and world.time >= 120.0:
-		credit = 100.0 + 8.0 * floorf(world.time / 60.0)
+		credit = 150.0 + 5.0 * floorf(world.time / 60.0)
 	if gold + credit + 0.01 < p.cost + (fee if credit > 0.0 and gold >= 0.0 else 0):
 		return "Not enough gold (%d needed)" % p.cost
 	var uses: Array = p.uses
@@ -853,7 +868,7 @@ func buy(id: String) -> String:
 		gold -= 50.0
 	gold -= p.cost
 	if rune_state != null and rune_state.has(8321) and Game.items[id].rarity == "legendary":
-		add_gold(Game.items[id].cost * 0.075)
+		add_gold(Game.items[id].cost * 0.08)
 	var stack := _stack_slot(id)
 	if stack >= 0:
 		items[stack].n += 1
@@ -934,6 +949,8 @@ func use_item(slot: int, aim: Vector2, tid: int) -> bool:
 		world.fx("notice", {"peer": peer, "text": "%s can't be used on that" % it.name})
 		return false
 	var cd: float = maxf(Effects.num(ab.cooldown, ctx, 60.0), 0.0) * 100.0 / (100.0 + stats.item_haste)
+	if has_page_rune(8324) and inst.id in ["zhonyas_hourglass", "gargoyle_stoneplate"]:
+		cd *= 0.85
 	inst.cd = cd
 	inst.cd_total = maxf(cd, 0.01)
 	_cancel_recall()
@@ -942,6 +959,8 @@ func use_item(slot: int, aim: Vector2, tid: int) -> bool:
 	world.fx("cast", {"p": global_position, "c": it.color, "v": net_id, "d": Vector2(ctx.dir).angle(), "s": "item"})
 	world.note_cast(self, "item", false, str(inst.id), ctx, 0.0)
 	Effects.run(ab.effects, ctx)
+	if rune_state != null and (str(inst.id).ends_with("_potion") or str(inst.id).begins_with("elixir_")):
+		rune_state.sustain(0.0, true)
 	if ab.get("consume", false) and items[slot] == inst:
 		inst.n -= 1
 		if inst.n <= 0 and it.charges <= 0:
@@ -1077,7 +1096,13 @@ func use_summoner(i: int, aim: Vector2, tid: int) -> bool:
 func _run_summoner(ab: Dictionary, ctx: Dictionary) -> void:
 	ctx.origin = global_position
 	world.fx("cast", {"p": global_position, "c": ctx.color, "v": net_id, "d": Vector2(ctx.dir).angle(), "s": "summoner"})
-	Effects.run(ab.effects, ctx)
+	if ctx.summoner == "smite" and rune_state != null and rune_state.has(8360) and int(rune_state.state.get("swaps", 0)) >= 2:
+		var upgraded: Array = ab.effects.duplicate(true)
+		for effect in upgraded:
+			if effect.get("type") == "damage": effect.amount = 900
+		Effects.run(upgraded, ctx)
+	else:
+		Effects.run(ab.effects, ctx)
 	trigger("summoner", self, ctx.pos, {"cast_slot": str(ctx.summoner)})
 	if rune_state != null and not ctx.get("hexflash", false):
 		rune_state.used_summoner(int(ctx.summoner_slot))
@@ -1466,11 +1491,6 @@ func _level_up() -> void:
 		for k in def.per_level:
 			base_stats[k] = float(base_stats.get(k, 0.0)) + def.per_level[k] * growth
 	recompute_stats()
-	if rune_state != null and rune_state.has(8313):
-		match level:
-			3: add_gold(40)
-			6: rune_state.buff(8313, 60.0, {"ability_power": 15.0} if stats.ability_power > rune_state.bonus_ad() else {"attack_damage": 9.0})
-			9: skill_points += 1
 	world.fx("levelup", {"p": global_position, "l": level, "v": net_id})
 	trigger("level_up", self)
 

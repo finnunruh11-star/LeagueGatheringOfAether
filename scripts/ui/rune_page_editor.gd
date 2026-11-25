@@ -76,12 +76,12 @@ func _pick(label: String, choices: Array, key: String, slot: int) -> void:
 	for i in choices.size():
 		var choice: Array = choices[i]
 		option.add_item(choice[1], choice[0])
-		option.set_item_tooltip(i, choice[2])
+		option.set_item_tooltip(i, Runes.tooltip(choice))
 		if choice[0] == page[key][slot]:
 			option.select(i)
-			option.tooltip_text = choice[2]
+			option.tooltip_text = Runes.tooltip(choice)
 	option.item_selected.connect(func(index: int):
 		page[key][slot] = choices[index][0]
-		option.tooltip_text = choices[index][2]
+		option.tooltip_text = Runes.tooltip(choices[index])
 		if key == "minor":
 			_refresh.call_deferred())

@@ -171,7 +171,7 @@ func _test_runes() -> void:
 	var player := world.local_champion
 	var page := Runes.preset()
 	page.major = [8008, 9102, 9107, 8014]
-	ok = _check(Runes.valid(page), "live keystone and legacy minors can coexist") and ok
+	ok = _check(Runes.valid(page), "historical keystone and legacy minors can coexist") and ok
 	var invalid := page.duplicate(true)
 	invalid.minor = [8444, 8473]
 	ok = _check(not Runes.valid(invalid), "secondary picks from the same row are rejected") and ok
@@ -187,14 +187,40 @@ func _test_runes() -> void:
 	player.recompute_stats()
 	ok = _check(is_equal_approx(player.stats.max_hp, player.base_stats.max_hp + 65.0), "flat health shard is applied") and ok
 	var speed: float = player.stats.bonus_attack_speed
+	var reach: float = player.stats.attack_range
 	var previous_hp: float = foe.hp
 	for i in 6:
 		foe.take_damage(5.0, player, "true", {"attack": true})
 	player.recompute_stats()
-	ok = _check(float(player.stats.bonus_attack_speed) > speed and previous_hp - foe.hp > 30.0, "six Lethal Tempo hits grant speed and bonus damage") and ok
+	var range_bonus := 75.0 if player.attack_def.ranged else 50.0
+	ok = _check(float(player.stats.bonus_attack_speed) > speed and is_equal_approx(player.stats.attack_range, reach + range_bonus) and is_equal_approx(previous_hp - foe.hp, 30.0), "12.19 Lethal Tempo grants range instead of bonus damage at six stacks") and ok
 	player.hp = player.stats.max_hp
 	player.heal(100.0, player)
 	ok = _check(not player.find_status("overheal").is_empty(), "excess healing creates the legacy Overheal shield") and ok
+
+	page = Runes.preset()
+	player.rune_state = RuneState.new(player, page)
+	for i in 3:
+		foe.take_damage(5.0, player, "true", {"attack": true})
+	var ally: Champion = world.spawn("champion", {"peer": -97, "team": 0, "character": player.char_id,
+		"pos": center - Vector2(90, 0)})
+	var allied_hit := foe.take_damage(50.0, ally, "true")
+	ok = _check(is_equal_approx(allied_hit, 56.0), "7.23 Press the Attack increases allied damage to the exposed target by 12%") and ok
+	foe.remove_status_id("press_the_attack")
+
+	page = {"primary": "Domination", "secondary": "Sorcery", "major": [8112, 8126, 8136, 8132],
+		"minor": [8225, 8237], "shards": [5007, 5008, 5011]}
+	ok = _check(Runes.valid(page), "restored ward, hunter, and orb runes can be picked together") and ok
+	player.rune_state = RuneState.new(player, page)
+	var enemy_ward: Summon = world.spawn("summon", {"pos": center, "team": 1, "ward": true, "name": "Test Ward", "stats": {"max_hp": 1}})
+	enemy_ward.take_damage(1.0, player, "physical", {"attack": true})
+	ok = _check(world.units.any(func(u): return u is Summon and u.team == player.team and u.display_name == "Zombie Ward" and is_equal_approx(u.lifetime, 120.0)), "9.7 Zombie Ward replaces a destroyed enemy ward for 120 seconds") and ok
+	player.remove_status_id("overheal")
+	player.hp = player.stats.max_hp * 0.31
+	player.take_damage(20.0, foe, "true")
+	ok = _check(not player.rune_state.timers.has(8225), "12.9 Nullifying Orb does not activate on true damage") and ok
+	player.take_damage(20.0, foe, "magic")
+	ok = _check(player.rune_state.timers.has(8225) and player.statuses.any(func(s): return s.key == "rune:orb" and s.dtype == "magic"), "12.9 Nullifying Orb grants a magic-only shield") and ok
 
 	page = Runes.preset("mage")
 	page.major[0] = 8231

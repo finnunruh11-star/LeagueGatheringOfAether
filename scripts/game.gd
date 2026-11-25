@@ -14,7 +14,7 @@ signal suggestions_changed
 signal suggestion_status_changed(text: String)
 
 const CharacterSuggestions = preload("res://scripts/character_suggestions.gd")
-const PROTOCOL := 7
+const PROTOCOL := 8
 const DEFAULT_PORT := 7777
 const MAX_APPROVED_SUGGESTIONS := 8
 const SUGGESTION_INTERVAL_MS := 3000
