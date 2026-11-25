@@ -14,6 +14,20 @@ class DrawControl extends Control:
 		return tip_func.call() if tip_func.is_valid() and for_text != "" else null
 
 
+class Scoreboard extends DrawControl:
+	var item_cells: Array[Dictionary] = []
+
+	func _get_tooltip(at: Vector2) -> String:
+		for cell in item_cells:
+			if cell.rect.has_point(at):
+				return cell.id
+		return ""
+
+	func _make_custom_tooltip(for_text: String) -> Object:
+		var item = Game.items.get(for_text)
+		return ItemUI.tooltip(item) if item != null else null
+
+
 const SLOT_KEYS := ["p", "q", "w", "e", "r"]
 const BAR_W := 966.0
 const SLOT_X := 262.0
@@ -39,13 +53,19 @@ var notice_label: Label
 var _notice_t := 9.0
 var minimap: DrawControl
 var minimap_units: DrawControl
-var scores: DrawControl
+var scores: Scoreboard
+var inspected_unit: Unit
+var inspect_label: Label
 var end_panel: PanelContainer
 var end_label: Label
 var menu_panel: PanelContainer
 var feed: Array = []
 var _tooltips_for := ""
 var _tooltip_key := ""
+var _ability_tip: PanelContainer
+var _ability_tip_text: Label
+var _hovered_slot := ""
+var _hover_time := 0.0
 var _items_key := ""
 var _last_hp := -1.0
 var vignette: TextureRect
@@ -146,6 +166,23 @@ func _ready() -> void:
 			b.visible = false
 			bar.add_child(b)
 			plus_buttons[key] = b
+	_ability_tip = PanelContainer.new()
+	_ability_tip.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_ability_tip.z_index = 1
+	_ability_tip.hide()
+	var style := StyleBoxFlat.new()
+	style.bg_color = Color(0.06, 0.08, 0.12, 0.98)
+	style.border_color = Color(0.33, 0.44, 0.60)
+	style.set_border_width_all(1)
+	style.set_corner_radius_all(5)
+	for side in [SIDE_LEFT, SIDE_TOP, SIDE_RIGHT, SIDE_BOTTOM]:
+		style.set_content_margin(side, 10.0)
+	_ability_tip.add_theme_stylebox_override("panel", style)
+	root.add_child(_ability_tip)
+	_ability_tip_text = Label.new()
+	_ability_tip_text.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_ability_tip_text.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	_ability_tip.add_child(_ability_tip_text)
 	for i in 6:
 		var s := DrawControl.new()
 		var idx := i
@@ -213,12 +250,19 @@ func _ready() -> void:
 	minimap_units.set_anchors_and_offsets_preset(Control.PRESET_FULL_RECT)
 	minimap.add_child(minimap_units)
 
-	scores = DrawControl.new()
+	scores = Scoreboard.new()
 	scores.draw_func = _draw_scores
 	scores.visible = false
-	scores.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	scores.mouse_filter = Control.MOUSE_FILTER_STOP
 	_place(scores, 0.5, 0.5, -380, -260, 760, 520)
 	root.add_child(scores)
+
+	var inspect_panel := PanelContainer.new()
+	inspect_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_place(inspect_panel, 0.0, 0.0, 20, 100, 300, 90)
+	root.add_child(inspect_panel)
+	inspect_label = _label(inspect_panel, 16, HORIZONTAL_ALIGNMENT_CENTER)
+	inspect_panel.hide()
 
 	end_panel = _panel(root)
 	var ev := end_panel.get_child(0)
@@ -391,6 +435,7 @@ func announce_rich(bbcode: String) -> void:
 
 
 func _process(_delta: float) -> void:
+	_update_inspection()
 	var t := int(world.time)
 	top_label.text = "%s %d  :  %d %s      %02d:%02d" % [Game.TEAM_NAMES[0], world.kills[0], world.kills[1], Game.TEAM_NAMES[1], t / 60, t % 60]
 	var now := Time.get_ticks_msec()
@@ -426,6 +471,7 @@ func _process(_delta: float) -> void:
 	for s in sum_boxes:
 		s.queue_redraw()
 	_place_bar()
+	_update_ability_tip(ch, _delta)
 	minimap.queue_redraw()
 	minimap_units.queue_redraw()
 	if scores.visible:
@@ -479,33 +525,87 @@ func _update_effects(delta: float, ch: Champion) -> void:
 			_ready_flash[s] = maxf(float(_ready_flash.get(s, 0.0)) - delta * 2.5, 0.0)
 
 
-func _build_tooltips(ch: Champion) -> void:
-	var p: Dictionary = ch.def.passive
-	slot_boxes.p.tooltip_text = "Passive - %s\n%s" % [p.name, p.description]
-	for slot in ["q", "w", "e", "r"]:
-		var ab = ch.def.abilities.get(slot)
-		if ab == null:
-			slot_boxes[slot].tooltip_text = "(no ability)"
-			continue
-		var r := int(ch.ranks.get(slot, 0))
+func _input(event: InputEvent) -> void:
+	# In the WASD preset, Shift also casts summoner spell 2. Hovering a champion
+	# slot gives the tooltip priority without changing the combat binding.
+	if event is InputEventKey and event.keycode == KEY_SHIFT and event.pressed \
+			and world.local_champion != null and slot_boxes.find_key(get_viewport().gui_get_hovered_control()) != null:
+		get_viewport().set_input_as_handled()
+
+
+func _update_ability_tip(ch: Champion, delta: float) -> void:
+	var hovered := get_viewport().gui_get_hovered_control()
+	var key = slot_boxes.find_key(hovered)
+	var slot: String = key if key != null and ch != null else ""
+	if slot != _hovered_slot:
+		_hovered_slot = slot
+		_hover_time = 0.0
+		_ability_tip.hide()
+	if slot.is_empty():
+		return
+	_hover_time += delta
+	if _hover_time < 0.5:
+		return
+	var expanded := Input.is_key_pressed(KEY_SHIFT)
+	var text := _ability_tip_content(ch, slot, expanded)
+	var width := minf(470.0 if expanded else 320.0, ui_root.size.x - 16.0)
+	if _ability_tip_text.text != text or not _ability_tip.visible or _ability_tip.size.x != width:
+		_ability_tip_text.custom_minimum_size.x = width - 20.0
+		_ability_tip_text.size.x = width - 20.0
+		_ability_tip_text.text = text
+		_ability_tip.reset_size()
+	var rect: Rect2 = hovered.get_global_rect()
+	_ability_tip.position = Vector2(
+		clampf(rect.get_center().x - width * 0.5, 8.0, ui_root.size.x - width - 8.0),
+		maxf(8.0, rect.position.y - _ability_tip.size.y - 12.0))
+	_ability_tip.show()
+
+
+func _ability_tip_content(ch: Champion, slot: String, expanded: bool) -> String:
+	var hint := "Release Shift for summary" if expanded else "Hold Shift for details"
+	if slot == "p":
+		var p: Dictionary = ch.def.passive
+		return "Passive - %s\n%s\n\n%s" % [p.name, _ability_description(p, expanded), hint]
+	var base = ch.def.abilities.get(slot)
+	if base == null:
+		return "(no ability)"
+	var ab: Dictionary = ch.active_ability(slot)
+	var rank := int(ch.ranks.get(slot, 0))
+	var lines := PackedStringArray(["%s - %s%s" % [slot.to_upper(), ab.name,
+		" (rank %d/%d)" % [rank, base.max_rank] if expanded else ""]])
+	_append_ability_tip(lines, ch, ab, rank, expanded)
+	if base.get("recast") is Dictionary and ab == base:
+		lines.append("\nRecast - %s" % base.recast.name)
+		_append_ability_tip(lines, ch, base.recast, rank, expanded)
+	if expanded and ab.auto_rank:
+		lines.append("Damage, healing and shielding: +%d%% per rank after rank 1 (additive)." % (50 if slot == "r" else 25))
+	if rank == 0:
+		lines.append("Not learned: Ctrl+%s or + to level up." % Controls.label("ability_" + slot))
+	lines.append("\n" + hint)
+	return "\n".join(lines)
+
+
+static func _ability_description(ab: Dictionary, expanded: bool) -> String:
+	return ab.description if expanded and not ab.description.is_empty() else ab.short_description
+
+
+static func _append_ability_tip(lines: PackedStringArray, ch: Champion, ab: Dictionary, rank: int, expanded: bool) -> void:
+	if expanded:
+		var ctx := {"caster": ch, "rank": maxi(rank, 1)}
 		var cost := ch.ability_cost(ab)
-		var lines := PackedStringArray()
-		lines.append("%s - %s   (rank %d/%d)" % [slot.to_upper(), ab.name, r, int(ab.max_rank)])
-		var meta := "Cooldown: %.1fs" % ch.ability_cooldown(ab)
+		var meta := "Cooldown: %s s" % String.num(ch.ability_cooldown(ab), 2).trim_suffix(".0")
 		if cost > 0.0:
-			meta += "   Cost: %d %s" % [int(cost), "health" if ab.cost_type == "health" else "mana"]
-		meta += "   Range: %d" % int(Effects.num(ab.range, {"caster": ch, "rank": maxi(r, 1)}, 700.0))
+			meta += "  |  Cost: %s %s" % [String.num(cost, 2).trim_suffix(".0"), ab.cost_type]
+		if ab.targeting != "self":
+			meta += "  |  Range: %s" % String.num(Effects.num(ab.range, ctx, 700.0), 2).trim_suffix(".0")
+		var cast_time := Effects.num(ab.cast_time, ctx)
+		if cast_time > 0.0:
+			meta += "  |  Cast time: %s s" % String.num(cast_time, 2).trim_suffix(".0")
 		lines.append(meta)
-		lines.append(str(ab.description))
-		var rc = ab.get("recast")
-		if rc is Dictionary:
-			lines.append("Recast - %s   (cooldown %.1fs)" % [rc.name, ch.ability_cooldown(rc)])
-			lines.append(str(rc.description))
-		if r == 0:
-			lines.append("Not learned yet: press Ctrl+%s or the + button when you have a skill point." % Controls.label("ability_" + slot))
-		elif ab.get("auto_rank", false) and r < int(ab.max_rank):
-			lines.append("Next rank: +%d%% damage/healing, shorter cooldown." % (50 if slot == "r" else 25))
-		slot_boxes[slot].tooltip_text = "\n".join(lines)
+	lines.append(_ability_description(ab, expanded))
+
+
+func _build_tooltips(ch: Champion) -> void:
 	for i in 2:
 		var sp = ch.summoner_def(i)
 		if sp == null:
@@ -865,7 +965,8 @@ func _minimap_input(event: InputEvent) -> void:
 			world.camera.global_position = wp
 
 
-func _draw_scores(c: Control) -> void:
+func _draw_scores(c: Scoreboard) -> void:
+	c.item_cells.clear()
 	c.draw_rect(Rect2(Vector2.ZERO, c.size), Color(0.05, 0.06, 0.08, 0.92))
 	var y := 44.0
 	for t in 2:
@@ -881,6 +982,7 @@ func _draw_scores(c: Control) -> void:
 				var r := Rect2(470 + i * 36, y - 22, 32, 32)
 				if it != null:
 					ItemUI.draw_icon(c, r, it)
+					c.item_cells.append({"rect": r, "id": it.id})
 				else:
 					c.draw_rect(r, Color(0.2, 0.21, 0.25), false, 1.0)
 			# Summoner spells (cooldowns only for your team, like LoL).
@@ -900,3 +1002,17 @@ func _draw_scores(c: Control) -> void:
 				c.draw_rect(sr, Color(sp.color), false, 1.0)
 			y += 40.0
 		y += 20.0
+func _update_inspection() -> void:
+	var u := inspected_unit
+	var panel := inspect_label.get_parent() as Control
+	if not is_instance_valid(u) or u.dead or not world.can_see(u, world.local_team):
+		inspected_unit = null
+		panel.hide()
+		return
+	var name_line := u.display_name
+	if u is Champion:
+		name_line += "  Lv %d" % u.level
+	inspect_label.text = "%s\nHP %.0f / %.0f\nAD %.0f   Armor %.0f   MR %.0f\nMove %.0f   Range %.0f   Radius %.0f" % [
+		name_line, u.hp, u.stats.max_hp, u.stats.attack_damage, u.stats.armor, u.stats.magic_resist,
+		u.stats.move_speed, u.stats.attack_range, u.radius]
+	panel.show()

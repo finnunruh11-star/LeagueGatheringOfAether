@@ -4,7 +4,8 @@ extends CharacterBody2D
 ## The host simulates units; on clients they are "puppets" that follow snapshots.
 
 enum { ANIM_IDLE, ANIM_WALK, ANIM_ATTACK, ANIM_CAST, ANIM_DEAD }
-const ANIM_NAMES := ["idle", "walk", "attack", "cast", "death"]
+const ACT_FINISHER := 63    # anim_variant of a basic attack that sets off an "every N attacks" passive
+const ACT_CHANNEL := 5      # anim_variant of a channeled summoner spell (Teleport)
 
 const F_STUN := 1
 const F_ROOT := 2
@@ -28,11 +29,10 @@ const F_UNTARGETABLE := 262144
 const F_REVEAL0 := 524288     # revealed to team 0 ("reveal" effect); F_REVEAL0 << team
 const F_REVEAL1 := 1048576
 const F_DEBUFF := 2097152     # a stat buff applied by an enemy (shred, curses, slows of attack speed...)
-const NET_BASE := 14
+const NET_BASE := 25
 const HARD_CC := ["stun", "root", "slow", "silence", "dot", "grievous"]
 const CC_TYPES := ["stun", "root", "slow", "silence"]
 const COMBAT_TIME := 3.0
-const WALK_SPEED_SCALE := 0.75
 const BOND_CAP := 2.0       # Bond of Life can't grow past this many times max HP (unless an effect sets "max")
 const BOND_COLOR := Color(0.9, 0.18, 0.38)
 
@@ -64,6 +64,8 @@ var dead := false
 var statuses: Array = []
 var stats_dirty := true
 var base_radius := 20.0
+var base_pathing_radius := Content.CHAMPION_PATH_RADIUS
+var base_selection_radius := Content.CHAMPION_SELECTION_RADIUS
 var radius := 20.0
 var combat_t := -100.0      # last time this unit dealt/took champion damage
 var combat_start := -100.0
@@ -80,13 +82,26 @@ var path := PackedVector2Array()
 var path_goal := Vector2.INF
 var path_timer := 0.0
 var facing := 1.0
+var face_angle := 0.0       # where the unit looks (radians); picks the row of directional sprites
 var anim := ANIM_IDLE
 var anim_lock := 0.0
 var anim_lock_kind := ANIM_IDLE
+# The latest attack/cast animation (replicated, see start_action).
+var anim_seq := 0
+var anim_act := ANIM_IDLE   # ANIM_ATTACK or ANIM_CAST
+var anim_variant := 0       # attacks: which swing (or ACT_FINISHER); casts: 1-4 = Q-R, 0 = other
+var anim_windup := 0.0      # seconds from its start to its hit frame
+var anim_span := 0.0        # attacks: the recovery after the hit; casts: the dash it started
+var _action_time := -100.0
+var _combo := 0
+var _last_swing := -100.0
 var windup_left := 0.0
 var windup_duration := 0.0
 var windup_dir := Vector2.ZERO
 var winding_attack: Unit
+var attack_starting := false
+var recovery_lock := 0.0
+var windup_marker := Vector2.ZERO
 var last_champion_hit = null
 var last_champion_hit_time := -100.0
 
@@ -96,6 +111,24 @@ var net_t := 1.0
 
 var sprite_info = null
 var sprite: AnimatedSprite2D = null
+# Sprite player state (every peer runs it from the replicated state).
+var _fade: Sprite2D = null  # the previous pose, fading out over the new one
+var _fade_t := 0.0
+var _fade_len := 1.0
+var _presented := false
+var _clip_state := ""
+var _clip_t := 0.0
+var _row := 0
+var _seen_seq := 0
+var _synced := false
+var _act_on := false
+var _oneshot := ""          # spawn / hurt / fidget
+var _idle_t := 0.0
+var _fidget_at := 9.0
+var _move_phase := 0.0
+var _was_dead := false
+var _vis_pos := Vector2.INF
+var _vis_speed := 0.0
 var overlay: DrawNode
 var collider: CollisionShape2D
 var flash := 0.0
@@ -125,9 +158,19 @@ func _ready() -> void:
 	if sprite_info != null:
 		sprite = AnimatedSprite2D.new()
 		sprite.sprite_frames = sprite_info.frames
+		sprite.animation = sprite_info.clips.idle[0].name + ("/0" if sprite_info.dirs > 1 else "")
 		sprite.position = sprite_info.offset
-		sprite.play("idle")
+		if sprite_info.linear:
+			sprite.texture_filter = CanvasItem.TEXTURE_FILTER_LINEAR
 		add_child(sprite)
+		if sprite_info.blend > 0.0:
+			_fade = Sprite2D.new()
+			_fade.texture_filter = sprite.texture_filter
+			_fade.visible = false
+			add_child(_fade)
+		_fidget_at = randf_range(7.0, 12.0)
+		if sprite_info.clips.has("spawn"):
+			_oneshot = "spawn"
 	overlay = DrawNode.new()
 	overlay.z_index = 40
 	overlay.draw_func = _draw_overlay
@@ -157,6 +200,7 @@ func _physics_process(delta: float) -> void:
 	if stats.max_mana > 0.0:
 		mana = minf(mana + stats.mana_regen * (1.0 + stats.mana_regen_percent) * delta, stats.max_mana)
 	attack_cd = maxf(attack_cd - delta, 0.0)
+	recovery_lock = maxf(recovery_lock - delta, 0.0)
 	anim_lock = maxf(anim_lock - delta, 0.0)
 	_think(delta)
 	if dead:
@@ -165,7 +209,7 @@ func _physics_process(delta: float) -> void:
 		_forced_process(delta)
 	elif not is_structure:
 		_act(delta)
-		if separate and windup_left <= 0.0:
+		if separate and windup_left <= 0.0 and recovery_lock <= 0.0:
 			_separate()
 		move_and_slide()
 	else:
@@ -184,31 +228,40 @@ func _dead_process(_delta: float) -> void:
 
 func _act(delta: float) -> void:
 	velocity = Vector2.ZERO
-	if attack_target != null and not valid_target(attack_target):
+	if not valid_target(attack_target):
 		attack_target = null
-	if is_instance_valid(winding_attack):
+	if recovery_lock > 0.0:
+		return
+	if attack_starting:
 		var t := winding_attack
-		if t == attack_target and can_attack() and global_position.distance_to(t.global_position) <= attack_reach(t):
-			face(t.global_position)
-			windup_dir = global_position.direction_to(t.global_position)
+		var in_reach := valid_target(t) and not t.is_protected() and global_position.distance_to(t.global_position) <= attack_reach(t)
+		if not can_attack():
+			cancel_attack_windup(true)
+		elif attack_committed() or (in_reach and t == attack_target):
+			if in_reach:
+				face(t.global_position)
+				windup_dir = global_position.direction_to(t.global_position)
 			windup_left -= delta
 			if windup_left <= 0.00001:
 				var elapsed := windup_duration
-				cancel_attack_windup()
-				perform_attack(t, elapsed)
+				cancel_attack_windup(true)
+				_begin_attack_recovery(elapsed)
+				if in_reach:
+					perform_attack(t, elapsed)
 			return
-		cancel_attack_windup()
-	elif anim_lock_kind == ANIM_ATTACK and windup_left > 0.0:
-		cancel_attack_windup()
+		else:
+			cancel_attack_windup()
 	if attack_target != null:
 		var d := global_position.distance_to(attack_target.global_position)
 		if d <= attack_reach(attack_target):
 			face(attack_target.global_position)
-			if attack_cd <= 0.0 and can_attack():
+			if attack_cd <= 0.0 and can_attack() and not attack_target.is_protected():
+				attack_starting = true
 				winding_attack = attack_target
 				var period := 1.0 / maxf(stats.attack_speed, 0.05)
 				var duration := minf(0.45, period * (0.32 if is_champion else 0.40))
 				begin_windup(ANIM_ATTACK, duration, global_position.direction_to(attack_target.global_position))
+				start_action(ANIM_ATTACK, _attack_variant(), duration, minf(0.3, (period - duration) * 0.8))
 			return
 		if can_move():
 			_move_toward(attack_target.global_position, delta, true)
@@ -244,7 +297,7 @@ func _separate() -> void:
 		if u == self or u.dead or not u.separate or u.stats.get("ghost", 0.0) > 0.0:
 			continue
 		var d: Vector2 = global_position - u.global_position
-		var min_d: float = radius + u.radius
+		var min_d: float = pathing_radius() + u.pathing_radius()
 		var l: float = d.length()
 		if l < min_d:
 			push += (d / l if l > 0.01 else Vector2.from_angle(randf() * TAU)) * (min_d - l)
@@ -271,8 +324,11 @@ func visible_to(t: int) -> bool:
 
 
 func face(p: Vector2) -> void:
-	if absf(p.x - global_position.x) > 2.0:
-		facing = signf(p.x - global_position.x)
+	var d := p - global_position
+	if absf(d.x) > 2.0:
+		facing = signf(d.x)
+	if d.length_squared() > 4.0:
+		face_angle = d.angle()
 
 
 func get_level() -> int:
@@ -315,7 +371,7 @@ func can_attack() -> bool:
 
 
 func can_cast() -> bool:
-	return not dead and forced == null and not has_status("stun") and not has_status("silence") and not has_status("stasis")
+	return not attack_action_locked() and not dead and forced == null and not has_status("stun") and not has_status("silence") and not has_status("stasis")
 
 
 func trigger(_event: String, _target = null, _pos = null, _extra := {}, _only := "") -> bool:
@@ -334,10 +390,12 @@ func enter_combat() -> void:
 
 # ---------------------------------------------------------------- attacks ---
 
-func begin_windup(animation: int, duration: float, direction: Vector2) -> void:
+func begin_windup(animation: int, duration: float, direction: Vector2, marker := Vector2.ZERO) -> void:
 	windup_left = duration
 	windup_duration = duration
 	windup_dir = direction
+	windup_marker = marker
+	anim = animation
 	set_anim_lock(animation, duration)
 
 
@@ -346,15 +404,53 @@ func clear_windup() -> void:
 	anim_lock = 0.0
 
 
-func cancel_attack_windup() -> void:
+## Starts an attack or cast animation. Every peer plays it from the replicated anim_* values:
+## the clip reaches its "hit" frame after `windup` seconds and stretches over `span` after that
+## (an attack's recovery; for casts, set by the dash the cast starts).
+func start_action(kind: int, variant: int, windup: float, span := 0.0) -> void:
+	anim_seq = (anim_seq + 1) % 32768
+	anim_act = kind
+	anim_variant = variant
+	anim_windup = windup
+	anim_span = span
+	_action_time = world.time if world != null else 0.0
+
+
+## Which swing the next basic attack shows: the regular ones take turns, starting over after a pause.
+func _attack_variant() -> int:
+	if world.time - _last_swing > 2.5:
+		_combo = 0
+	_last_swing = world.time
+	var v := _combo
+	_combo = (_combo + 1) % ACT_FINISHER
+	return v
+
+
+func attack_committed() -> bool:
+	return attack_starting and windup_left <= windup_duration * 0.45
+
+
+func attack_action_locked() -> bool:
+	return attack_committed() or recovery_lock > 0.0
+
+
+func cancel_attack_windup(interrupt := false) -> void:
+	if not attack_starting or (attack_committed() and not interrupt):
+		return
+	attack_starting = false
 	winding_attack = null
-	if anim_lock_kind == ANIM_ATTACK and windup_left > 0.0:
-		clear_windup()
+	clear_windup()
 
 
-func perform_attack(t: Unit, elapsed_windup: float) -> void:
+func _begin_attack_recovery(elapsed_windup: float) -> void:
 	attack_cd = maxf(0.0, 1.0 / maxf(stats.attack_speed, 0.05) - elapsed_windup)
-	set_anim_lock(ANIM_ATTACK, minf(0.3, attack_cd * 0.8))
+	var recovery := minf(0.3, attack_cd * 0.8)
+	recovery_lock = recovery * 0.45
+	set_anim_lock(ANIM_ATTACK, recovery)
+	kick = windup_dir * 15.0
+
+
+func perform_attack(t: Unit, _elapsed_windup: float) -> void:
 	var a: Dictionary = attack_def
 	var dmg := attack_damage_against(t)
 	if a.has("damage"):
@@ -629,7 +725,8 @@ func die(killer = null) -> void:
 	if dead:
 		return
 	dead = true
-	winding_attack = null
+	cancel_attack_windup(true)
+	recovery_lock = 0.0
 	clear_windup()
 	hp = 0.0
 	forced = null
@@ -703,7 +800,8 @@ func _apply_stacks(s: Dictionary) -> void:
 
 
 func _interrupted() -> void:
-	cancel_attack_windup()
+	cancel_attack_windup(true)
+	recovery_lock = 0.0
 
 
 func cleanse(cc_only := false) -> void:
@@ -780,7 +878,9 @@ func recompute_stats() -> void:
 		ms = 475.0 + (ms - 490.0) * 0.5
 	elif ms > 415.0:
 		ms = 415.0 + (ms - 415.0) * 0.8
-	st.move_speed = maxf(ms, 0.0) * WALK_SPEED_SCALE
+	elif ms > 0.0 and ms < 220.0:
+		ms = 110.0 + ms * 0.5
+	st.move_speed = maxf(ms, 0.0)
 	st.max_hp = maxf(st.max_hp, 1.0)
 	st.size = clampf(st.size, 0.2, 6.0)
 	stats = st
@@ -813,10 +913,18 @@ func _refresh_attack() -> void:
 	attack_def = a
 
 
+func pathing_radius() -> float:
+	return base_pathing_radius * float(stats.size) if is_champion else radius
+
+
+func selection_radius() -> float:
+	return base_selection_radius if is_champion else radius
+
+
 func set_radius(r: float) -> void:
 	radius = r
 	if collider != null:
-		(collider.shape as CircleShape2D).radius = r * (0.9 if is_structure else 0.6)
+		(collider.shape as CircleShape2D).radius = pathing_radius() if is_champion else r * (0.9 if is_structure else 0.6)
 
 
 func _compute_flags() -> int:
@@ -861,9 +969,13 @@ func knockback(vec: Vector2, dur: float) -> void:
 func start_dash(dir: Vector2, length: float, speed: float, e: Dictionary, ctx: Dictionary) -> void:
 	if dead:
 		return
+	cancel_attack_windup(true)
+	recovery_lock = 0.0
 	forced = {"vel": dir * speed, "time": length / speed, "dash": true, "e": e, "ctx": ctx, "hit": {}}
 	path = PackedVector2Array()
 	face(global_position + dir)
+	if anim_act == ANIM_CAST and world != null and world.time - _action_time <= anim_windup + 0.05:
+		anim_span = maxf(length, 0.0) / maxf(speed, 1.0)
 	if length <= 0.0:
 		_end_forced()
 
@@ -911,6 +1023,9 @@ func set_anim_lock(a: int, t: float) -> void:
 func _update_anim() -> void:
 	if dead:
 		anim = ANIM_DEAD
+	elif anim_lock_kind == ANIM_ATTACK and not attack_starting and recovery_lock <= 0.0 and velocity.length_squared() > 100.0:
+		anim_lock = 0.0
+		anim = ANIM_WALK
 	elif anim_lock > 0.0:
 		anim = anim_lock_kind
 	elif velocity.length() > 10.0:
@@ -922,7 +1037,9 @@ func _update_anim() -> void:
 
 func net_state() -> PackedFloat32Array:
 	return PackedFloat32Array([global_position.x, global_position.y, hp, stats.max_hp, shield, flags, facing, anim, stats.size, bond,
-		windup_left, windup_duration, windup_dir.x, windup_dir.y])
+		windup_left, windup_duration, windup_dir.x, windup_dir.y, windup_marker.x, windup_marker.y,
+		stats.attack_damage, stats.armor, stats.magic_resist, stats.move_speed, stats.attack_range,
+		face_angle, anim_act + 4 * anim_variant + 256 * anim_seq, anim_windup, anim_span])
 
 
 func apply_net_state(s: PackedFloat32Array) -> void:
@@ -947,6 +1064,22 @@ func apply_net_state(s: PackedFloat32Array) -> void:
 	windup_left = s[10]
 	windup_duration = s[11]
 	windup_dir = Vector2(s[12], s[13])
+	windup_marker = Vector2(s[14], s[15])
+	stats.attack_damage = s[16]
+	stats.armor = s[17]
+	stats.magic_resist = s[18]
+	stats.move_speed = s[19]
+	stats.attack_range = s[20]
+	face_angle = s[21]
+	var code := int(s[22])
+	anim_act = code % 4
+	anim_variant = (code / 4) % 64
+	anim_seq = code / 256
+	anim_windup = s[23]
+	anim_span = s[24]
+	if not _synced:
+		_synced = true
+		_seen_seq = anim_seq
 	dead = flags & F_DEAD != 0
 
 
@@ -965,7 +1098,7 @@ func _process(delta: float) -> void:
 	_afterimages(delta)
 	_update_status_fx()
 	if sprite != null:
-		_update_sprite()
+		_update_sprite(delta)
 	queue_redraw()
 	overlay.queue_redraw()
 
@@ -976,6 +1109,11 @@ func hit_react(ang: float, amount: float) -> void:
 	squash = 1.0
 	if not is_structure:
 		kick = Vector2.from_angle(ang) * clampf(2.0 + amount / 25.0, 2.0, 9.0)
+	# Big hits make an idle character flinch.
+	if sprite != null and not dead and anim == ANIM_IDLE and not _act_on and sprite_info.clips.has("hurt") \
+			and amount >= maxf(40.0, stats.max_hp * 0.04) and _oneshot != "spawn":
+		_oneshot = "hurt"
+		_clip_state = ""
 
 
 func _bob() -> Vector2:
@@ -986,12 +1124,21 @@ func _bob() -> Vector2:
 	return Vector2(0, sin(life * 2.4) * 1.2)
 
 
+## Animated sprite sheets move on their own; the code only adds hit/attack kicks to them.
+func _procedural() -> bool:
+	return sprite_info == null or sprite_info.procedural
+
+
 func _body_offset() -> Vector2:
-	var lean := (1.0 - windup_left / windup_duration) * 9.0 if windup_left > 0.0 and not is_structure else 0.0
+	if not _procedural():
+		return kick
+	var lean := (1.0 - windup_left / windup_duration) * (24.0 if anim == ANIM_CAST else 9.0) if windup_left > 0.0 and not is_structure else 0.0
 	return kick + _bob() - windup_dir * lean
 
 
 func _squash_scale() -> Vector2:
+	if not _procedural():
+		return Vector2.ONE
 	return Vector2(1.0 + 0.16 * squash, 1.0 - 0.12 * squash)
 
 
@@ -1028,6 +1175,7 @@ func _afterimages(delta: float) -> void:
 	if sprite != null:
 		var s := Sprite2D.new()
 		s.texture = sprite.sprite_frames.get_frame_texture(sprite.animation, sprite.frame)
+		s.texture_filter = sprite.texture_filter
 		s.flip_h = sprite.flip_h
 		s.scale = sprite.scale
 		s.position = global_position + sprite.position
@@ -1090,17 +1238,241 @@ func _update_status_fx() -> void:
 	status_fx.emitting = true
 
 
-func _update_sprite() -> void:
-	var anim_name: String = ANIM_NAMES[clampi(anim, 0, 4)]
-	if not sprite.sprite_frames.has_animation(anim_name):
-		anim_name = "idle"
-	sprite.visible = not dead or sprite.sprite_frames.has_animation("death")
-	if sprite.animation != anim_name:
-		sprite.play(anim_name)
-	sprite.flip_h = (facing < 0.0) != bool(sprite_info.faces_left)
-	sprite.position = sprite_info.offset + _body_offset()
-	sprite.scale = Vector2.ONE * sprite_info.scale * stats.size * _squash_scale()
+## Sprite player: picks what to show by priority (death, stun, the latest attack/cast, recall,
+## moving, one-shots like spawn/hurt/fidget, guard while shielded, idle), maps attack/cast clips
+## onto their windup and dash, and cross-fades from the previous pose whenever the animation or
+## direction changes. Runs the same on every peer from the replicated state.
+func _update_sprite(delta: float) -> void:
+	var clips: Dictionary = sprite_info.clips
+	if _vis_pos != Vector2.INF and delta > 0.0:
+		_vis_speed = lerpf(_vis_speed, global_position.distance_to(_vis_pos) / delta, minf(delta * 15.0, 1.0))
+	_vis_pos = global_position
+	if anim_seq != _seen_seq:
+		_seen_seq = anim_seq
+		_act_on = _action_clip() != null
+		_clip_state = ""
+	if dead != _was_dead:
+		_was_dead = dead
+		_act_on = false
+		_oneshot = "spawn" if not dead and clips.has("spawn") else ""
+	var pick := _sprite_state()
+	if pick[0] != _clip_state:
+		_clip_state = pick[0]
+		_clip_t = 0.0
+		if _clip_state == "move":
+			_move_phase = 0.0
+	else:
+		_clip_t += delta
+	var frame := _state_frame(pick[0], pick[1], delta)
+	if frame < 0:
+		if str(pick[0]).begins_with("act"):
+			_act_on = false
+		else:
+			_oneshot = ""
+		pick = _sprite_state()
+		_clip_state = pick[0]
+		_clip_t = 0.0
+		frame = maxi(_state_frame(pick[0], pick[1], 0.0), 0)
+	if pick[0] == "idle":
+		_idle_t += delta
+		if _idle_t >= _fidget_at and clips.has("fidget"):
+			_oneshot = "fidget"
+			_fidget_at = randf_range(7.0, 12.0)
+	else:
+		_idle_t = 0.0
+	_present(pick[1], frame, delta)
+
+
+## [state name, clip] to show right now.
+func _sprite_state() -> Array:
+	var clips: Dictionary = sprite_info.clips
+	if dead:
+		return ["death", clips.death[0]] if clips.has("death") else ["idle", clips.idle[0]]
+	if flags & F_STUN and clips.has("stun"):
+		_act_on = false
+		_oneshot = ""
+		return ["stun", clips.stun[0]]
+	if _act_on:
+		var c = _action_clip()
+		if c != null and not _action_cancelled(c):
+			_oneshot = ""
+			return ["act%d" % _seen_seq, c]
+		_act_on = false
+	var recall: bool = flags & F_RECALL != 0
+	if recall or (anim_act == ANIM_CAST and anim_variant == ACT_CHANNEL and anim == ANIM_CAST):
+		var k := "recall" if recall or not clips.has("channel") else "channel"
+		if not clips.has(k):
+			k = "channel" if clips.has("channel") else ""
+		if k != "":
+			_oneshot = ""
+			return [k, clips[k][0]]
+	if anim == ANIM_WALK:
+		var m = _move_clip()
+		if m != null:
+			_oneshot = ""
+			return ["move", m]
+	if _oneshot != "" and clips.has(_oneshot):
+		return [_oneshot, clips[_oneshot][0]]
+	_oneshot = ""
+	if shield > 0.0 and clips.has("guard"):
+		return ["guard", clips.guard[0]]
+	return ["idle", clips.idle[0]]
+
+
+## Frame of the current state's clip, or -1 when a one-shot is over.
+func _state_frame(state: String, c: Dictionary, delta: float) -> int:
+	var n: int = c.frames
+	if state.begins_with("act"):
+		var f := _action_frame(c, _clip_t)
+		return int(f) if f >= 0.0 else -1
+	match state:
+		"move":
+			var rate := clampf(stats.move_speed / c.speed, 0.5, 2.0) if c.speed > 0.0 else 1.0
+			_move_phase = fposmod(_move_phase + delta * c.fps * rate / n, 1.0)
+			return int(_move_phase * n) % n
+		"death":
+			return mini(int(_clip_t * c.fps), n - 1)
+		"spawn", "hurt", "fidget":
+			var f := int(_clip_t * c.fps)
+			return f if f < n else -1
+	return _loop_frame(c, _clip_t)
+
+
+## Looping clips play their intro once, then repeat from "loop_from" (back and forth with "pingpong").
+func _loop_frame(c: Dictionary, t: float) -> int:
+	var n: int = c.frames
+	var f := int(t * c.fps)
+	if not c.loop:
+		return mini(f, n - 1)
+	var from: int = c.loop_from
+	if f < from:
+		return f
+	var span := n - from
+	var k := int((t - from / c.fps) * c.loop_fps)
+	if c.pingpong and span > 1:
+		k %= 2 * span - 2
+		return from + (k if k < span else 2 * span - 2 - k)
+	return from + k % span
+
+
+## The clip of the latest attack/cast (null if the sprite has none for it).
+func _action_clip():
+	var clips: Dictionary = sprite_info.clips
+	if anim_act == ANIM_ATTACK:
+		if anim_variant == ACT_FINISHER and clips.has("attack_finisher"):
+			return clips.attack_finisher[0]
+		if clips.has("attack"):
+			return clips.attack[anim_variant % clips.attack.size()]
+	elif anim_act == ANIM_CAST and anim_variant != ACT_CHANNEL:
+		var k: String = "cast_" + "qwer"[anim_variant - 1] if anim_variant >= 1 and anim_variant <= 4 else "cast"
+		if clips.has(k):
+			return clips[k][0]
+		if clips.has("cast"):
+			return clips.cast[0]
+	return null
+
+
+## Frame of an attack/cast clip `t` seconds in: frames before "hit" fill the windup, frames from
+## "hit" to "land" (or the end) fill the span, the rest play at the clip's speed. -1 when over.
+func _action_frame(c: Dictionary, t: float) -> float:
+	var n := float(c.frames)
+	var fps: float = c.fps
+	if c.hit < 0:
+		var f0 := t * fps
+		return f0 if f0 < n else -1.0
+	var hit := float(c.hit)
+	var land := float(c.land) if c.land > c.hit else n
+	if hit > 0.0:
+		var wl := anim_windup if anim_windup > 0.0 else hit / fps
+		if t < wl:
+			return hit * t / wl
+		t -= wl
+	var sl := anim_span if anim_span > 0.0 else (land - hit) / fps
+	if t < sl:
+		return hit + (land - hit) * t / sl
+	var f := land + (t - sl) * fps
+	return f if f < n else -1.0
+
+
+## Attack/cast animations stop when their windup gets cancelled, or when the unit walks off after
+## the committed part (but not while it's still flying through the dash the cast started).
+func _action_cancelled(c: Dictionary) -> bool:
+	if _clip_t < anim_windup - 0.03 and anim != anim_act:
+		return true
+	if anim != ANIM_WALK or _vis_speed > stats.move_speed * 1.4 + 60.0:
+		return false
+	if anim_act == ANIM_ATTACK:
+		return true
+	var busy := anim_windup + anim_span
+	if c.land > c.hit and anim_span <= 0.0:
+		busy += float(c.land - maxi(c.hit, 0)) / c.fps
+	return _clip_t >= busy
+
+
+## Walk or run, whichever was drawn for the speed closest to the current one.
+func _move_clip():
+	var best = null
+	var bd := INF
+	for k in ["run", "walk"]:
+		if sprite_info.clips.has(k):
+			var c: Dictionary = sprite_info.clips[k][0]
+			var d := absf(log(maxf(stats.move_speed, 1.0) / c.speed)) if c.speed > 0.0 else 1.0
+			if d < bd:
+				bd = d
+				best = c
+	return best
+
+
+## Row of a directional sheet for face_angle. It sticks a little past the boundary so walking
+## along a diagonal doesn't flicker between two rows.
+func _dir_row(dirs: int) -> int:
+	var sector := TAU / dirs
+	var a := face_angle - float(sprite_info.first_dir)
+	if absf(angle_difference(_row * sector, a)) > sector * 0.5 + 0.1:
+		_row = posmod(roundi(a / sector), dirs)
+	return _row
+
+
+func _present(c: Dictionary, frame: int, delta: float) -> void:
+	var info: Dictionary = sprite_info
+	var dirs: int = info.dirs
+	var anim_name: String = c.name if dirs == 1 else "%s/%d" % [c.name, _dir_row(dirs)]
+	if sprite.animation != StringName(anim_name):
+		if _fade != null and sprite.visible and _presented:
+			var turn_only: bool = str(sprite.animation).get_slice("/", 0) == c.name
+			_begin_fade(info.blend * (0.6 if turn_only else 1.0))
+		sprite.animation = anim_name
+	sprite.frame = clampi(frame, 0, c.frames - 1)
+	var flip: bool = dirs == 1 and (facing < 0.0) != bool(info.faces_left)
+	sprite.flip_h = flip
+	var shift: Vector2 = c.shift
+	if flip:
+		shift.x = -shift.x
+	sprite.position = (info.offset + shift * info.scale) * stats.size + _body_offset()
+	sprite.scale = Vector2.ONE * info.scale * stats.size * _squash_scale()
 	sprite.modulate = Color(2.2, 2.2, 2.2) if flash > 0.0 else _tint()
+	sprite.visible = not dead or info.clips.has("death")
+	_presented = true
+	if _fade != null and _fade.visible:
+		_fade_t -= delta
+		if _fade_t <= 0.0 or not sprite.visible:
+			_fade.visible = false
+		else:
+			_fade.modulate.a = _fade_t / _fade_len
+
+
+## Freezes the current pose on top and fades it out over `length` seconds.
+func _begin_fade(length: float) -> void:
+	if length <= 0.0:
+		return
+	_fade.texture = sprite.sprite_frames.get_frame_texture(sprite.animation, sprite.frame)
+	_fade.flip_h = sprite.flip_h
+	_fade.position = sprite.position
+	_fade.scale = sprite.scale
+	_fade.modulate = sprite.modulate
+	_fade.visible = true
+	_fade_len = length
+	_fade_t = length
 
 
 func _tint() -> Color:
@@ -1157,11 +1529,17 @@ func _draw_windup() -> void:
 	var progress := clampf(1.0 - windup_left / windup_duration, 0.0, 1.0)
 	var col := Color(1.0, 0.42, 0.20, 0.9) if anim == ANIM_CAST else Color(1.0, 0.81, 0.35, 0.9)
 	var r := (maxf(radius, Content.CHAMPION_ART_HEIGHT * 0.5 * stats.size) if is_champion else radius) + 9.0
-	draw_arc(Vector2.ZERO, r, 0.0, TAU, 40, Color(col, 0.25), 3.0, true)
-	draw_arc(Vector2.ZERO, r, -PI * 0.5, -PI * 0.5 + TAU * progress, 40, col, 4.0, true)
+	if anim == ANIM_CAST:
+		draw_circle(Vector2.ZERO, r, Color(col, 0.22))
+		draw_arc(Vector2.ZERO, r + 8.0, 0.0, TAU, 40, Color(col, 0.75), 5.0, true)
+	draw_arc(Vector2.ZERO, r, 0.0, TAU, 40, Color(col, 0.35), 3.0, true)
+	draw_arc(Vector2.ZERO, r, -PI * 0.5, -PI * 0.5 + TAU * progress, 40, col, 7.0 if anim == ANIM_CAST else 4.0, true)
 	if anim == ANIM_CAST and windup_dir != Vector2.ZERO:
-		var tip := windup_dir * (r + 50.0)
-		var wing := windup_dir.orthogonal() * 9.0
+		var tip := windup_marker
+		if tip.length() < r + 20.0:
+			tip = windup_dir * (r + 20.0)
+		var wing := windup_dir.orthogonal() * 13.0
+		draw_line(windup_dir * r, tip, Color(col, 0.28), 26.0, true)
 		draw_line(windup_dir * r, tip, col, 4.0, true)
 		draw_colored_polygon(PackedVector2Array([tip, tip - windup_dir * 14.0 + wing, tip - windup_dir * 14.0 - wing]), col)
 
@@ -1169,13 +1547,16 @@ func _draw_windup() -> void:
 ## Shadow, team ring and hover highlight (stays on the ground).
 func _draw_ground() -> void:
 	draw_set_transform(Vector2(0, radius * 0.75), 0.0, Vector2(1.0, 0.45))
-	draw_circle(Vector2.ZERO, radius * 1.05, Color(0, 0, 0, 0.32))
+	if sprite_info == null or sprite_info.shadow:
+		draw_circle(Vector2.ZERO, radius * 1.05, Color(0, 0, 0, 0.32))
 	if world != null and not dead:
 		if not is_structure:
 			draw_arc(Vector2.ZERO, radius * 1.22, 0, TAU, 40, Color(ring_color(), 0.85 if is_champion else 0.5), 5.0 if is_champion else 3.0, true)
 		if world.hover_unit == self:
 			var pulse := 0.5 + 0.5 * sin(life * 10.0)
 			draw_arc(Vector2.ZERO, radius * 1.5, 0, TAU, 40, Color(1, 0.3, 0.25, 0.55 + 0.45 * pulse), 7.0, true)
+		if world.hud != null and world.hud.inspected_unit == self:
+			draw_arc(Vector2.ZERO, radius * 1.25, 0, TAU, 40, Color(1.0, 0.9, 0.5), 4.0, true)
 	draw_set_transform(Vector2.ZERO)
 
 
@@ -1239,9 +1620,7 @@ func bar_color() -> Color:
 
 func bar_top() -> float:
 	if sprite != null:
-		var tex := sprite.sprite_frames.get_frame_texture(sprite.animation, 0)
-		if tex != null:
-			return sprite_info.offset.y - tex.get_height() * sprite_info.scale * stats.size * 0.5 - 12.0
+		return (sprite_info.offset.y - sprite_info.top * sprite_info.scale) * stats.size - 12.0
 	return -radius - 16.0
 
 

@@ -5,7 +5,7 @@ extends Node2D
 ## "mirror": true copies the blue half (walls/towers/spawn/nexus) onto the red side.
 
 const CELL := 32.0
-const MARGIN := 18.0
+const MARGIN := Content.CHAMPION_PATH_RADIUS
 
 var data := {}
 var size := Vector2(2400, 1600)

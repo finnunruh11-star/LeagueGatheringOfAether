@@ -2,6 +2,10 @@ class_name Minion
 extends Unit
 ## Lane minion: walks its lane and fights whatever enemy is closest.
 
+const CHAMPION_LEASH := 450.0
+const CHAMPION_DROP_RANGE := 700.0
+const RETURN_DISTANCE := 40.0
+
 const TYPES := {
 	"melee": {"max_hp": 465.0, "attack_damage": 11.0, "attack_speed": 1.25, "attack_range": 110.0, "move_speed": 310.0,
 		"armor": 0.0, "magic_resist": 0.0, "radius": 15.0, "xp": 62.0, "gold": 20.0, "ranged": false},
@@ -17,6 +21,9 @@ var lane := PackedVector2Array()
 var wp := 1
 var minion_type := "melee"
 var think_t := 0.0
+var chase_start := Vector2.ZERO
+var chasing_champion := false
+var returning_to_lane := false
 
 
 func setup(d: Dictionary) -> void:
@@ -47,11 +54,30 @@ func setup(d: Dictionary) -> void:
 
 
 func _think(delta: float) -> void:
+	if returning_to_lane:
+		if global_position.distance_to(chase_start) > RETURN_DISTANCE:
+			move_goal = chase_start
+			return
+		returning_to_lane = false
+	if chasing_champion and (not valid_target(attack_target)
+			or global_position.distance_to(chase_start) >= CHAMPION_LEASH
+			or global_position.distance_to(attack_target.global_position) > maxf(CHAMPION_DROP_RANGE, attack_reach(attack_target))):
+		chasing_champion = false
+		attack_target = null
+		cancel_attack_windup()
+		if global_position.distance_to(chase_start) > RETURN_DISTANCE:
+			returning_to_lane = true
+			move_goal = chase_start
+			return
 	think_t -= delta
 	if think_t <= 0.0:
 		think_t = 0.25 + randf() * 0.05
-		if attack_target == null or not valid_target(attack_target) or attack_target.is_protected() or global_position.distance_to(attack_target.global_position) > 700.0:
+		if not valid_target(attack_target) or attack_target.is_protected() or (
+				not chasing_champion and global_position.distance_to(attack_target.global_position) > 700.0):
 			attack_target = _find_target()
+			chasing_champion = attack_target != null and attack_target.is_champion
+			if chasing_champion:
+				chase_start = global_position
 	if attack_target != null or lane.size() < 2:
 		move_goal = null
 		return

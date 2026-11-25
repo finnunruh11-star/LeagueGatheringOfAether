@@ -30,6 +30,7 @@
   },
   "passive": {
     "name": "Kindling",
+    "short_description": "Basic attacks set enemies on fire.",
     "description": "Basic attacks set enemies ablaze for 2s (8 + 10% AP damage per second).",
     "triggers": [
       {
@@ -49,7 +50,9 @@
     "q": "fireball",
     "w": {
       "name": "Flame Field",
-      "description": "Ignite the ground for 4s. Enemies inside burn and are slowed.",
+      "cast_time": 0.35,
+      "short_description": "Ignite a patch of ground to damage and slow enemies inside.",
+      "description": "Ignite a 170-radius area for 4s. Every 0.5s, enemies inside take 14/20/26/32/38 + 12% AP magic damage and are slowed by 30% for 0.6s.",
       "cooldown": [
         12,
         11.5,
@@ -89,7 +92,8 @@
     },
     "e": {
       "name": "Flicker",
-      "description": "Teleport a short distance.",
+      "short_description": "Teleport a short distance.",
+      "description": "Teleport to the cursor, up to 430 units away.",
       "cooldown": [
         14,
         13,

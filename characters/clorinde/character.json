@@ -17,6 +17,7 @@
   "attack": {"ranged": false, "projectile_color": "#c9a2ff"},
   "passive": {
     "name": "Lawful Remuneration",
+    "short_description": "Healing pays off Bond of Life before restoring health. Clearing it grants attack speed.",
     "description": "Bond of Life (the crimson bar on her health bar): healing pays it off before it restores any health. Healing bonuses apply first, so they also pay it off faster. During Night Vigil, healing from anything except Impale the Night is turned into Bond of Life instead. Whenever her Bond of Life is fully paid off, she gains 15% attack speed for 6s (stacks 2 times).",
     "triggers": [
       {"on": "bond_cleared", "effects": [
@@ -28,6 +29,7 @@
   "abilities": {
     "q": {
       "name": "Suppressing Shots",
+      "short_description": "Stun enemies in a cone, then shoot them.",
       "description": "A blinding flash in a cone in front of her stuns enemies for 0.6s, then a fan of pistol shots hits the same cone for 60/95/130/165/200 (+70% AD) physical damage.",
       "cooldown": [13, 12, 11, 10, 9],
       "targeting": "direction",
@@ -46,6 +48,7 @@
     },
     "w": {
       "name": "Riposte",
+      "short_description": "Block incoming attacks, then thrust. A successful parry turns the thrust's slow into a stun.",
       "description": "Clorinde parries for 0.75s: she can't move, but takes no damage and ignores stuns, roots, slows and silences. Then she thrusts in the chosen direction for 70/110/150/190/230 (+80% AD) physical damage, slowing by 50% for 1.5s. If she parried an enemy champion's attack, ability or crowd control (damage over time doesn't count), the thrust stuns for 1s instead.",
       "cooldown": [18, 16.5, 15, 13.5, 12],
       "targeting": "direction",
@@ -71,6 +74,7 @@
     },
     "e": {
       "name": "Hunter's Vigil",
+      "short_description": "Switch to pistol shots that build Bond of Life. Recast to lunge and spend it.",
       "description": "Night Vigil for 7s: her attacks become pistol shots (425 range, +100/115/130/145/160% attack speed, attack speed cap raised to 3.0) dealing 12/14/17/24/30 (+17% AP) magic damage. A shot gives her Bond of Life equal to 35% of her max HP while she has less than 100%. Shots fired while she has Bond of Life deal 50% more damage and pierce enemies behind the target. Recast: Impale the Night. The cooldown starts when Night Vigil ends.",
       "cooldown": [16, 15, 14, 13, 12],
       "targeting": "self",
@@ -90,7 +94,8 @@
       ],
       "recast": {
         "name": "Impale the Night",
-        "description": "Lunge 260 toward the cursor, damaging every enemy you pass through. The lunge depends on her Bond of Life: none = a short lunge (180) for 50% damage; under 100% = 65% damage; 100% or more = Pact, three strikes of 75%. Base damage is 0/3/6/12/20 + 35% AD or + 60% AP (whichever is higher, as physical or magic damage). Then she heals for 110% of her Bond of Life, which pays it off. Usable every 0.5s during Night Vigil.",
+        "short_description": "Lunge through enemies and spend Bond of Life to heal. More Bond strengthens the lunge.",
+        "description": "Lunge through enemies. With no Bond of Life: travel 180 and deal 50% damage. With Bond below max HP: travel 260 and deal 65%. With Bond at or above max HP: travel 260 and strike three times for 75% each, 0.12s apart. Base damage: 0/3/6/12/20 + the higher of 35% AD (physical) or 60% AP (magic). Heal for 110% of Bond and clear any remaining Bond. Unlimited uses during Night Vigil, subject to the recast cooldown.",
         "status": "night_vigil",
         "charges": 0,
         "cooldown": 0.5,
@@ -120,6 +125,7 @@
     },
     "r": {
       "name": "Last Lightfall",
+      "short_description": "Gain Bond of Life and unleash a barrage around you while staying free to move and attack.",
       "description": "Clorinde gains Bond of Life equal to 66% of her max HP, then unloads saber and pistol: 8 volleys over 2s hit every enemy within 450 of her for 30/45/60 (+10% AP) magic damage each. She can move, attack and lunge meanwhile.",
       "cooldown": [90, 75, 60],
       "targeting": "self",

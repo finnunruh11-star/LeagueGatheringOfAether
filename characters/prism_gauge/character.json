@@ -1,0 +1,73 @@
+{
+  "name": "Prism Gauge",
+  "title": "Lux Unit Reference",
+  "description": "A calibration character with Lux's 65-unit gameplay radius, 35-unit pathing radius, 330-unit/s walking speed, and published attack and spell ranges. The spells are range probes, not a reproduction of the kit.",
+  "color": "#72d9ed",
+  "gameplay_radius": 65,
+  "pathing_radius": 35,
+  "selection_radius": 100,
+  "stats": {
+    "move_speed": 330,
+    "attack_range": 550,
+    "attack_speed": 0.669,
+    "attack_damage": 1
+  },
+  "per_level": {
+    "attack_damage": 0,
+    "bonus_attack_speed": 0
+  },
+  "attack": {
+    "ranged": true
+  },
+  "abilities": {
+    "q": {
+      "name": "Projectile Gauge",
+      "description": "Fires a 140-unit-wide bolt at 1200 units/s, up to 1175 units. The bolt stops on its second target.",
+      "cooldown": 1,
+      "max_rank": 1,
+      "targeting": "direction",
+      "range": 1175,
+      "effects": [
+        {"type": "projectile", "speed": 1200, "radius": 70, "pierce": 1, "through_walls": true,
+          "on_hit": [{"type": "damage", "amount": 1, "damage_type": "true"}]}
+      ]
+    },
+    "w": {
+      "name": "Return Gauge",
+      "description": "Sends a 220-unit-wide marker to 1150 units and back. Uses a constant 2400 units/s rather than Lux's variable wand speed.",
+      "cooldown": 1,
+      "max_rank": 1,
+      "targeting": "direction",
+      "range": 1150,
+      "effects": [
+        {"type": "projectile", "speed": 2400, "radius": 110, "pierce": true, "returns": true,
+          "affects": "allies", "through_walls": true, "color": "#99e9c5"}
+      ]
+    },
+    "e": {
+      "name": "Circle Gauge",
+      "description": "Marks a circle with a radius of 310, centered up to 1100 units away. The probe is instant.",
+      "cooldown": 1,
+      "max_rank": 1,
+      "targeting": "point",
+      "range": 1100,
+      "effects": [
+        {"type": "area", "radius": 310,
+          "effects": [{"type": "damage", "amount": 1, "damage_type": "true"}]}
+      ]
+    },
+    "r": {
+      "name": "Beam Gauge",
+      "description": "Marks a 200-unit-wide line segment extending 3340 units from the caster.",
+      "cooldown": 1,
+      "max_rank": 1,
+      "unlock_levels": [1],
+      "targeting": "direction",
+      "range": 3340,
+      "effects": [
+        {"type": "beam", "width": 200,
+          "effects": [{"type": "damage", "amount": 1, "damage_type": "true"}]}
+      ]
+    }
+  }
+}

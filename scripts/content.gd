@@ -8,6 +8,9 @@ const ALLOWED_EXT := ["json", "png", "jpg", "jpeg", "webp", "svg", "bmp", "wav",
 const MAX_FILE_BYTES := 8 * 1024 * 1024
 const SLOTS := ["q", "w", "e", "r"]
 const BASE_RADIUS := 24.0
+const CHAMPION_PATH_RADIUS := 35.0
+const CHAMPION_GAMEPLAY_RADIUS := 65.0
+const CHAMPION_SELECTION_RADIUS := 100.0
 const CHAMPION_ART_HEIGHT := 100.0
 
 ## Every stat a unit can have. Percent-style stats are fractions (0.3 = 30%).
@@ -362,6 +365,9 @@ static func build_character(pack: Dictionary, errors: PackedStringArray):
 	def.title = str(raw.get("title", ""))
 	def.description = str(raw.get("description", ""))
 	def.color = parse_color(raw.get("color"), hash_color(id))
+	def.gameplay_radius = clampf(_n(raw.get("gameplay_radius"), CHAMPION_GAMEPLAY_RADIUS), 1.0, 200.0)
+	def.pathing_radius = clampf(_n(raw.get("pathing_radius"), CHAMPION_PATH_RADIUS), 1.0, 200.0)
+	def.selection_radius = clampf(_n(raw.get("selection_radius"), CHAMPION_SELECTION_RADIUS), 1.0, 200.0)
 
 	var stats := DEFAULT_STATS.duplicate()
 	var rs = raw.get("stats", {})
@@ -404,6 +410,7 @@ static func build_character(pack: Dictionary, errors: PackedStringArray):
 		var p := {
 			"name": str(passive.get("name", "Passive")),
 			"description": str(passive.get("description", "")),
+			"short_description": str(passive.get("short_description", passive.get("description", ""))),
 			"triggers": [],
 			"icon": null,
 		}
@@ -419,7 +426,7 @@ static func build_character(pack: Dictionary, errors: PackedStringArray):
 			p.icon = texture(def, passive.icon)
 		def.passive = p
 	else:
-		def.passive = {"name": "No passive", "description": "", "triggers": [], "icon": null}
+		def.passive = {"name": "No passive", "description": "", "short_description": "", "triggers": [], "icon": null}
 
 	def.abilities = {}
 	var abilities = raw.get("abilities", {})
@@ -471,6 +478,7 @@ static func _ability(a: Dictionary, slot: String, def: Dictionary, errors: Packe
 	ab.slot = slot
 	ab.name = str(a.get("name", slot.to_upper()))
 	ab.description = str(a.get("description", ""))
+	ab.short_description = str(a.get("short_description", ab.description))
 	ab.cooldown = a.get("cooldown", 6.0)
 	ab.targeting = str(a.get("targeting", "direction"))
 	ab.range = a.get("range", 700.0)
@@ -515,7 +523,7 @@ static func _ability(a: Dictionary, slot: String, def: Dictionary, errors: Packe
 static func _has_rank_values(v) -> bool:
 	if v is Dictionary:
 		for k in v:
-			if k in ["color", "offset", "unlock_levels"]:
+			if k in ["color", "offset", "unlock_levels", "short_description"]:
 				continue
 			if _has_rank_values(v[k]):
 				return true
@@ -613,6 +621,13 @@ static func _validate(list, where: String, errors: PackedStringArray) -> void:
 					_validate(e[k], where + " > " + t, errors)
 
 
+## Animations that loop unless they say otherwise.
+const LOOPING_ANIMS := ["idle", "walk", "run", "guard", "stun", "recall"]
+
+
+## Builds a character's sprite: {frames (SpriteFrames), clips {name: [clip, ...]}, scale, offset, ...}.
+## A clip is one animation (or one attack variant) and knows its frame count, speed and timing
+## marks; with "directions" > 1 it has one SpriteFrames animation per direction ("name/0"...).
 static func _sprite(spec, def: Dictionary, errors: PackedStringArray):
 	if spec == null:
 		if def.pack.files.has("sprite.png"):
@@ -622,9 +637,8 @@ static func _sprite(spec, def: Dictionary, errors: PackedStringArray):
 	var frames := SpriteFrames.new()
 	if frames.has_animation("default"):
 		frames.remove_animation("default")
-	var scale := 1.0
-	var offset := Vector2.ZERO
-	var faces_left := false
+	var info := {"frames": frames, "clips": {}, "scale": 1.0, "offset": Vector2.ZERO, "faces_left": false, "dirs": 1,
+		"first_dir": 0.0, "blend": 0.0, "linear": false, "procedural": true, "shadow": true, "top": 0.0}
 	if spec is String:
 		var tex := texture(def, spec)
 		if tex == null:
@@ -632,41 +646,89 @@ static func _sprite(spec, def: Dictionary, errors: PackedStringArray):
 			return null
 		frames.add_animation("idle")
 		frames.add_frame("idle", tex)
-		scale = CHAMPION_ART_HEIGHT / tex.get_height()
-	elif spec is Dictionary:
-		var sheet := texture(def, spec.get("sheet", "spritesheet.png"))
-		if sheet == null:
-			errors.append("%s: sprite sheet '%s' not found" % [def.id, spec.get("sheet", "spritesheet.png")])
-			return null
-		var fw := int(spec.get("frame_width", sheet.get_width()))
-		var fh := int(spec.get("frame_height", sheet.get_height()))
-		var cols: int = max(1, sheet.get_width() / max(fw, 1))
-		var anims = spec.get("animations", {"idle": {"row": 0, "frames": 1}})
-		for anim_name in anims:
-			var a = anims[anim_name]
+		info.clips["idle"] = [_clip_info("idle", {}, tex.get_width(), tex.get_height(), 1, true)]
+		info.scale = CHAMPION_ART_HEIGHT / tex.get_height()
+		info.top = tex.get_height() * 0.5
+		return info
+	if not (spec is Dictionary):
+		return null
+	var dirs := clampi(int(spec.get("directions", 1)), 1, 16)
+	info.dirs = dirs
+	var anims = spec.get("animations", {"idle": {"row": 0, "frames": 1}})
+	if not (anims is Dictionary):
+		anims = {}
+	for anim_name in anims:
+		var list: Array = anims[anim_name] if anims[anim_name] is Array else [anims[anim_name]]
+		var built := []
+		for a in list:
 			if not (a is Dictionary):
 				continue
-			frames.add_animation(anim_name)
-			frames.set_animation_speed(anim_name, float(a.get("fps", 8.0)))
-			frames.set_animation_loop(anim_name, bool(a.get("loop", anim_name in ["idle", "walk"])))
-			var first := int(a.get("row", 0)) * cols + int(a.get("start", 0))
-			for i in int(a.get("frames", 1)):
-				var idx := first + i
-				var at := AtlasTexture.new()
-				at.atlas = sheet
-				at.region = Rect2((idx % cols) * fw, (idx / cols) * fh, fw, fh)
-				frames.add_frame(anim_name, at)
-		if not frames.has_animation("idle"):
-			errors.append(def.id + ": sprite needs at least an 'idle' animation")
-			return null
-		scale = float(spec.get("scale", CHAMPION_ART_HEIGHT / fh))
-		var off = spec.get("offset", [0, 0])
-		if off is Array and off.size() == 2:
-			offset = Vector2(off[0], off[1])
-		faces_left = bool(spec.get("faces_left", false))
-	else:
+			var key: String = anim_name if built.is_empty() else "%s#%d" % [anim_name, built.size()]
+			var clip = _sprite_clip(frames, key, a, spec, dirs, def, errors, anim_name in LOOPING_ANIMS)
+			if clip != null:
+				built.append(clip)
+		if not built.is_empty():
+			info.clips[anim_name] = built
+	if not info.clips.has("idle"):
+		errors.append(def.id + ": sprite needs at least an 'idle' animation")
 		return null
-	return {"frames": frames, "scale": scale, "offset": offset, "faces_left": faces_left}
+	var idle: Dictionary = info.clips.idle[0]
+	info.scale = float(spec.get("scale", CHAMPION_ART_HEIGHT / idle.h))
+	var off = spec.get("offset", [0, 0])
+	if off is Array and off.size() == 2:
+		info.offset = Vector2(off[0], off[1])
+	info.faces_left = bool(spec.get("faces_left", false))
+	info.first_dir = deg_to_rad(float(spec.get("first_direction", 0.0)))
+	info.blend = maxf(float(spec.get("blend", 0.0)), 0.0)
+	info.linear = str(spec.get("filter", "nearest")) == "linear"
+	info.procedural = bool(spec.get("procedural_motion", dirs == 1))
+	info.shadow = bool(spec.get("shadow", true))
+	info.top = float(spec.get("top", idle.anchor_y))
+	return info
+
+
+## One animation of a sprite sheet. Its frames are a row of the sheet ("row", from column
+## "start"); with several directions, each direction is the next row.
+static func _sprite_clip(frames: SpriteFrames, key: String, a: Dictionary, spec: Dictionary, dirs: int, def: Dictionary,
+		errors: PackedStringArray, loops: bool):
+	var sheet_name := str(a.get("sheet", spec.get("sheet", "spritesheet.png")))
+	var sheet := texture(def, sheet_name)
+	if sheet == null:
+		errors.append("%s: sprite sheet '%s' not found" % [def.id, sheet_name])
+		return null
+	var fw := maxi(int(a.get("frame_width", spec.get("frame_width", sheet.get_width()))), 1)
+	var fh := maxi(int(a.get("frame_height", spec.get("frame_height", sheet.get_height()))), 1)
+	var cols: int = max(1, sheet.get_width() / fw)
+	var n := maxi(int(a.get("frames", 1)), 1)
+	var row := int(a.get("row", 0))
+	var start := int(a.get("start", 0))
+	for d in dirs:
+		var name := key if dirs == 1 else "%s/%d" % [key, d]
+		frames.add_animation(name)
+		frames.set_animation_speed(name, float(a.get("fps", 8.0)))
+		var first := (row + d) * cols + start
+		for i in n:
+			var idx := first + i
+			var at := AtlasTexture.new()
+			at.atlas = sheet
+			at.region = Rect2((idx % cols) * fw, (idx / cols) * fh, fw, fh)
+			frames.add_frame(name, at)
+	return _clip_info(key, a, fw, fh, n, loops)
+
+
+static func _clip_info(key: String, a: Dictionary, fw: int, fh: int, n: int, loops: bool) -> Dictionary:
+	var anchor := Vector2(fw * 0.5, fh * 0.5)
+	if a.get("anchor") is Array and a.anchor.size() == 2:
+		anchor = Vector2(float(a.anchor[0]), float(a.anchor[1]))
+	var fps := maxf(float(a.get("fps", 8.0)), 0.1)
+	return {
+		"name": key, "frames": n, "fps": fps, "loop": bool(a.get("loop", loops)),
+		"loop_from": clampi(int(a.get("loop_from", 0)), 0, n - 1), "loop_fps": maxf(float(a.get("loop_fps", fps)), 0.1),
+		"pingpong": bool(a.get("pingpong", false)),
+		"hit": mini(int(a.get("hit", -1)), n - 1), "land": mini(int(a.get("land", -1)), n),
+		"speed": maxf(float(a.get("speed", 0.0)), 0.0),
+		"shift": Vector2(fw * 0.5, fh * 0.5) - anchor, "h": fh, "anchor_y": anchor.y,
+	}
 
 
 ## Returns a texture from a character's folder (cached). `quiet` skips nothing-found errors.

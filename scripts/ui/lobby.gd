@@ -13,6 +13,15 @@ var problems: RichTextLabel
 var editing := 0
 var _map_ids: Array = []
 var sum_pick: Array = []   # the two summoner spell OptionButtons
+var _preview_id := ""
+var _expanded := false
+var _suggest_button: Button
+var _suggest_status: Label
+var _suggest_dialog: AcceptDialog
+var _suggest_list: OptionButton
+var _suggest_preview: RichTextLabel
+var _approve_button: Button
+var _decline_button: Button
 
 
 func _ready() -> void:
@@ -65,6 +74,8 @@ func _ready() -> void:
 	fog_check.text = "Fog of war"
 	fog_check.toggled.connect(func(on): Game.set_setting("fog", on))
 	left.add_child(fog_check)
+	if Game.online:
+		_setup_suggestions(left)
 	var spacer := Control.new()
 	spacer.size_flags_vertical = Control.SIZE_EXPAND_FILL
 	left.add_child(spacer)
@@ -108,8 +119,78 @@ func _leave() -> void:
 	main.show_menu("")
 
 
+func _setup_suggestions(parent: VBoxContainer) -> void:
+	if Game.is_host():
+		_suggest_button = UiKit.button(parent, "", func(): _suggest_dialog.popup_centered(Vector2i(520, 360)))
+		_suggest_dialog = AcceptDialog.new()
+		_suggest_dialog.title = "Character suggestions"
+		_suggest_dialog.ok_button_text = "Close"
+		add_child(_suggest_dialog)
+		var panel := VBoxContainer.new()
+		_suggest_dialog.add_child(panel)
+		var note := UiKit.label(panel, "Only approve characters you trust. Approval lasts until you end the hosted session.")
+		note.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+		_suggest_list = OptionButton.new()
+		_suggest_list.clip_text = true
+		panel.add_child(_suggest_list)
+		_suggest_preview = RichTextLabel.new()
+		_suggest_preview.size_flags_vertical = Control.SIZE_EXPAND_FILL
+		panel.add_child(_suggest_preview)
+		var row := UiKit.row(panel)
+		_approve_button = UiKit.button(row, "Approve", _resolve_suggestion.bind(true))
+		_decline_button = UiKit.button(row, "Decline", _resolve_suggestion.bind(false))
+		_suggest_list.item_selected.connect(func(_index): _refresh_suggestion_preview())
+		Game.suggestions_changed.connect(_refresh_suggestions)
+		_refresh_suggestions()
+	else:
+		var picker := FileDialog.new()
+		picker.title = "Choose a folder containing character.json (JSON, PNG, WebP only)"
+		picker.access = FileDialog.ACCESS_FILESYSTEM
+		picker.file_mode = FileDialog.FILE_MODE_OPEN_DIR
+		picker.current_dir = Content.characters_dir()
+		picker.dir_selected.connect(Game.suggest_character)
+		add_child(picker)
+		UiKit.button(parent, "Suggest a character...", func(): picker.popup_centered_ratio(0.7))
+	_suggest_status = UiKit.label(parent, Game.suggestion_status)
+	_suggest_status.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	Game.suggestion_status_changed.connect(func(text): _suggest_status.text = text)
+
+
+func _refresh_suggestions() -> void:
+	var selected := _suggest_list.get_selected_id()
+	_suggest_list.clear()
+	for peer in Game.pending_suggestions:
+		var entry: Dictionary = Game.pending_suggestions[peer]
+		_suggest_list.add_item("%s [%s]" % [entry.preview.name, entry.pack.id], peer)
+	var index := _suggest_list.get_item_index(selected)
+	if _suggest_list.item_count > 0:
+		_suggest_list.select(maxi(index, 0))
+	_suggest_button.text = "Character suggestions (%d)" % _suggest_list.item_count
+	_refresh_suggestion_preview()
+
+
+func _refresh_suggestion_preview() -> void:
+	var peer := _suggest_list.get_selected_id()
+	var entry: Dictionary = Game.pending_suggestions.get(peer, {})
+	_approve_button.disabled = entry.is_empty()
+	_decline_button.disabled = entry.is_empty()
+	if entry.is_empty():
+		_suggest_preview.text = "No pending suggestions."
+		return
+	var preview: Dictionary = entry.preview
+	_suggest_preview.text = "%s\nSuggested by %s\n\n%s\n%s\n\n%s" % [
+		preview.name, Game.players[peer].name, preview.title, preview.description, preview.abilities]
+
+
+func _resolve_suggestion(approve: bool) -> void:
+	# Close so the host sees the result before reviewing another suggestion.
+	_suggest_dialog.hide()
+	Game.resolve_character_suggestion(_suggest_list.get_selected_id(), approve)
+
+
 func _rebuild_grid() -> void:
 	for c in grid.get_children():
+		grid.remove_child(c)
 		c.queue_free()
 	for id in Game.sorted_character_ids():
 		var def: Dictionary = Game.characters[id]
@@ -255,7 +336,21 @@ func _set_editing(pid: int) -> void:
 
 
 func _show_details(id: String) -> void:
-	var def = Game.characters.get(id)
+	_preview_id = id
+	_expanded = Input.is_key_pressed(KEY_SHIFT)
+	_render_details()
+	details.get_v_scroll_bar().value = 0
+
+
+func _process(_delta: float) -> void:
+	var expanded := Input.is_key_pressed(KEY_SHIFT)
+	if _expanded != expanded:
+		_expanded = expanded
+		_render_details()
+
+
+func _render_details() -> void:
+	var def = Game.characters.get(_preview_id)
 	if def == null:
 		details.text = ""
 		return
@@ -269,22 +364,41 @@ func _show_details(id: String) -> void:
 	t += "\n[color=#9aa3b5]HP %d  |  %sAD %d  |  AS %.2f  |  Range %d  |  MS %d  |  Armor %d  |  MR %d[/color]\n" % [
 		s.max_hp, mana, s.attack_damage, s.attack_speed, s.attack_range, s.move_speed, s.armor, s.get("magic_resist", 0.0)]
 	t += "[color=#9aa3b5]%s basic attack[/color]\n\n" % ("Ranged" if def.attack.ranged else "Melee")
-	t += "[b][color=#ffd36b]Passive - %s[/color][/b]\n%s\n\n" % [def.passive.name, def.passive.description]
+	t += "[color=#9aa3b5]%s[/color]\n\n" % ("Release Shift for summaries" if _expanded else "Hold Shift for ability details")
+	t += "[b][color=#ffd36b]Passive - %s[/color][/b]\n%s\n\n" % [def.passive.name, _ability_text(def.passive)]
 	for slot in ["q", "w", "e", "r"]:
 		var ab = def.abilities.get(slot)
 		if ab == null:
 			continue
-		t += "[b][color=#7fc8ff]%s - %s[/color][/b]  [color=#9aa3b5](%ss)[/color]\n%s\n\n" % [slot.to_upper(), ab.name, _per_rank(ab.cooldown), ab.description]
+		t += _ability_entry("%s - %s" % [slot.to_upper(), ab.name], "#7fc8ff", ab)
 		if ab.get("recast") is Dictionary:
-			t += "[b][color=#f080ff]%s recast - %s[/color][/b]  [color=#9aa3b5](%ss)[/color]\n%s\n\n" % [slot.to_upper(), ab.recast.name,
-				_per_rank(ab.recast.cooldown), ab.recast.description]
+			t += _ability_entry("Recast - %s" % ab.recast.name, "#f080ff", ab.recast)
 	details.text = t
+
+
+func _ability_text(ab: Dictionary) -> String:
+	var text: String = ab.description if _expanded else ab.short_description
+	return (text if not text.is_empty() else ab.short_description).replace("[", "[lb]")
+
+
+func _ability_entry(title: String, color: String, ab: Dictionary) -> String:
+	var t := "[b][color=%s]%s[/color][/b]\n" % [color, title]
+	if _expanded:
+		var meta := "Base cooldown: %s s" % _per_rank(ab.cooldown)
+		if ab.cost != 0.0:
+			meta += "  |  Cost: %s %s" % [_per_rank(ab.cost), ab.cost_type]
+		if ab.targeting != "self":
+			meta += "  |  Range: %s" % _per_rank(ab.range)
+		if ab.cast_time != 0.0:
+			meta += "  |  Cast time: %s s" % _per_rank(ab.cast_time)
+		t += "[color=#9aa3b5]%s[/color]\n" % meta.replace("[", "[lb]")
+	return t + _ability_text(ab) + "\n\n"
 
 
 static func _per_rank(v) -> String:
 	if v is Array:
 		var parts := PackedStringArray()
 		for x in v:
-			parts.append(String.num(float(x), 2) if (x is float or x is int) else str(x))
+			parts.append(_per_rank(x))
 		return "/".join(parts)
-	return String.num(float(v), 2) if (v is float or v is int) else str(v)
+	return String.num(float(v), 2).trim_suffix(".0") if (v is float or v is int) else str(v)

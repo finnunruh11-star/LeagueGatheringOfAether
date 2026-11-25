@@ -7,7 +7,7 @@ extends PanelContainer
 ##            subtracted): click shows details, right-click or double-click buys
 ##   right  - details: recipe tree (owned parts green), what it builds into, Buy / Add to build
 ##   bottom - your autobuy build for this character: Ctrl/Shift+click any item (or Add to build)
-##            adds it, drag to reorder, right-click removes; while it's empty the recommended
+##            adds it, drag to reorder, Shift+right-click removes; while it's empty the recommended
 ##            build is shown (and used by autobuy). The Autobuy switch, then your item slots:
 ##            select one to sell it, drag one onto another to swap them
 ## Buying and selling go through world.send_command, so the host validates everything. Builds are
@@ -200,17 +200,20 @@ func _input(event: InputEvent) -> void:
 
 
 ## `add`: Ctrl+click or Shift+click, which adds the item to your build instead.
-func _cell_clicked(view: Cells, cell: Dictionary, right: bool, double: bool, add := false) -> void:
+func _cell_clicked(view: Cells, cell: Dictionary, right: bool, double: bool, modified := false) -> void:
 	var id := str(cell.id)
 	if view == _build:
 		if right:
-			_remove_from_build(int(cell.index))
+			if modified:
+				_remove_from_build(int(cell.index))
+			else:
+				_buy(id)
 			return
 		_select(id)
 		if double:
 			_buy(id)
 		return
-	if add:
+	if modified and not right:
 		if id != "" and not double:
 			_add_to_build(id)
 		return
@@ -325,7 +328,7 @@ func _add_to_build(id: String) -> void:
 	elif _mine.has(id):
 		_flash("%s is already in your build" % it.name, ORANGE)
 	elif _mine.size() >= BUILD_MAX:
-		_flash("Your build is full (%d items) - right-click one to remove it" % BUILD_MAX, RED)
+		_flash("Your build is full (%d items) - Shift+right-click one to remove it" % BUILD_MAX, RED)
 	else:
 		var fresh := _mine.is_empty()
 		_set_build(_mine + [id])
@@ -417,7 +420,7 @@ func _update_build() -> void:
 		_build_note.text = "Build complete - you have every item in it"
 		col = GREEN
 	else:
-		_build_note.text = "Ctrl+click items to add, drag to reorder, right-click to remove"
+		_build_note.text = "Ctrl+click to add, drag to reorder, Shift+right-click to remove"
 	_build_note.add_theme_color_override("font_color", col)
 
 
@@ -436,9 +439,9 @@ func _update_add_btn() -> void:
 	_add_btn.text = "In build" if pos >= 0 else ("Build full" if full else "Add to build")
 	_add_btn.disabled = _champ() == null or pos >= 0 or full or not it.buyable
 	if pos >= 0:
-		_add_btn.tooltip_text = "#%d in your build - right-click it there to remove it" % (pos + 1)
+		_add_btn.tooltip_text = "#%d in your build - Shift+right-click it there to remove it" % (pos + 1)
 	elif full:
-		_add_btn.tooltip_text = "Your build has %d items - right-click one of them to remove it" % BUILD_MAX
+		_add_btn.tooltip_text = "Your build has %d items - Shift+right-click one to remove it" % BUILD_MAX
 	elif _mine.is_empty():
 		_add_btn.tooltip_text = "Start your own build with this item (instead of the recommended one)"
 	else:
@@ -870,7 +873,7 @@ func _build_tooltip(i: int) -> Control:
 			notes.append(["You pay %d with the components you own" % int(st[0]), GOLD])
 		if st[1] != "":
 			notes.append([st[1], RED])
-	notes.append(["Click for details - drag to reorder - right-click to remove", MUTED])
+	notes.append(["Right-click to buy - Shift+right-click to remove", MUTED])
 	if _plan_rec:
 		notes.append(["Changing it makes it your own build", MUTED])
 	return ItemUI.tooltip(it, notes)
@@ -1430,8 +1433,8 @@ class Cells extends Control:
 			if i >= 0 and (ev.button_index == MOUSE_BUTTON_LEFT or ev.button_index == MOUSE_BUTTON_RIGHT):
 				accept_event()
 				var right: bool = ev.button_index == MOUSE_BUTTON_RIGHT
-				var add: bool = not right and (ev.is_command_or_control_pressed() or ev.shift_pressed)
-				shop._cell_clicked(self, cells[i], right, ev.double_click, add)
+				var modified: bool = ev.shift_pressed or (not right and ev.is_command_or_control_pressed())
+				shop._cell_clicked(self, cells[i], right, ev.double_click, modified)
 
 	func _notification(what: int) -> void:
 		if what == NOTIFICATION_MOUSE_EXIT and hover >= 0:
@@ -1703,7 +1706,7 @@ class InvRow extends Cells:
 
 
 ## Your build: up to BUILD_MAX small icons in the order autobuy buys them. Click one for details,
-## drag it onto another place to move it there, right-click removes it.
+## drag it onto another place to move it there, Shift+right-click removes it.
 class BuildRow extends Cells:
 	const S := 32.0
 	const GAP := 5.0

@@ -24,11 +24,14 @@ Lines starting with `//` are treated as comments.
 {
   "name": "Ember", "title": "The Pyromaniac", "description": "...",
   "color": "#ff7a2f",                       // placeholder body color
+  "gameplay_radius": 65,                                 // circular combat hitbox, in world units
+  "pathing_radius": 35,                                  // terrain collider and body separation
+  "selection_radius": 100,                               // mouse targeting circle, before input tolerance
   "stats": { "max_hp": 560, "attack_range": 480, ... },   // see Stats
   "per_level": { "max_hp": 70, "ability_power": 12 },     // added every level up
   "attack": { "ranged": true, "projectile_speed": 950, "projectile_color": "#ffb347",
               "projectile_size": 7, "projectile_sprite": "bolt.png", "on_hit": [ ...effects ] },
-  "passive": { "name": "...", "description": "...", "icon": "p.png", "triggers": [ ... ] },
+  "passive": { "name": "...", "short_description": "...", "description": "...", "icon": "p.png", "triggers": [ ... ] },
   "abilities": { "q": { ... }, "w": "fireball", "e": { ... }, "r": { ... } }
 }
 ```
@@ -52,7 +55,7 @@ Percent stats are fractions (`0.3` = 30%). Regen is per second.
 | `attack_damage`, `ability_power` | 60, 0 | |
 | `attack_speed` | 0.8 | base attacks/second. `bonus_attack_speed` (items, 0.3 = +30%) multiplies it; capped at `attack_speed_cap` 2.5 |
 | `attack_range` | 125 | melee ~70-125, ranged ~450-550 |
-| `move_speed` / `move_speed_bonus` | 330 / 0 | flat / percent (soft-capped above 415; final walking speed is 75% of the result, in world units/second) |
+| `move_speed` / `move_speed_bonus` | 330 / 0 | flat world units/s / percent. Positive raw speeds below 220 and speeds above 415 are soft-capped; zero stays zero. |
 | `armor`, `magic_resist` | 20, 30 | reduce physical / magic damage (100 = half). True damage ignores both |
 | `crit_chance`, `crit_damage` | 0, 1.75 | basic attacks crit for 175% damage |
 | `ability_haste` | 0 | cooldown = base × 100 / (100 + haste) |
@@ -76,7 +79,8 @@ All stats can be changed temporarily with the `buff` effect.
 ### Abilities
 ```jsonc
 {
-  "name": "Fireball", "description": "...", "icon": "fireball.png",
+  "name": "Fireball", "short_description": "Hurl an exploding fireball.",
+  "description": "The explosion deals 70/105/140/175/210 + 70% AP magic damage.", "icon": "fireball.png",
   "cooldown": [8, 7.5, 7, 6.5, 6],   // number, per-rank list, or expression
   "cost": [50, 55, 60, 65, 70],      // mana (ignored for manaless champions)
   "cost_type": "mana",               // or "health" (pay HP instead)
@@ -94,6 +98,11 @@ All stats can be changed temporarily with the `buff` effect.
   so `{"type": "shield"}` shields yourself. Inside projectiles/areas/zones the target is whoever got hit.
 
 Players hold Q/W/E/R to see the range indicator and release to cast.
+
+Champion select and in-match hover show `short_description`. Holding **Shift** shows
+`description` with cooldown, cost and range where applicable. Use `description` for damage
+formulas, durations and other details. Both fields work on passives, abilities and recasts.
+If `short_description` is omitted, the normal view keeps using `description`.
 
 #### Recasts
 Give an ability a `"recast": { ... }` (any ability keys) to make it castable again for a while:
@@ -156,7 +165,8 @@ before multipliers, e.g. crit chance before Guinsoo's sets it to 0), `h_stat('na
 holding the buff whose trigger runs), `h_hp()`, `h_dist()` (holder's HP / distance to you), `near_allies(r)`, `near_enemies(r)` (champions; `near_enemies(r, 'id')` skips ones carrying your mark 'id'), `near_units(r)`,
 `cd('q')` (remaining), `cd_total('r')` (full cooldown of the last cast), `has_item('id')`, `item_count('legendary')`.
 Godot math and logic work too (write decimals like `10.0` in `clamp`/`min`/`max` - with whole numbers they return whole numbers): `min`, `max`, `clamp`, `pow`, `sqrt`, `randf()`, `and`, `or`, `not`,
-`a if cond else b`, `[10, 20, 30][rank - 1]`.
+`a if cond else b`, `[10, 20, 30][rank - 1]`. Formulas can use game variables, the helpers above,
+and math functions, but cannot access object properties or call arbitrary engine methods.
 
 ### On a unit (the current target, or yourself with `"target": "self"`)
 | type | keys (defaults) |
@@ -410,6 +420,47 @@ Without a sprite you get a colored circle. Options:
 ```
 Only `idle` is required. See `honk_lord/` for a working example.
 
+### Directional sheets, more animations and transitions
+Sir Bonk (`sir_bonk/`) uses an 8-direction sheet set made from the "2D HD Character Knight" pack
+(`2D HD Character Knight/build_sir_bonk.py` crops and packs it). The extra options:
+
+```jsonc
+"sprite": {
+  "directions": 8,            // rows per animation: row 0 faces right, then clockwise (down-right, down...)
+  "first_direction": 0,       // degrees of row 0, if your sheet starts elsewhere
+  "scale": 2.3, "offset": [0, -15],
+  "top": 34,                  // pixels from the frame center to the top of the head (health bar height)
+  "blend": 0.12,              // seconds to cross-fade between animations / directions (0 = cut)
+  "filter": "linear",         // smooth scaling for hi-res art (default "nearest", for pixel art)
+  "shadow": true,             // draw the round ground shadow (turn off if the art has its own)
+  "procedural_motion": false, // the bob/lean/squash the game adds (default: on for 1-direction sheets)
+  "animations": {
+    "idle":   {"sheet": "knight/idle.webp", "frame_width": 64, "frame_height": 94, "frames": 15, "fps": 12},
+    "run":    {"sheet": "knight/run.webp", "frame_width": 94, "frame_height": 116, "frames": 15, "fps": 24, "speed": 340},
+    "attack": [ {"sheet": "knight/melee.webp", "frames": 15, "fps": 24, "hit": 7}, {"...": "second swing"} ],
+    "cast_r": {"sheet": "knight/front_flip.webp", "frames": 15, "fps": 22, "hit": 3, "land": 11}
+  }
+}
+```
+- Every animation can use its own `sheet`, `frame_width` and `frame_height` (the sprite-level values
+  are the defaults). `row` + `start` pick the first frame; with `directions` the next rows are the
+  other directions. The character stands at the center of each frame unless an `anchor` [x, y] says otherwise.
+- **Animation names:** `idle`, `walk` and/or `run` (with `speed`, the move speed they were drawn for:
+  the closer one is used, and its playback rate follows your speed), `attack` (one, or a list of
+  swings that take turns), `attack_finisher` (an attack that sets off an "every N attacks" passive),
+  `cast`, `cast_q` ... `cast_r`, `death`, and optional extras: `spawn` (start and respawn), `hurt`
+  (flinch from a big hit while idle), `stun`, `guard` (idle while shielded), `recall`, `channel`
+  (channeled summoner spells), `fidget` (now and then while idle). Missing ones fall back
+  (no `cast_e` -> `cast`, no `stun` -> what you'd show otherwise).
+- **Timing marks:** `hit` is the frame where an attack connects / a spell goes off. Frames before it
+  are stretched to fit the windup (so attacks speed up with attack speed and line up with the damage)
+  and the rest play at `fps`. For dashes, frames from `hit` to `land` are stretched over the dash.
+- **Loops:** `idle`, `walk`, `run`, `guard`, `stun` and `recall` loop (`"loop": false/true` to change).
+  `loop_from` plays the frames before it once as an intro, `loop_fps` sets the loop's speed and
+  `pingpong` plays it back and forth.
+- Moving or casting cancels attack animations right away (it may jump a little); everything else
+  cross-fades over `blend` seconds.
+
 ## Testing your character
 Run the self-test, which casts each ability at a training dummy and prints damage dealt:
 ```
@@ -423,3 +474,31 @@ godot --headless --path . -- --auto=practice --map=arena --itemtest= --char=clor
     --steps=behind,cast:e,attack:2.4,cast:e,stats
 ```
 Or just pick Practice, choose the Training Arena map and hit the dummies (they show DPS).
+
+### League unit calibration: Prism Gauge
+
+Select **Prism Gauge** in Practice. Use **F4** to unlock all four probes, then hold their
+keys to show the ranges. The Training Arena is useful for dummy testing; use the
+**Bridge** for the full 3340-unit beam (the arena is only 2880 units wide).
+Measure in world units, not screen pixels, with no items or speed buffs and away from the fountain.
+
+| Measurement | Lux reference | Prism Gauge |
+|---|---:|---|
+| Gameplay radius | 65 | 65 |
+| Pathing radius | 35 | 35 |
+| Selection radius | 100 | 100, before input tolerance |
+| Unmodified walking speed | 330 units/s | 330 units/s |
+| Basic attack range | 550 | 550 edge-to-edge; add both gameplay radii for center-to-center reach |
+| Q / W / E / R nominal range | 1175 / 1150 / 1100 / 3340 | Same; Q/W measure projectile center travel, E measures distance to the circle center, R measures beam segment length |
+
+Sources: [Meraki champion stats](https://cdn.merakianalytics.com/riot/lol/resources/latest/en-US/champions/Lux.json)
+and [CommunityDragon spell data](https://cdn.communitydragon.org/latest/champion/lux/data).
+
+Author movement speed, radii and ranges directly in world units. In the normal speed band
+(220-415), a champion covers its move speed in units each second on clear ground. `size`
+multiplies gameplay and pathing radii, but not selection. This is a shared unit scale, not
+a simulation of League's map grid, camera, or per-spell hit and timing rules.
+
+```sh
+godot --headless --path . -- --auto=practice --map=bridge --char=prism_gauge --selftest=league_units
+```

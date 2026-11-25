@@ -3,6 +3,36 @@
   "title": "Knight of the Round Hammer",
   "description": "Tanky melee bruiser. Charges in, bonks things, refuses to elaborate.",
   "color": "#c9a36b",
+  "gameplay_radius": 80,
+  "sprite": {
+    "directions": 8,
+    "scale": 2.3,
+    "offset": [0, -15],
+    "top": 34,
+    "filter": "linear",
+    "blend": 0.12,
+    "animations": {
+      "idle": {"sheet": "knight/idle.webp", "frame_width": 64, "frame_height": 94, "frames": 15, "fps": 12},
+      "fidget": {"sheet": "knight/idle2.webp", "frame_width": 102, "frame_height": 124, "frames": 15, "fps": 14},
+      "guard": {"sheet": "knight/shield_block_mid.webp", "frame_width": 80, "frame_height": 106, "frames": 15, "fps": 10},
+      "walk": {"sheet": "knight/walk.webp", "frame_width": 78, "frame_height": 104, "frames": 15, "fps": 18, "speed": 170},
+      "run": {"sheet": "knight/run.webp", "frame_width": 94, "frame_height": 116, "frames": 15, "fps": 24, "speed": 340},
+      "attack": [
+        {"sheet": "knight/melee.webp", "frame_width": 128, "frame_height": 128, "frames": 15, "fps": 24, "hit": 7},
+        {"sheet": "knight/melee2.webp", "frame_width": 128, "frame_height": 128, "frames": 15, "fps": 24, "hit": 7}
+      ],
+      "attack_finisher": {"sheet": "knight/pummel.webp", "frame_width": 100, "frame_height": 118, "frames": 15, "fps": 24, "hit": 8},
+      "cast_q": {"sheet": "knight/melee_run.webp", "frame_width": 128, "frame_height": 128, "start": 5, "frames": 10, "fps": 24, "hit": 0, "land": 6},
+      "cast_w": {"sheet": "knight/shield_block_start.webp", "frame_width": 84, "frame_height": 108, "start": 2, "frames": 13, "fps": 30},
+      "cast_e": {"sheet": "knight/melee_spin.webp", "frame_width": 118, "frame_height": 128, "start": 3, "frames": 12, "fps": 28},
+      "cast_r": {"sheet": "knight/front_flip.webp", "frame_width": 124, "frame_height": 128, "frames": 15, "fps": 22, "hit": 3, "land": 11},
+      "hurt": {"sheet": "knight/take_damage.webp", "frame_width": 84, "frame_height": 108, "frames": 15, "fps": 28},
+      "stun": {"sheet": "knight/take_damage.webp", "frame_width": 84, "frame_height": 108, "frames": 9, "fps": 22, "loop_from": 5, "loop_fps": 8, "pingpong": true},
+      "recall": {"sheet": "knight/special2.webp", "frame_width": 90, "frame_height": 112, "frames": 11, "fps": 12, "loop_from": 4, "loop_fps": 5, "pingpong": true},
+      "spawn": {"sheet": "knight/unsheath_sword.webp", "frame_width": 126, "frame_height": 128, "frames": 15, "fps": 16},
+      "death": {"sheet": "knight/die.webp", "frame_width": 128, "frame_height": 128, "frames": 15, "fps": 16}
+    }
+  },
   "stats": {
     "max_hp": 690,
     "hp_regen": 1.8,
@@ -16,6 +46,7 @@
   "attack": {"ranged": false},
   "passive": {
     "name": "Bonk Rhythm",
+    "short_description": "Every third basic attack deals bonus damage and stuns.",
     "description": "Every 3rd basic attack stuns for 0.6s and deals 30 + 30% AD bonus damage.",
     "triggers": [
       {"on": "attack", "every": 3, "effects": [
@@ -28,7 +59,8 @@
   "abilities": {
     "q": {
       "name": "Charge",
-      "description": "Dash toward the cursor, damaging and slowing everyone you run through.",
+      "short_description": "Dash forward, damaging and slowing enemies you pass through.",
+      "description": "Dash 420 units. Enemies hit take 70 + 60% AD physical damage and are slowed by 40% for 1.5s.",
       "cooldown": 7,
       "targeting": "direction",
       "range": 420,
@@ -41,6 +73,7 @@
     },
     "w": {
       "name": "Bulwark",
+      "short_description": "Shield yourself and gain a burst of move speed.",
       "description": "Gain a shield (120 + 8% max HP) for 3s and 25% move speed for 2s.",
       "cooldown": 12,
       "targeting": "self",
@@ -51,7 +84,8 @@
     },
     "e": {
       "name": "Whirlwind",
-      "description": "Spin, damaging nearby enemies and knocking them back.",
+      "short_description": "Damage and knock back nearby enemies with a spin.",
+      "description": "Enemies within 200 take 60 + 50% AD physical damage and are knocked back 150 units over 0.2s.",
       "cooldown": 8,
       "targeting": "self",
       "effects": [
@@ -63,7 +97,8 @@
     },
     "r": {
       "name": "Hammer Time",
-      "description": "Leap to a location and SMASH: big damage and a 1.2s stun around the landing spot.",
+      "short_description": "Leap to a spot, damaging and stunning enemies where you land.",
+      "description": "Leap to a location. Enemies within 270 of the landing spot take 180 + 100% AD physical damage and are stunned for 1.2s.",
       "cooldown": 50,
       "targeting": "point",
       "range": 650,

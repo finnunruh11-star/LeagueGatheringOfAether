@@ -29,7 +29,8 @@
   },
   "passive": {
     "name": "Soothing Presence",
-    "description": "Every 5 seconds, heal yourself and nearby allies for 15 + 4 per level.",
+    "short_description": "Periodically heal yourself and nearby allies.",
+    "description": "Every 5s, heal yourself and allies within 450 for 15 + 4 per level.",
     "triggers": [
       {
         "on": "interval",
@@ -56,7 +57,8 @@
     "q": {
       "name": "Spirit Orb",
       "cast_time": 0.25,
-      "description": "An orb that damages and slows the first enemy hit - or heals the first ally it touches.",
+      "short_description": "Fire an orb that heals an ally or damages and slows an enemy.",
+      "description": "The first ally hit is healed for 60 + 60% AP. If it hits an enemy instead, deal that much magic damage and slow them by 35% for 1.5s.",
       "cooldown": 5,
       "targeting": "direction",
       "range": 850,
@@ -93,7 +95,8 @@
     "w": {
       "name": "Lifeline Hook",
       "cast_time": 0.35,
-      "description": "Throw a hook. The first enemy hit is pulled to you and stunned briefly.",
+      "short_description": "Hook the first enemy hit, pulling and stunning them.",
+      "description": "The first enemy hit takes 50 + 50% AP magic damage, is pulled to you over 0.3s, and is stunned for 0.6s.",
       "cooldown": 14,
       "targeting": "direction",
       "range": 900,
@@ -124,7 +127,8 @@
     },
     "e": {
       "name": "Sanctuary",
-      "description": "Create a healing zone for 4 seconds.",
+      "short_description": "Create a zone that heals allies inside.",
+      "description": "Create a 220-radius zone for 4s. Allies inside are healed for 12 + 10% AP every 0.5s.",
       "cooldown": 13,
       "targeting": "point",
       "range": 600,
@@ -148,7 +152,8 @@
     },
     "r": {
       "name": "Guardian Spirits",
-      "description": "All allies within 1200 range are cleansed, healed and shielded for 4s.",
+      "short_description": "Cleanse, heal, and shield nearby allies.",
+      "description": "Cleanse allies within 1200, heal them for 100 + 50% AP, and grant a shield of 150 + 100% AP for 4s.",
       "cooldown": 60,
       "targeting": "self",
       "effects": [

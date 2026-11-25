@@ -3,6 +3,7 @@
   "title": "Gadgeteer",
   "description": "Marksman with traps, rocket boots and a pocket turret. Keep your distance!",
   "color": "#5fd4c4",
+  "gameplay_radius": 55,
   "stats": {
     "max_hp": 600,
     "move_speed": 335,
@@ -27,6 +28,7 @@
   },
   "passive": {
     "name": "Overclock",
+    "short_description": "Casting an ability temporarily increases attack speed.",
     "description": "After casting an ability, gain 40% attack speed for 3 seconds.",
     "triggers": [
       {
@@ -47,7 +49,8 @@
     "q": {
       "name": "Piercing Bolt",
       "cast_time": 0.25,
-      "description": "Fire a bolt that pierces through every enemy in a line.",
+      "short_description": "Fire a bolt that pierces through enemies.",
+      "description": "Fire a piercing bolt that deals 60 + 90% AD physical damage to each enemy hit.",
       "cooldown": 6,
       "targeting": "direction",
       "range": 1000,
@@ -72,7 +75,8 @@
     },
     "w": {
       "name": "Bear Trap",
-      "description": "Place a hidden trap (lasts 30s). The first enemy to step on it is rooted for 1.5s and takes damage.",
+      "short_description": "Place a hidden trap that damages and roots the first enemy to step on it.",
+      "description": "Place a hidden trap with a 55 trigger radius that lasts 30s. The first enemy to trigger it takes 60 + 40% AD physical damage and is rooted for 1.5s.",
       "cooldown": 9,
       "targeting": "point",
       "range": 600,
@@ -105,7 +109,8 @@
     },
     "e": {
       "name": "Rocket Jump",
-      "description": "Blast nearby enemies away and rocket-jump backwards (away from the cursor).",
+      "short_description": "Blast nearby enemies away and jump backward.",
+      "description": "Enemies within 190 take 50 magic damage and are knocked back 200 units. Jump 380 units away from the cursor.",
       "cooldown": 12,
       "targeting": "direction",
       "range": 380,
@@ -137,7 +142,8 @@
     },
     "r": {
       "name": "Sentry Turret",
-      "description": "Deploy a turret for 15s that shoots enemies in range.",
+      "short_description": "Deploy a turret that shoots nearby enemies.",
+      "description": "Deploy a stationary turret for 15s. It has 500 HP, 30 armor, 560 attack range and fires 1.6 times per second with 25 + 35% AD attack damage.",
       "cooldown": 40,
       "targeting": "point",
       "range": 500,

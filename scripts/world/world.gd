@@ -7,6 +7,8 @@ const SNAP_EVERY := 3
 const SNAP_DT := SNAP_EVERY / 60.0
 const SNAP_CHUNK := 300  # floats per snapshot packet (~1.2 KB, under the usual 1392-byte MTU)
 const XP_RANGE := 1400.0
+const MINION_XP_MULTIPLIER := 0.92
+const SHARED_MINION_XP_MULTIPLIER := 1.2
 const KILL_GOLD := 300.0
 const ASSIST_GOLD := 150.0
 const TOWER_GOLD := 50.0
@@ -749,7 +751,7 @@ func on_unit_died(u: Unit, killer) -> void:
 				credit.add_gold(u.gold_value, u.global_position)
 			credit.on_kill(u)
 		if u.xp_value > 0.0:
-			_give_xp(u.global_position, u.team, u.xp_value, null)
+			_give_xp(u.global_position, u.team, u.xp_value, null, u is Minion)
 	if u is Tower:
 		fx("announce", {"text": "%s %s destroyed!" % [Game.TEAM_NAMES[u.team], u.display_name], "color": Game.TEAM_COLORS[1 - u.team]})
 		if u.is_inhibitor:
@@ -763,7 +765,7 @@ func on_unit_died(u: Unit, killer) -> void:
 			end_match(1 - u.team)
 
 
-func _give_xp(pos: Vector2, victim_team: int, amount: float, killer) -> void:
+func _give_xp(pos: Vector2, victim_team: int, amount: float, killer, lane_minion := false) -> void:
 	var near := []
 	for c in champions.values():
 		if c.team != victim_team and not c.dead and c.global_position.distance_to(pos) <= XP_RANGE:
@@ -772,7 +774,10 @@ func _give_xp(pos: Vector2, victim_team: int, amount: float, killer) -> void:
 		near.append(killer)
 	if near.is_empty():
 		return
-	var share := amount * (1.0 + 0.2 * (near.size() - 1)) / near.size()
+	var total_multiplier := 1.0 + 0.2 * (near.size() - 1)
+	if lane_minion:
+		total_multiplier = MINION_XP_MULTIPLIER * (SHARED_MINION_XP_MULTIPLIER if near.size() > 1 else 1.0)
+	var share := amount * total_multiplier / near.size()
 	for c in near:
 		c.gain_xp(share)
 
@@ -856,7 +861,7 @@ func pick_unit(pos: Vector2, team: int, enemy: bool, tolerance: float, structs :
 			continue
 		if enemy and not can_see(u, team):
 			continue
-		var d: float = u.global_position.distance_to(pos) - u.radius
+		var d: float = u.global_position.distance_to(pos) - u.selection_radius()
 		if d <= tolerance and d < bd:
 			bd = d
 			best = u
@@ -890,12 +895,20 @@ func _unhandled_input(event: InputEvent) -> void:
 				return
 			MOUSE_BUTTON_LEFT:
 				if mb.pressed:
+					var click_world := get_canvas_transform().affine_inverse() * mb.position
 					if aim_slot != "":
 						_cast(aim_slot)
 						aim_slot = ""
 					elif amove_armed or Game.prefs.move_mode == "wasd":
-						amove_armed = false
-						attack_move()
+						if amove_armed:
+							amove_armed = false
+							attack_move()
+						else:
+							var picked := inspect_at(click_world)
+							if picked == null:
+								attack_move()
+					else:
+						inspect_at(click_world)
 				return
 	if event is InputEventKey:
 		var k := event as InputEventKey
@@ -1127,6 +1140,16 @@ func _process(delta: float) -> void:
 		_cursor_attack = want_attack
 		Input.set_custom_mouse_cursor(Cursors.attack() if want_attack else null, Input.CURSOR_ARROW, Vector2(15, 15) if want_attack else Vector2.ZERO)
 	indicator.queue_redraw()
+
+
+func inspect_at(pos: Vector2) -> Unit:
+	var enemy := pick_unit(pos, local_team, true, 6.0)
+	var ally := pick_unit(pos, local_team, false, 6.0)
+	var u := enemy
+	if ally != null and (enemy == null or ally.global_position.distance_squared_to(pos) < enemy.global_position.distance_squared_to(pos)):
+		u = ally
+	hud.inspected_unit = u
+	return u
 
 
 func _draw_indicator(n: Node2D) -> void:

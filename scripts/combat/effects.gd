@@ -19,6 +19,15 @@ const VARS := [
 	"cc", "t_self", "at_base", "t_summon", "dmg_raw", "shield", "t_shield", "t_ward", "bond", "t_bond",
 ]
 const DAMAGE_TYPES := ["physical", "magic", "true"]
+const FORMULA_WORDS := [
+	"and", "or", "not", "true", "false", "if", "else",
+	"abs", "min", "max", "clamp", "floor", "ceil", "round", "sqrt", "pow", "sign", "int", "float",
+	"sin", "cos", "tan", "asin", "acos", "atan", "atan2", "log", "exp", "lerp", "inverse_lerp",
+	"fmod", "fposmod", "posmod", "snapped", "smoothstep", "PI", "TAU", "randf", "randf_range", "randi_range",
+	"has", "t_has", "t_has_any", "stacks", "t_stacks", "counter", "stat", "t_stat", "base", "bonus",
+	"near_allies", "near_enemies", "near_units", "iff", "cd", "cd_total", "pre", "h_stat", "h_hp",
+	"h_dist", "has_item", "item_count",
+]
 
 
 ## Functions usable inside expressions, e.g. "has('spellblade')" or "30 * t_stacks('kraken')".
@@ -147,6 +156,7 @@ static var _cache := {}
 static var _bad := {}
 static var _failed := {}
 static var _env: Env = null
+static var _formula_token: RegEx
 
 
 static func num(v, ctx: Dictionary, def := 0.0) -> float:
@@ -191,6 +201,10 @@ static func _eval(v: String, ctx: Dictionary):
 		return null
 	var e: Expression = _cache.get(v)
 	if e == null:
+		if not _valid_formula(v):
+			_bad[v] = true
+			push_warning("Unsupported formula syntax: " + v.left(120))
+			return null
 		e = Expression.new()
 		if e.parse(_ternary(v), VARS) != OK:
 			_bad[v] = true
@@ -209,6 +223,23 @@ static func _eval(v: String, ctx: Dictionary):
 			push_warning("Expression failed \"%s\": %s" % [v, e.get_error_text()])
 		return null
 	return r
+
+
+## Expression can call methods on its base instance; allow only formula tokens and our helpers.
+static func _valid_formula(text: String) -> bool:
+	if text.length() > 4096:
+		return false
+	if _formula_token == null:
+		_formula_token = RegEx.create_from_string(r"""\s+|[A-Za-z_][A-Za-z_0-9]*|(?:[0-9]+(?:\.[0-9]*)?|\.[0-9]+)(?:[eE][+-]?[0-9]+)?|'(?:[^'\\]|\\.)*'|"(?:[^"\\]|\\.)*"|==|!=|<=|>=|&&|\|\||[-+*/%(),\[\]<>!]""")
+	var end := 0
+	for token in _formula_token.search_all(text):
+		if token.get_start() != end:
+			return false
+		end = token.get_end()
+		var word := token.get_string()
+		if word.is_valid_ascii_identifier() and not word in VARS and not word in FORMULA_WORDS:
+			return false
+	return end == text.length()
 
 
 ## Godot's Expression has no "a if c else b": rewrite it to iff(c, a, b) before parsing.

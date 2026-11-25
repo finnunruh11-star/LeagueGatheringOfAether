@@ -36,15 +36,16 @@ The bottom of the screen always shows your current keys.
 | Right mouse | move / attack (hold to keep moving) |
 | Q W E R | hold to aim (shows range), release to cast. Left click also casts, right click cancels |
 | Ctrl + Q W E R | spend a skill point (or click the **+** above an ability) |
+| Shift | show detailed ability numbers and scaling in champion select or while hovering the ability bar |
 | D / F | summoner spells (Flash, Ignite... picked in the lobby) |
 | 1 - 6 | use item actives (aimed ones work like abilities) |
-| P | shop (in your fountain or while dead; anywhere in Practice). Click an item for details, right-click or double-click to buy, search box + category filters; click one of your items to sell it, drag to reorder |
+| P | shop (in your fountain or while dead; anywhere in Practice). Click for details; right-click or double-click to buy, including from the build row. Shift+right-click removes a build entry. |
 | A | attack-move: attacks the enemy in range closest to the cursor, otherwise walks there attacking whatever comes in range (Settings: closest to you instead, or the classic "A, then left click") |
 | S | stop |
 | B | recall to base (8s, cancelled by damage or moving) |
 | Y or Z | lock/unlock camera (edge-pan or arrow keys when unlocked; speed in Settings), hold Space = center on your champion |
 | Mouse wheel | zoom |
-| Tab | scoreboard |
+| Tab | hold to show the scoreboard; hover an item to inspect it |
 | Esc | menu (Resume / **Settings** / leave) |
 | F1 / F2 / F3 / F4 | Practice only: level up / +1000 gold / reset cooldowns & mana / max ability ranks |
 | Minimap | left click = look there, right click = move there |
@@ -60,6 +61,8 @@ until it respawns five minutes later. On **Bridge**, clear the lane turrets to e
 Your fountain heals and refills mana; the enemy fountain deals damage.
 
 - **Levels & abilities:** XP comes from nearby kills, not elapsed time. The level cap is 21.
+  In solo lane, a regular wave plus one melee minion grants level 2. Nearby allies split a fixed
+  pool of 120% of the solo XP award. Minions give up long chases and return to their lane.
   You start with one skill point and earn one per level up to 18; levels 19-21 only give stats. Q/W/E go to rank 5, R to rank 3
   (at levels 6/11/16).
 - **Stats & mana:** health, mana (casters only - abilities cost mana), attack damage, ability power,
@@ -88,7 +91,17 @@ Your fountain heals and refills mana; the enemy fountain deals damage.
 2. Friends: enter the host's IP, **Join game**.
 3. Everyone picks a character and team; the host adds bots if wanted and presses **Start**.
 
-Only the host needs the character files - they're sent to everyone on join.
+Only the host needs the character files - they're sent to everyone on join. To share a guest's
+character, choose **Suggest a character...** in the online lobby and select its folder (the one
+containing `character.json`). The host can review it under **Character suggestions** and approve
+or decline it. Approved characters appear for everyone right away, including guests who join
+later. Approval lasts until the hosted session ends and does not write files to disk.
+
+Suggestions support JSON, PNG and WebP (up to 8 MiB total and 64 files). Use a unique folder name
+with letters, digits, underscores or hyphens. Each guest can have one pending suggestion, and
+the host can approve up to eight guest characters per session. Only approve characters you trust.
+Everyone needs the same game version.
+
 For play over the internet either forward UDP port 7777 on the host's router, or (easier)
 all join the same virtual LAN, e.g. [Tailscale](https://tailscale.com) or ZeroTier, and use the host's VPN IP.
 2-4 players is the target; up to 8 can connect. If someone disconnects mid-match a bot takes over.
@@ -98,7 +111,8 @@ See **[characters/MODDING.md](characters/MODDING.md)** - stats, abilities, the e
 blocks (projectiles, explosions, dashes, teleports, shields, heals, stuns, slows, DoTs, summons,
 traps, knockbacks, beams, zones...), passives and sprites. The six example characters show most of it:
 
-- **Sir Bonk** - melee bruiser (dash, shield, spin, leap-slam, every-3rd-hit stun)
+- **Sir Bonk** - melee bruiser (dash, shield, spin, leap-slam, every-3rd-hit stun). Animated 8-direction
+  knight sprites with alternating swings, a 3rd-hit "BONK" finisher and an animation per ability.
 - **Ember** - fire mage (fireball, burning ground, blink, meteor shower; abilities in separate files)
 - **Gizmo** - marksman (piercing bolt, hidden bear traps, rocket jump, turret)
 - **Mender** - support (heal-or-damage orb, hook, healing zone, team shield)
@@ -135,14 +149,16 @@ character stats). Also `"fog": false` (no fog of war), `"start_gold"`, `"start_l
 
 Health and damage use direct values (no hidden multiplier). One world coordinate unit is the
 distance unit for attack range, spell geometry and pathing; movement speed is in units per second.
-Champion art is nominally 100 units tall, separate from the gameplay hitbox. A 500-unit range is
-five champion art heights before adding the hitbox radii for basic attacks. Unbuffed champions
-walk at about 248-259 world units per second, compared with lane minions at about 233.
+Champion art is nominally 100 units tall. The default champion gameplay, pathing and selection
+radii are 65, 35 and 100 units respectively. Left-click a visible unit to see its stats.
+A 500-unit basic attack range is measured between gameplay edges. Unbuffed champions
+walk at 330-345 world units per second, compared with lane minions at 310.
 The default camera zoom is 0.8x. Walking pace, camera zoom, and map dimensions are independent
 of spell ranges, dash speeds, and projectile speeds.
 
-Basic attacks show a windup before damage or projectile launch. Moving out of reach before release
-cancels the attack. Spells with a cast time show a startup cue with an arrow for aimed casts.
+Basic attacks have a cancelable windup, committed windup, hit or projectile release, locked recovery,
+then cancelable recovery. An out-of-range target cancels early windup or makes a committed attack
+miss. Spells with a cast time show a charge ring and a direction cue for aimed casts.
 The custom maps keep their own layouts: Two Lanes is 14,400 by 7,800 units,
 Bridge is 7,560 by 2,340, and Training Arena is 2,880 by 1,800.
 
@@ -166,6 +182,10 @@ sheets actually used are copied to `assets/vfx/`; the original pack folders have
 doesn't import their hundreds of extra files. Effects are listed in `scripts/vfx/vfx.gd`, and characters
 can choose them per ability (see MODDING.md, "Visual effects"). Everything else (rings, trails,
 particles, telegraphs, the map art) is drawn procedurally.
+
+Sir Bonk's sprites come from the "2D HD Character Knight" pack (also `.gdignore`d). Its
+`build_sir_bonk.py` (Python + Pillow) crops the sheets he uses into `characters/sir_bonk/knight/`
+(lossless WebP, about 3 MB, since characters are sent to every client) and makes his portrait.
 
 ## How it works (for tinkering)
 - `scripts/game.gd` - lobby, networking (Godot ENet), sends characters to clients

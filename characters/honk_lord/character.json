@@ -30,7 +30,8 @@
   "attack": {"ranged": false},
   "passive": {
     "name": "Agent of Chaos",
-    "description": "Basic attacks have a 25% chance to do something random: stun, slow, knock back or bonus true damage.",
+    "short_description": "Basic attacks can randomly stun, slow, knock back, or deal bonus true damage.",
+    "description": "Basic attacks have a 25% chance to trigger one of four equally likely effects: stun for 0.75s, slow by 60% for 1.5s, knock back 220 units, or deal 40 + 50% AD bonus true damage.",
     "triggers": [
       {"on": "attack", "chance": 0.25, "effects": [
         {"type": "text", "text": "HONK!", "color": "#ffdd55"},
@@ -47,7 +48,8 @@
     "q": {
       "name": "HONK",
       "icon": "honk_icon.png",
-      "description": "Honk in a cone, damaging enemies and blasting them away.",
+      "short_description": "Damage and knock back enemies with a honk.",
+      "description": "Honk in a 70-degree cone, dealing 55 + 50% AD magic damage and knocking enemies back 260 units over 0.3s.",
       "cooldown": 7,
       "targeting": "direction",
       "range": 380,
@@ -61,7 +63,8 @@
     },
     "w": {
       "name": "Goslings",
-      "description": "Summon 3 angry goslings for 10 seconds.",
+      "short_description": "Summon goslings to chase and attack enemies.",
+      "description": "Summon 3 goslings for 10s. Each has 120 + 15 per level HP, 10 + 2 per level attack damage, 1.2 attacks per second, and 390 move speed.",
       "cooldown": 16,
       "targeting": "self",
       "effects": [
@@ -71,7 +74,8 @@
     },
     "e": {
       "name": "Egg Bomb",
-      "description": "Lob an egg that lands after 0.7s, damaging and slowing enemies.",
+      "short_description": "Lob an egg that damages and slows enemies where it lands.",
+      "description": "After 0.7s, the egg lands and hits enemies within 170 for 80 + 40% AD magic damage, slowing them by 50% for 1.5s.",
       "cooldown": 9,
       "targeting": "point",
       "range": 750,
@@ -84,7 +88,8 @@
     },
     "r": {
       "name": "GOOSE MODE",
-      "description": "Become an enormous goose for 7s: bigger, stronger, faster, with a damaging honk aura.",
+      "short_description": "Turn into a giant goose, gain stats, and damage nearby enemies.",
+      "description": "For 7s, gain 90% size, 50% attack damage, 25% move speed, and 30% max HP. Enemies within 230 take 15 + 10% AD magic damage every 0.5s.",
       "cooldown": 55,
       "targeting": "self",
       "effects": [

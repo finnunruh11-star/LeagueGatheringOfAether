@@ -10,9 +10,14 @@ signal net_status(text: String)
 signal match_started(config: Dictionary)
 signal back_to_lobby
 signal left_game(reason: String)
+signal suggestions_changed
+signal suggestion_status_changed(text: String)
 
-const PROTOCOL := 3
+const CharacterSuggestions = preload("res://scripts/character_suggestions.gd")
+const PROTOCOL := 6
 const DEFAULT_PORT := 7777
+const MAX_APPROVED_SUGGESTIONS := 8
+const SUGGESTION_INTERVAL_MS := 3000
 const TEAM_NAMES := ["Blue", "Red", "Neutral"]
 const TEAM_COLORS := [Color("4d8dff"), Color("ff5a4d"), Color("bbbbbb")]
 const SETTINGS_PATH := "user://settings.cfg"
@@ -33,6 +38,10 @@ var summoner_pack := {}    # raw summoners/ folder, sent to clients
 var summoner_ids: Array = []   # sorted by name
 var content_errors := PackedStringArray()
 var using_host_content := false
+var pending_suggestions := {} # guest peer -> {pack, preview}
+var suggestion_status := ""
+var _approved_suggestions := {}
+var _last_suggestion_at := {}
 
 var online := false
 var in_match := false
@@ -157,12 +166,12 @@ func default_character() -> String:
 # ---------------------------------------------------------------- session ---
 
 func start_practice() -> void:
-	leave(false)
+	leave()
 	_init_lobby()
 
 
 func host(p: int) -> String:
-	leave(false)
+	leave()
 	var peer := ENetMultiplayerPeer.new()
 	var err := peer.create_server(p, 8)
 	if err != OK:
@@ -176,7 +185,7 @@ func host(p: int) -> String:
 
 
 func join(ip: String, p: int) -> String:
-	leave(false)
+	leave()
 	var peer := ENetMultiplayerPeer.new()
 	var err := peer.create_client(ip, p)
 	if err != OK:
@@ -199,6 +208,13 @@ func leave(reload := true) -> void:
 	in_match = false
 	players.clear()
 	_ready_peers.clear()
+	pending_suggestions.clear()
+	_last_suggestion_at.clear()
+	suggestion_status = ""
+	for id in _approved_suggestions:
+		characters.erase(id)
+		character_packs.erase(id)
+	_approved_suggestions.clear()
 	if reload and using_host_content:
 		reload_content()
 
@@ -229,6 +245,9 @@ func _on_peer_disconnected(id: int) -> void:
 	var pname: String = players.get(id, {}).get("name", "Someone")
 	players.erase(id)
 	_ready_peers.erase(id)
+	_last_suggestion_at.erase(id)
+	if pending_suggestions.erase(id):
+		suggestions_changed.emit()
 	if in_match and world != null:
 		world.on_peer_left(id, pname)
 	_broadcast_lobby()
@@ -309,6 +328,113 @@ func _rpc_summoner_pack(pack: Dictionary) -> void:
 func _rpc_content_end() -> void:
 	content_changed.emit()
 	net_status.emit("")
+
+
+# -------------------------------------------------------- guest suggestions ---
+
+func suggest_character(path: String) -> void:
+	if not online or is_host() or in_match or not players.has(multiplayer.get_unique_id()):
+		_set_suggestion_status("You can only suggest a character as a guest in an online lobby.")
+		return
+	var pack := CharacterSuggestions.read_folder(path)
+	if pack.has("error"):
+		_set_suggestion_status(pack.error)
+		return
+	var preview := CharacterSuggestions.inspect(pack.id, pack.files)
+	if preview.has("error"):
+		_set_suggestion_status(preview.error)
+		return
+	if _has_character_id(pack.id):
+		_set_suggestion_status("That character ID is already in the lobby. Use a different folder name.")
+		return
+	_rpc_suggest_character.rpc_id(1, pack.id, pack.files)
+	_set_suggestion_status("Sending suggestion...")
+
+
+func _has_character_id(id: String) -> bool:
+	for current_id in character_packs:
+		if id.nocasecmp_to(current_id) == 0:
+			return true
+	return false
+
+
+@rpc("any_peer", "call_remote", "reliable")
+func _rpc_suggest_character(id: String, files: Dictionary) -> void:
+	var peer := multiplayer.get_remote_sender_id()
+	if not online or not is_host() or peer <= 1 or not players.has(peer):
+		return
+	var now := Time.get_ticks_msec()
+	if now - int(_last_suggestion_at.get(peer, -SUGGESTION_INTERVAL_MS)) < SUGGESTION_INTERVAL_MS:
+		_rpc_suggestion_status.rpc_id(peer, "Please wait a few seconds before sending another suggestion.")
+		return
+	_last_suggestion_at[peer] = now
+	if in_match:
+		_rpc_suggestion_status.rpc_id(peer, "Character suggestions are only accepted in the lobby.")
+		return
+	if pending_suggestions.has(peer):
+		_rpc_suggestion_status.rpc_id(peer, "You already have a suggestion awaiting the host's decision.")
+		return
+	if _approved_suggestions.size() >= MAX_APPROVED_SUGGESTIONS:
+		_rpc_suggestion_status.rpc_id(peer, "This session already has the maximum number of approved characters.")
+		return
+	if _has_character_id(id):
+		_rpc_suggestion_status.rpc_id(peer, "That character ID is already in the lobby. Use a different folder name.")
+		return
+	var preview := CharacterSuggestions.inspect(id, files)
+	if preview.has("error"):
+		_rpc_suggestion_status.rpc_id(peer, preview.error)
+		return
+	pending_suggestions[peer] = {"pack": {"id": id, "files": files}, "preview": preview}
+	_rpc_suggestion_status.rpc_id(peer, "Suggestion sent. Waiting for the host to review %s." % preview.name)
+	suggestions_changed.emit()
+
+
+func resolve_character_suggestion(peer: int, approve: bool) -> void:
+	if not online or not is_host() or in_match or not pending_suggestions.has(peer):
+		return
+	var entry: Dictionary = pending_suggestions[peer]
+	pending_suggestions.erase(peer)
+	var message := "The host declined %s." % entry.preview.name
+	if approve:
+		var pack: Dictionary = entry.pack
+		var id: String = pack.id
+		var errors := PackedStringArray()
+		if _has_character_id(id):
+			errors.append("That character ID is already in the lobby.")
+		elif _approved_suggestions.size() >= MAX_APPROVED_SUGGESTIONS:
+			errors.append("This session already has the maximum number of approved characters.")
+		else:
+			var def = CharacterSuggestions.build(pack, errors)
+			if def == null and errors.is_empty():
+				errors.append("Invalid character definition.")
+			if errors.is_empty():
+				_approved_suggestions[id] = true
+				character_packs[id] = pack
+				characters[id] = def
+				# Same reliable channel as lobby changes and match start.
+				_rpc_approved_character.rpc(id, pack)
+				content_changed.emit()
+		message = "%s is now available in the roster." % entry.preview.name if errors.is_empty() else \
+			"Could not approve %s: %s" % [entry.preview.name, errors[0].left(240)]
+	_set_suggestion_status(message)
+	_rpc_suggestion_status.rpc_id(peer, message)
+	suggestions_changed.emit()
+
+
+@rpc("authority", "call_remote", "reliable")
+func _rpc_approved_character(id: String, pack: Dictionary) -> void:
+	_rpc_character_pack(id, pack)
+	content_changed.emit()
+
+
+@rpc("authority", "call_remote", "reliable")
+func _rpc_suggestion_status(text: String) -> void:
+	_set_suggestion_status(text)
+
+
+func _set_suggestion_status(text: String) -> void:
+	suggestion_status = text
+	suggestion_status_changed.emit(text)
 
 
 # ------------------------------------------------------------------ lobby ---

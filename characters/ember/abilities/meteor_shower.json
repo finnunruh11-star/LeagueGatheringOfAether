@@ -1,12 +1,14 @@
 {
   "name": "Meteor Shower",
-  "description": "Call down 5/7/9 meteors around the target area over a few seconds.",
+  "short_description": "Rain meteors on an area, damaging and burning enemies they hit.",
+  "description": "Call down 5/7/9 meteors, spaced 0.35s apart. Each takes 0.8s to land within 230 of the target point. Enemies within 130 of an impact take 85/125/165 + 45% AP magic damage and burn for 15 + 10% AP magic damage per second for 2s.",
   "cooldown": [
     90,
     75,
     60
   ],
   "targeting": "point",
+  "cast_time": 0.45,
   "range": 900,
   "effects": [
     {

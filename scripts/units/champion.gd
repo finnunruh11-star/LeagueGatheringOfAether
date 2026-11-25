@@ -84,7 +84,9 @@ func setup(d: Dictionary) -> void:
 	display_name = def.name
 	color = def.color
 	base_stats = def.stats.duplicate()
-	base_radius = Content.BASE_RADIUS
+	base_radius = def.get("gameplay_radius", Content.CHAMPION_GAMEPLAY_RADIUS)
+	base_pathing_radius = def.get("pathing_radius", Content.CHAMPION_PATH_RADIUS)
+	base_selection_radius = def.get("selection_radius", Content.CHAMPION_SELECTION_RADIUS)
 	attack_def = def.attack
 	sprite_info = def.sprite
 	global_position = d.pos
@@ -261,9 +263,12 @@ func cast(slot: String, aim: Vector2, tid: int) -> bool:
 		Effects.run(ab.start_effects, ctx)
 	if ct > 0.0:
 		casting = {"ab": ab, "ctx": ctx, "time": ct}
-		begin_windup(ANIM_CAST, ct, Vector2.ZERO if ab.targeting == "self" else ctx.dir)
+		var marker: Vector2 = ctx.dir * ctx.range if ab.targeting == "direction" else ctx.pos - global_position
+		begin_windup(ANIM_CAST, ct, Vector2.ZERO if ab.targeting == "self" else ctx.dir, marker)
+		start_action(ANIM_CAST, SLOTS.find(slot) + 1, ct)
 	else:
 		set_anim_lock(ANIM_CAST, 0.25)
+		start_action(ANIM_CAST, SLOTS.find(slot) + 1, 0.0)
 		_execute(ab, ctx)
 	return true
 
@@ -836,6 +841,8 @@ func _items_changed() -> void:
 
 
 func use_item(slot: int, aim: Vector2, tid: int) -> bool:
+	if attack_action_locked():
+		return false
 	var it = item_def(slot)
 	if it == null or it.active == null or has_status("stasis") or (dead and not it.active.get("while_dead", false)):
 		return false
@@ -929,7 +936,7 @@ func summoner_cooldown(i: int, ctx := {}) -> float:
 func can_use_summoner(ab: Dictionary) -> bool:
 	if dead:
 		return bool(ab.get("while_dead", false))
-	if has_status("stasis") or forced != null or casting != null:
+	if attack_action_locked() or has_status("stasis") or forced != null or casting != null:
 		return false
 	return not has_status("stun") or bool(ab.get("while_cc", false))
 
@@ -963,6 +970,7 @@ func use_summoner(i: int, aim: Vector2, tid: int) -> bool:
 		sum_cd[i] = cd
 		sum_cd_total[i] = maxf(cd, 0.01)
 	_cancel_recall()
+	cancel_attack_windup()
 	if ab.targeting != "self":
 		face(ctx.pos)
 	if ab.get("start_effects") is Array:
@@ -971,6 +979,7 @@ func use_summoner(i: int, aim: Vector2, tid: int) -> bool:
 	if ct > 0.0:
 		casting = {"ab": ab, "ctx": ctx, "time": ct, "summoner": i}
 		set_anim_lock(ANIM_CAST, ct)
+		start_action(ANIM_CAST, ACT_CHANNEL, ct)
 	else:
 		_run_summoner(ab, ctx)
 	return true
@@ -1235,7 +1244,7 @@ func _act(delta: float) -> void:
 	if casting != null or recall_timer > 0.0 or has_status("stasis"):
 		velocity = Vector2.ZERO
 		return
-	if move_dir != Vector2.ZERO and attack_target == null:
+	if move_dir != Vector2.ZERO and attack_target == null and not attack_starting and not attack_action_locked():
 		velocity = Vector2.ZERO
 		if can_move():
 			velocity = move_dir * stats.move_speed
@@ -1250,6 +1259,19 @@ func perform_attack(t: Unit, elapsed_windup: float) -> void:
 	if move_dir != Vector2.ZERO:
 		attack_target = null
 		amove = null
+
+
+## An attack that will set off an "every N attacks" passive gets its own swing animation.
+func _attack_variant() -> int:
+	for r in trig_by_event.get("attack", []):
+		var tr: Dictionary = r.tr
+		if not tr.has("every") or trigger_cds.get(r.key, 0.0) > 0.0:
+			continue
+		var n := maxi(int(Effects.num(tr.every, {"caster": self, "rank": level}, 1.0)), 1)
+		if n > 1 and (int(trigger_counts.get(r.key, 0)) + 1) % n == 0:
+			_last_swing = world.time
+			return ACT_FINISHER
+	return super._attack_variant()
 
 
 ## Attack-move target: a visible enemy within attack range (+ `pad`), the one closest to `p` (or
@@ -1271,7 +1293,7 @@ func amove_pick(p: Vector2, pad: float) -> Unit:
 
 
 func start_recall() -> void:
-	if dead or recall_timer > 0.0 or casting != null:
+	if dead or recall_timer > 0.0 or casting != null or attack_action_locked():
 		return
 	cancel_attack_windup()
 	recall_timer = 8.0

@@ -1,6 +1,7 @@
 {
   "name": "Fireball",
-  "description": "Hurl a fireball that explodes on the first enemy hit (or at max range), burning everyone nearby. Damage 70/105/140/175/210 (+70% AP).",
+  "short_description": "Hurl a fireball that explodes and sets nearby enemies ablaze.",
+  "description": "The fireball explodes on the first enemy hit or at max range. Enemies within 140 take 70/105/140/175/210 + 70% AP magic damage and burn for 12 + 10% AP magic damage per second for 2s.",
   "cooldown": [
     6,
     5.5,
@@ -9,7 +10,7 @@
     4
   ],
   "targeting": "direction",
-  "cast_time": 0.25,
+  "cast_time": 0.4,
   "range": 900,
   "effects": [
     {
