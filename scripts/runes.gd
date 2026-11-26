@@ -170,6 +170,23 @@ static func keystone(page: Dictionary) -> String:
 	return keystone_name(page.major[0])
 
 
+const TREE_COLORS := {"Precision": Color("c8aa6e"), "Domination": Color("e05050"), "Sorcery": Color("9faafc"),
+	"Resolve": Color("a1d586"), "Inspiration": Color("49c6d8")}
+
+
+## The path a rune belongs to ("" if unknown).
+static func tree_of(id: int) -> String:
+	for tree in TREES:
+		for i in 4:
+			if _has(row(tree, i), id):
+				return tree
+	return ""
+
+
+static func tree_color(id: int) -> Color:
+	return TREE_COLORS.get(tree_of(id), Color(0.9, 0.9, 0.9))
+
+
 static func keystone_name(id: int) -> String:
 	for tree in TREES:
 		for choice in row(tree, 0):

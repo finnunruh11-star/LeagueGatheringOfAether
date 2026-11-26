@@ -81,6 +81,7 @@ var _cache := {}              # per-decision memo (bursts, ranges...)
 var _steroids := {}           # Vector3i(caster, profile, rank) -> [time, multipliers]
 var _parts_memo := {}         # _parts of other champions, reused for 0.3s
 var _gc_t := 0.0
+var _ward_t := 0.0            # world time before which we don't place another ward
 
 
 static var cost_usec := 0
@@ -179,10 +180,38 @@ func _think() -> void:
 		_:
 			_do_lane()
 	_use_summoners()
+	_ward()
 	if cfg.items == "basic":
 		_basic_items()
 	if not cfg.micro:
 		_apply()
+
+
+## Normal and Scripting bots drop their Stealth Ward into a nearby brush no allied ward watches
+## (at most one every 25 seconds, never mid-fight).
+func _ward() -> void:
+	if difficulty == "brick" or me.trinket_charges <= 0 or world.time < _ward_t or mode in ["fight", "trade", "retreat", "recall", "heal"]:
+		return
+	var best := Vector2.INF
+	var best_d := INF
+	for brush: PackedVector2Array in world.map.brushes:
+		var center := Vector2.ZERO
+		for p in brush:
+			center += p
+		center /= maxf(brush.size(), 1.0)
+		var d := me.global_position.distance_to(center)
+		if d > Champion.TRINKET.range or d >= best_d or center.distance_to(world.map.spawn_point(me.team)) < 2500.0:
+			continue
+		var watched := false
+		for u in world.units:
+			if u.is_ward and u.team == me.team and not u.dead and u.global_position.distance_to(center) < 800.0:
+				watched = true
+				break
+		if not watched:
+			best = center
+			best_d = d
+	if best.is_finite() and me.use_trinket(best):
+		_ward_t = world.time + 25.0
 
 
 func _gc() -> void:
@@ -1416,7 +1445,7 @@ func _jungle_smite(mobs: Array) -> void:
 	if i < 0 or me.sum_cd[i] > 0.0:
 		return
 	for m in mobs:
-		if (m.large or m.epic) and m.hp <= 600.0 and me.global_position.distance_to(m.global_position) <= 500.0 + m.radius + me.radius:
+		if (m.large or m.epic) and m.hp <= 600.0 and me.global_position.distance_to(m.global_position) <= 500.0:
 			me.use_summoner(i, m.global_position, m.net_id)
 			return
 
@@ -2253,7 +2282,7 @@ func _offense(c: Dictionary, t, intent: String) -> Dictionary:
 	if pr.targeting == "self":
 		return _self_offense(pr, t, d, value, intent, ct)
 	if pr.targeting == "unit":
-		if d > rng + t.radius + me.radius + 30.0:
+		if d > rng:
 			return {}
 		return {"score": value, "aim": t.global_position, "tid": t.net_id}
 	if pr.shape == "summon":
@@ -2523,7 +2552,7 @@ func _support(c: Dictionary) -> Dictionary:
 		var d: float = me.global_position.distance_to(a.global_position)
 		var v := 0.0
 		if pr.targeting == "ally":
-			if d > rng + a.radius + me.radius:
+			if d > rng:
 				continue
 			v = _need(pr, a, rank)
 		elif pr.shape == "projectile":
@@ -2787,7 +2816,7 @@ func _smart_summoner(i: int, ab: Dictionary, hint: String) -> bool:
 				if a.global_position.distance_to(me.global_position) < 800.0 and a.hp < a.stats.max_hp * 0.2 and world.time - a.hurt_t < 1.0:
 					return me.use_summoner(i, me.global_position, me.net_id)
 		"kill":
-			if t != null and me.global_position.distance_to(t.global_position) <= rng + t.radius + me.radius:
+			if t != null and me.global_position.distance_to(t.global_position) <= rng:
 				var ign := _ignite(me, t, 5.0)
 				var ehp := t.hp + t.shield
 				var burst := _burst(me, t, 2.5) - _ignite(me, t, 2.5)
@@ -2798,7 +2827,7 @@ func _smart_summoner(i: int, ab: Dictionary, hint: String) -> bool:
 				var worst: Champion = null
 				var wv := 0.0
 				for e in foes:
-					if e.global_position.distance_to(me.global_position) > rng + e.radius + me.radius:
+					if e.global_position.distance_to(me.global_position) > rng:
 						continue
 					var v := _burst(e, me, 2.5)
 					if v > wv:
@@ -2824,11 +2853,11 @@ func _smart_summoner(i: int, ab: Dictionary, hint: String) -> bool:
 				return me.use_summoner(i, me.global_position, me.net_id)
 		"smite":
 			for m in monsters:
-				if (m.large or m.epic) and m.hp <= 600.0 and me.global_position.distance_to(m.global_position) <= rng + m.radius + me.radius \
+				if (m.large or m.epic) and m.hp <= 600.0 and me.global_position.distance_to(m.global_position) <= rng \
 						and me.use_summoner(i, m.global_position, m.net_id):
 					return true
 			for u in foe_units:
-				if u.is_ward or u.hp > 600.0 or me.global_position.distance_to(u.global_position) > rng + u.radius + me.radius:
+				if u.is_ward or u.hp > 600.0 or me.global_position.distance_to(u.global_position) > rng:
 					continue
 				var worth: bool = (u is Minion and u.minion_type in ["siege", "super"]) or (u is Summon and mode == "fight")
 				if worth and me.use_summoner(i, u.global_position, u.net_id):
@@ -2873,13 +2902,13 @@ func _hint_summoner(i: int, ab: Dictionary, hint: String) -> bool:
 				target = me
 		"smite":
 			for m in monsters:
-				if (m.large or m.epic) and m.hp <= 600.0 and me.global_position.distance_to(m.global_position) <= rng + m.radius:
+				if (m.large or m.epic) and m.hp <= 600.0 and me.global_position.distance_to(m.global_position) <= rng:
 					target = m
 					break
 			for u in foe_units:
 				if target != null:
 					break
-				if u is Minion and u.minion_type == "siege" and u.hp <= 600.0 and me.global_position.distance_to(u.global_position) <= rng + u.radius:
+				if u is Minion and u.minion_type == "siege" and u.hp <= 600.0 and me.global_position.distance_to(u.global_position) <= rng:
 					target = u
 					break
 	if target == null:

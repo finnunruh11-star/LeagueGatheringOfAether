@@ -5,6 +5,8 @@ var c: Champion
 var picks: Array
 var state := {}
 var timers := {}
+var cd_total := {}          # rune id -> cooldown it last went on (HUD sweep)
+var _announced := {}        # rune id -> when its proc was last shown above the champion
 var unique := {}
 var hits := {}
 var keystone: int
@@ -31,8 +33,36 @@ func ready(id: int) -> bool:
 
 func proc(id: int, cooldown: float) -> void:
 	timers[id] = c.world.time + cooldown
+	cd_total[id] = cooldown
+	if id == active_keystone() and c.world.time - float(_announced.get(id, -INF)) >= (3.0 if cooldown > 0.0 else 8.0):
+		# Keystones say so when they go off (everyone sees it, like League's rune effects).
+		_announced[id] = c.world.time
+		c.world.fx("text", {"pos": c.global_position + Vector2(0, -120), "text": Runes.keystone_name(id),
+			"color": Runes.tree_color(id), "size": 20, "team": c.team})
 	if keystone == 8358 and id == rotation[rotation_index]:
 		state.rotate = c.world.time + lerpf(9.0 if c.attack_def.ranged else 5.0, 7.0 if c.attack_def.ranged else 3.0, progress())
+
+
+## The keystone in effect right now (Omnistone's current pick for 8358).
+func active_keystone() -> int:
+	return rotation[rotation_index] if keystone == 8358 else keystone
+
+
+## For the HUD: [keystone id, cooldown left, cooldown total, stacks or charge (0 if none)].
+func keystone_view() -> Array:
+	var id := active_keystone()
+	var now: float = c.world.time
+	var left := maxf(float(timers.get(id, 0.0)) - now, 0.0)
+	var stacks := 0
+	match id:
+		8005: stacks = int(state.get("pta", 0))
+		8008: stacks = int(state.get("tempo", 0)) if now < float(state.get("tempo_end", 0.0)) else 0
+		8010: stacks = int(state.get("conqueror", 0)) if now < float(state.get("conqueror_end", 0.0)) else 0
+		8021: stacks = int(float(state.get("fleet", 0.0)))
+		8128: stacks = int(state.get("souls", 0))
+		8437: stacks = int(state.get("grasp", 0))
+		9923: stacks = int(state.get("blades", 0))
+	return [id, left, maxf(float(cd_total.get(id, left)), 0.01), stacks]
 
 
 func roll_keystone() -> void:

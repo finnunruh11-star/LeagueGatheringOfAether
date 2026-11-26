@@ -4,7 +4,8 @@ extends PanelContainer
 ## Shop button toggles it, Esc closes it.
 ##   left   - search box and stat categories (an item must match every selected category)
 ##   middle - all buyable items grouped by rarity with your price (owned components are
-##            subtracted): click shows details, right-click or double-click buys
+##            subtracted): click shows details, right-click or double-click buys - or, when you
+##            can't afford it yet, quick-buys the parts you can (as much gold as possible)
 ##   right  - details: recipe tree (owned parts green), what it builds into, Buy / Add to build
 ##   bottom - your autobuy build for this character: Ctrl/Shift+click any item (or Add to build)
 ##            adds it, drag to reorder, Shift+right-click removes; while it's empty the recommended
@@ -241,6 +242,18 @@ func _buy(id: String) -> void:
 	if ch == null or not Game.items.has(id):
 		return
 	var err := ch.check_buy(id)
+	if err.begins_with("Not enough gold"):
+		# Quick buy: get the parts you can afford now, spending as much gold as possible.
+		var parts := ch.quick_buy_plan(id)
+		if not parts.is_empty():
+			world.send_command("quick_buy", [id])
+			var names := PackedStringArray()
+			for p in parts:
+				names.append(str(Game.items[p].name))
+			_flash("Bought %s toward %s" % [", ".join(names), Game.items[id].name], GREEN)
+			_sig = ""
+			_poll()
+			return
 	if err != "":
 		_flash(err, RED)
 		return

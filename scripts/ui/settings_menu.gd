@@ -49,6 +49,9 @@ func _ready() -> void:
 	body.add_theme_constant_override("separation", 8)
 	scroll.add_child(body)
 
+	_section(body, "Display")
+	_check(body, "Fullscreen (F11 or Alt+Enter toggles it anywhere)", "fullscreen", func(_on): Game.apply_window_mode())
+
 	_section(body, "Accessibility")
 	_check(body, "Colorblind mode", "colorblind_mode")
 	var palette_hint := UiKit.label(body, "When on: gold = you, blue = allies, orange + diamond = enemies, gray = neutral.")
@@ -59,6 +62,13 @@ func _ready() -> void:
 	_option(body, "Ability casting", "cast_mode", [["quick", "Quick cast on press"], ["indicator", "Quick cast with indicator on release"], ["normal", "Normal cast: aim, then left-click"]])
 	_option(body, "Attack-move attacks", "amove_target", [["cursor", "the enemy closest to the cursor"], ["champion", "the enemy closest to you"]])
 	_check(body, "The attack-move key waits for a left click (otherwise it attacks at the cursor right away)", "amove_click")
+	_option(body, "Target champions only", "target_champs_mode", [
+		["hold", "While holding its key (%s)" % Controls.label("target_champions")],
+		["toggle", "Its key (%s) turns it on and off" % Controls.label("target_champions")],
+		["always", "Always on"]])
+	var champs_hint := UiKit.label(body, "Right-clicks, direct attacks and targeted spells then ignore minions, monsters, pets and structures. Attack-move is not filtered. Change the key under Keys.")
+	champs_hint.autowrap_mode = TextServer.AUTOWRAP_WORD_SMART
+	champs_hint.modulate = Color(1, 1, 1, 0.6)
 	_check(body, "Autobuy - buy your build in your base or while dead (edit the build in the shop)", "autobuy", _on_autobuy)
 
 	_section(body, "Camera")
@@ -198,6 +208,10 @@ func _action_name(action: String) -> String:
 
 func _refresh_keys() -> void:
 	var wasd: bool = Game.prefs.move_mode == "wasd"
+	var champs: OptionButton = _controls.get("target_champs_mode")
+	if champs != null:
+		champs.set_item_text(0, "While holding its key (%s)" % Controls.label("target_champions"))
+		champs.set_item_text(1, "Its key (%s) turns it on and off" % Controls.label("target_champions"))
 	for a in Controls.ACTIONS:
 		var id: String = a[0]
 		var b: Button = _key_buttons[id]

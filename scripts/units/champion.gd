@@ -12,6 +12,14 @@ const SELL_RATIO := 0.7
 ## trigger has "procs": true.
 const PROC_GUARDED := ["deal_damage", "deal_damage_pre", "heal_ally", "shield_ally", "buff_ally"]
 const JUNGLE_BUFFS := ["crest_of_insight", "crest_of_cinders", "hand_of_baron", "aspect_of_the_elder"]
+## Every champion's free trinket (League's Stealth Ward): 2 charges, placed up to 600 away.
+const TRINKET := {"name": "Stealth Ward", "slot": "trinket", "targeting": "point", "range": 600.0, "cast_time": 0.0,
+	"cost": 0.0, "cost_type": "mana", "cooldown": 0.0, "approach": true, "effects": [], "indicator": {}, "indicator_radius": 0.0,
+	"description": "Place a ward that becomes invisible to enemies after 1 second and sees 900 around it for 90 to 120 seconds (longer at higher average levels). Holds 2 charges that recharge in 210 to 120 seconds. At most 3 wards: a fourth replaces the oldest. Destroyed by 3 basic attacks.",
+	"short_description": "Place an invisible ward."}
+const TRINKET_CHARGES := 2
+const TRINKET_WARD_LIMIT := 3
+const WARD_COLOR := Color("f2d95c")
 
 var peer := 0
 var def := {}
@@ -37,6 +45,7 @@ var counters := {}
 var respawn_timer := 0.0
 var recall_timer := 0.0
 var casting = null
+var pending_cast = null        # host: a targeted cast waiting until we walk into range {kind, slot, aim, tid, best, stall}
 var amove = null
 var amove_mode := "cursor"     # attack-move picks the enemy closest to its point ("cursor") or to you ("champion")
 var move_dir := Vector2.ZERO   # WASD steering (host): walk this way while it isn't zero
@@ -51,6 +60,13 @@ var rune_biscuits := 0
 var rune_hexflash := false
 var rune_keystone := 0
 var rune_shoes := false
+var rune_ks_cd := 0.0          # active keystone: cooldown left / total and stacks (replicated for the HUD)
+var rune_ks_cd_total := 1.0
+var rune_ks_stacks := 0
+var trinket_charges := 1       # Stealth Ward charges (replicated)
+var trinket_cd := 0.0          # seconds until the next charge while below TRINKET_CHARGES
+var trinket_cd_total := 1.0
+var nav_target := Vector2.INF  # where the champion is walking (nav_goal(), replicated for the minimap path)
 var sum_cd := [0.0, 0.0]
 var sum_cd_total := [1.0, 1.0]
 var sum_recast := [false, false]   # the slot casts its recast right now (replicated)
@@ -187,14 +203,32 @@ func command(cmd: String, args: Array) -> void:
 				bot_difficulty = BotBrain.level_name(args[1])
 			if not is_bot:
 				move_dir = Vector2.ZERO
+			pending_cast = null
 			return
 		"item":
 			if args.size() >= 3 and (args[0] is int or args[0] is float) and args[1] is Vector2 and (args[2] is int or args[2] is float):
-				use_item(int(args[0]), args[1], int(args[2]))
+				var queued = pending_cast
+				if use_item(int(args[0]), args[1], int(args[2]), true) and is_same(pending_cast, queued):
+					pending_cast = null  # used right away: forget an older walk-in-range order
 			return
 		"summoner":
 			if args.size() >= 3 and (args[0] is int or args[0] is float) and args[1] is Vector2 and (args[2] is int or args[2] is float):
-				use_summoner(int(args[0]), args[1], int(args[2]))
+				var queued = pending_cast
+				if use_summoner(int(args[0]), args[1], int(args[2]), true) and is_same(pending_cast, queued):
+					pending_cast = null
+			return
+		"trinket":
+			if args.size() > 0 and args[0] is Vector2:
+				var queued = pending_cast
+				if use_trinket(args[0], true) and is_same(pending_cast, queued):
+					pending_cast = null
+			return
+		"quick_buy":
+			if args.size() > 0 and args[0] is String:
+				var bought := quick_buy(args[0])
+				if bought.is_empty():
+					var err := check_buy(args[0])
+					world.fx("notice", {"peer": peer, "text": err if err != "" else "Nothing to buy toward that item"})
 			return
 		"steer":
 			if args.size() > 0 and args[0] is Vector2:
@@ -208,6 +242,7 @@ func command(cmd: String, args: Array) -> void:
 					move_goal = null
 					amove = null
 					attack_target = null
+					pending_cast = null
 					path = PackedVector2Array()
 					_cancel_recall()
 			return
@@ -231,6 +266,8 @@ func command(cmd: String, args: Array) -> void:
 	if casting != null and casting.ctx.get("hexflash", false) and cmd in ["move", "attack", "amove", "stop"]:
 		casting = null
 		clear_windup()
+	if cmd in ["move", "attack", "amove", "stop", "recall"]:
+		pending_cast = null
 	match cmd:
 		"move":
 			if args.size() > 0 and args[0] is Vector2:
@@ -242,11 +279,13 @@ func command(cmd: String, args: Array) -> void:
 		"attack":
 			if args.size() > 0 and (args[0] is int or args[0] is float):
 				var t = world.entities.get(int(args[0]))
-				if t is Unit and valid_target(t):
+				if t is Unit and valid_target(t) and attackable(t):
 					attack_target = t
 					move_goal = null
 					amove = null
 					_cancel_recall()
+				elif t is Unit and t.is_structure and valid_target(t):
+					world.fx("notice", {"peer": peer, "text": "That structure can't be damaged yet"})
 		"amove":
 			if args.size() > 0 and args[0] is Vector2:
 				cancel_attack_windup()
@@ -269,7 +308,9 @@ func command(cmd: String, args: Array) -> void:
 			path = PackedVector2Array()
 		"cast":
 			if args.size() >= 3 and args[0] is String and args[1] is Vector2 and (args[2] is int or args[2] is float):
-				cast(args[0], args[1], int(args[2]))
+				var queued = pending_cast
+				if cast(args[0], args[1], int(args[2]), true) and is_same(pending_cast, queued):
+					pending_cast = null
 		"recall":
 			if world.aram:
 				world.fx("notice", {"peer": peer, "text": "Recall is disabled in ARAM."})
@@ -277,7 +318,13 @@ func command(cmd: String, args: Array) -> void:
 				start_recall()
 
 
-func cast(slot: String, aim: Vector2, tid: int) -> bool:
+## Whether basic attacks may target `t`: structures that can't be damaged yet (an outer turret
+## still stands, the Nexus is closed...) are skipped by clicks and attack-move.
+func attackable(t: Unit) -> bool:
+	return not (t.is_structure and t.is_protected())
+
+
+func cast(slot: String, aim: Vector2, tid: int, approach := false) -> bool:
 	if sion != null:
 		if dead or not aim.is_finite() or not slot in SLOTS:
 			return false
@@ -307,6 +354,8 @@ func cast(slot: String, aim: Vector2, tid: int) -> bool:
 		and forced.dash and forced.ctx.get("src_slot") == "e"
 	if not can_cast(over_attacks, during_dash):
 		return false
+	if approach and _needs_approach(ab, aim, tid):
+		return can_pay(ab) and _queue_cast("cast", slot, aim, tid, ab)
 	var is_recast := recasts.has(slot) and not is_same(ab, def.abilities.get(slot))
 	var ctx := _make_ctx(ab, aim, tid)
 	if ctx.is_empty():
@@ -336,6 +385,8 @@ func cast(slot: String, aim: Vector2, tid: int) -> bool:
 	var ct := Effects.num(ab.cast_time, ctx, 0.0)
 	var variant := (ACT_RECAST if is_recast else 1) + SLOTS.find(slot)
 	world.note_cast(self, slot, is_recast, "", ctx, ct)
+	if ab.targeting == "unit":
+		world.brush_reveal(self, ctx.target)
 	if ab.get("start_effects") is Array:
 		Effects.run(ab.start_effects, ctx)
 	if ct > 0.0:
@@ -506,20 +557,149 @@ func _make_ctx(ab: Dictionary, aim: Vector2, tid: int) -> Dictionary:
 		"self":
 			ctx.pos = global_position
 		"unit", "ally":
-			var enemy: bool = ab.targeting == "unit"
-			var structs := bool(ab.get("structures", false))
-			var t = world.entities.get(tid)
-			if not (t is Unit and (_unit_ok(t, enemy) or (structs and t.is_structure and not t.dead and (t.team != team) == enemy))):
-				t = world.pick_unit(aim, team, enemy, 100.0, structs)
-			if t == null or global_position.distance_to(t.global_position) > rng + t.radius + radius + 40.0:
+			# Targeted spells reach `range` from center to center (basic attacks go edge to edge).
+			var t := _cast_target(ab, aim, tid)
+			if t == null or global_position.distance_to(t.global_position) > rng:
 				return {}
 			ctx.target = t
 			ctx.pos = t.global_position
+			ctx.targeted = ab.targeting == "unit"
 			if t != self:
 				ctx.dir = (t.global_position - global_position).normalized()
 		_:
 			ctx.pos = global_position + dir * minf(to.length(), rng)
 	return ctx
+
+
+## The unit a targeted ability would hit: the clicked unit `tid` if it's a valid target, else the
+## one nearest to `aim`.
+func _cast_target(ab: Dictionary, aim: Vector2, tid: int) -> Unit:
+	var t = world.entities.get(tid)
+	if t is Unit and _valid_cast_target(ab, t):
+		return t
+	return world.pick_unit(aim, team, ab.targeting == "unit", 100.0, bool(ab.get("structures", false)))
+
+
+func _valid_cast_target(ab: Dictionary, t: Unit) -> bool:
+	var enemy: bool = ab.targeting == "unit"
+	return _unit_ok(t, enemy) or (bool(ab.get("structures", false)) and t.is_structure and not t.dead and (t.team != team) == enemy)
+
+
+# -------------------------------------------------------- walk into range ---
+
+## Like League, targeted spells and ground-targeted areas aimed out of range walk you into range
+## first and then cast ("approach" on the ability, see Content._ability). Skillshots and movement
+## spells (dashes, blinks, Flash) never do: they go off right away, clamped to their range.
+func _needs_approach(ab: Dictionary, aim: Vector2, tid: int) -> bool:
+	if not bool(ab.get("approach", false)) or not aim.is_finite():
+		return false
+	var goal := _approach_goal(ab, aim, tid)
+	return goal.is_finite() and global_position.distance_to(goal) > _cast_range(ab)
+
+
+func _cast_range(ab: Dictionary) -> float:
+	return Effects.num(ab.range, {"caster": self, "target": self, "rank": maxi(int(ranks.get(ab.slot, 1)), 1)}, 700.0)
+
+
+## Where an approaching cast is headed: its target unit, or the aimed point (INF: no target).
+func _approach_goal(ab: Dictionary, aim: Vector2, tid: int) -> Vector2:
+	if ab.targeting in ["unit", "ally"]:
+		var t := _cast_target(ab, aim, tid)
+		return t.global_position if t != null else Vector2.INF
+	return aim
+
+
+func _queue_cast(kind: String, slot, aim: Vector2, tid: int, ab: Dictionary) -> bool:
+	if ab.targeting in ["unit", "ally"]:
+		var t := _cast_target(ab, aim, tid)
+		if t == null:
+			return false
+		tid = t.net_id
+	pending_cast = {"kind": kind, "slot": slot, "aim": aim, "tid": tid, "best": INF, "stall": 0.0}
+	attack_target = null
+	amove = null
+	cancel_attack_windup()
+	_cancel_recall()
+	_tick_pending_cast(0.0)
+	return true
+
+
+func _pending_ability(p: Dictionary):
+	match str(p.kind):
+		"item":
+			var it = item_def(int(p.slot))
+			return it.active if it != null else null
+		"summoner":
+			return summoner_ability(int(p.slot))
+		"trinket":
+			return TRINKET if trinket_charges > 0 else null
+	return active_ability(str(p.slot))
+
+
+## Walks toward a queued cast and casts it once in range. Gives up when its target is gone (dead,
+## out of sight, untargetable) or when walking no longer gets a ground-targeted cast any closer.
+func _tick_pending_cast(delta: float) -> void:
+	var p = pending_cast
+	if p == null:
+		return
+	var ab = _pending_ability(p)
+	if ab == null or dead:
+		_drop_pending_cast()
+		return
+	var goal: Vector2 = p.aim
+	var chase: bool = ab.targeting in ["unit", "ally"]
+	if chase:
+		var t = world.entities.get(int(p.tid))
+		if not (t is Unit and _valid_cast_target(ab, t)):
+			_drop_pending_cast()
+			return
+		goal = t.global_position
+	var d := global_position.distance_to(goal)
+	if d > _cast_range(ab):
+		if d < float(p.best) - 1.0:
+			p.best = d
+			p.stall = 0.0
+		elif not chase and casting == null and can_move():
+			p.stall = float(p.stall) + delta
+			if p.stall > 1.0:
+				_drop_pending_cast()
+				return
+		if not (move_goal is Vector2) or move_goal.distance_to(goal) > 40.0:
+			move_goal = goal
+		return
+	pending_cast = null
+	move_goal = null
+	path = PackedVector2Array()
+	match str(p.kind):
+		"item":
+			use_item(int(p.slot), p.aim, int(p.tid))
+		"summoner":
+			use_summoner(int(p.slot), p.aim, int(p.tid))
+		"trinket":
+			use_trinket(p.aim)
+		_:
+			cast(str(p.slot), p.aim, int(p.tid))
+
+
+func _drop_pending_cast() -> void:
+	if pending_cast != null:
+		pending_cast = null
+		move_goal = null
+		path = PackedVector2Array()
+
+
+## Where this champion is walking to (for the path line on the minimap), INF when it isn't.
+func nav_goal() -> Vector2:
+	if dead or move_dir != Vector2.ZERO:
+		return Vector2.INF
+	if move_goal is Vector2:
+		return move_goal
+	if amove is Vector2 and attack_target == null:
+		return amove
+	if is_instance_valid(attack_target) and not attack_target.dead \
+			and global_position.distance_to(attack_target.global_position) > attack_reach(attack_target):
+		return attack_target.global_position
+	return Vector2.INF
 
 
 func _unit_ok(t: Unit, enemy: bool) -> bool:
@@ -1004,7 +1184,7 @@ func _items_changed() -> void:
 	stats_dirty = true
 
 
-func use_item(slot: int, aim: Vector2, tid: int) -> bool:
+func use_item(slot: int, aim: Vector2, tid: int, approach := false) -> bool:
 	if sion != null and sion.action != SionKit.IDLE:
 		return false
 	if attack_action_locked():
@@ -1016,6 +1196,8 @@ func use_item(slot: int, aim: Vector2, tid: int) -> bool:
 	if inst.cd > 0.0 or (it.charges > 0 and int(inst.n) <= 0):
 		return false
 	var ab: Dictionary = it.active
+	if approach and not dead and _needs_approach(ab, aim, tid):
+		return _queue_cast("item", slot, aim, tid, ab)
 	var ctx := _make_ctx(ab, aim, tid)
 	if ctx.is_empty():
 		return false
@@ -1039,6 +1221,8 @@ func use_item(slot: int, aim: Vector2, tid: int) -> bool:
 		face(ctx.pos)
 	world.fx("cast", {"p": global_position, "c": it.color, "v": net_id, "d": Vector2(ctx.dir).angle(), "s": "item"})
 	world.note_cast(self, "item", false, str(inst.id), ctx, 0.0)
+	if ab.targeting == "unit":
+		world.brush_reveal(self, ctx.target)
 	Effects.run(ab.effects, ctx)
 	if rune_state != null and (str(inst.id).ends_with("_potion") or str(inst.id).begins_with("elixir_")):
 		rune_state.sustain(0.0, true)
@@ -1133,17 +1317,21 @@ func summoner_cooldown(i: int, ctx := {}) -> float:
 
 
 ## Summoner spells work while silenced or rooted - not while stunned (unless "while_cc", e.g.
-## Cleanse), dead (unless "while_dead"), knocked up or dashing, in stasis or channeling.
+## Cleanse), dead (unless "while_dead"), knocked up or dashing, in stasis or channeling a summoner
+## spell. Instant ones (Flash...) also work while an ability charges or channels: the ability then
+## goes off from wherever you end up (see teleport()).
 func can_use_summoner(ab: Dictionary) -> bool:
 	if dead:
 		return bool(ab.get("while_dead", false))
-	if attack_action_locked() or has_status("stasis") or forced != null or casting != null:
+	if attack_action_locked() or has_status("stasis") or forced != null:
+		return false
+	if casting != null and (casting.has("summoner") or Effects.num(ab.cast_time, {"caster": self}, 0.0) > 0.0):
 		return false
 	return not has_status("stun") or bool(ab.get("while_cc", false))
 
 
-func use_summoner(i: int, aim: Vector2, tid: int) -> bool:
-	if sion != null and (sion.form != SionKit.ALIVE or sion.action != SionKit.IDLE):
+func use_summoner(i: int, aim: Vector2, tid: int, approach := false) -> bool:
+	if sion != null and (sion.form != SionKit.ALIVE or not sion.action in [SionKit.IDLE, SionKit.SMASH]):
 		return false
 	var sp = summoner_def(i)
 	if sp == null:
@@ -1153,12 +1341,16 @@ func use_summoner(i: int, aim: Vector2, tid: int) -> bool:
 		casting = null
 		return false
 	var ab = summoner_ability(i)
+	if sion != null and sion.action == SionKit.SMASH and Effects.num(ab.cast_time, {"caster": self}, 0.0) > 0.0:
+		return false  # only instant spells (Flash) while Decimating Smash charges
 	var hex: bool = sp.id == "flash" and sum_cd[i] > 0.0 and rune_hexflash
 	if hex and (rune_state == null or not rune_state.ready(8306) or world.time - combat_t < 10):
 		return false
 	var is_recast: bool = ab != sp.active
 	if not can_use_summoner(ab) or (not is_recast and sum_cd[i] > 0.0):
 		return false
+	if approach and not dead and casting == null and _needs_approach(ab, aim, tid):
+		return _queue_cast("summoner", i, aim, tid, ab)
 	var ctx := _make_ctx(ab, aim, tid)
 	if ctx.is_empty():
 		return false
@@ -1179,9 +1371,11 @@ func use_summoner(i: int, aim: Vector2, tid: int) -> bool:
 		sum_cd_total[i] = maxf(cd, 0.01)
 	if hex:
 		rune_state.proc(8306, 20.0)
+	if ab.targeting == "unit":
+		world.brush_reveal(self, ctx.target)
 	_cancel_recall()
 	cancel_attack_windup()
-	if ab.targeting != "self":
+	if ab.targeting != "self" and casting == null and (sion == null or sion.action == SionKit.IDLE):
 		face(ctx.pos)
 	if ab.get("start_effects") is Array:
 		Effects.run(ab.start_effects, ctx)
@@ -1235,6 +1429,70 @@ func _tick_summoners(delta: float) -> void:
 			sum_cd[i] = maxf(sum_cd[i] - delta, 0.0)
 		var sp = summoner_def(i)
 		sum_recast[i] = sp != null and sp.recast != null and not find_status(sp.recast.status).is_empty()
+
+
+# ---------------------------------------------------------------- trinket ---
+
+## Stealth Ward recharge: 210 seconds at an average champion level of 1 down to 120 at 18
+## (League), shortened by item haste.
+func trinket_recharge() -> float:
+	return lerpf(210.0, 120.0, _average_level_progress()) * 100.0 / (100.0 + maxf(float(stats.get("item_haste", 0.0)), 0.0))
+
+
+func _average_level_progress() -> float:
+	return clampf((world.average_level() - 1.0) / 17.0, 0.0, 1.0)
+
+
+func _tick_trinket(delta: float) -> void:
+	if world.aram:
+		trinket_charges = 0  # no wards on ARAM maps, like League's Howling Abyss
+		return
+	if trinket_charges >= TRINKET_CHARGES:
+		trinket_cd = 0.0
+		return
+	if trinket_cd <= 0.0:
+		trinket_cd = trinket_recharge()
+		trinket_cd_total = maxf(trinket_cd, 0.01)
+	trinket_cd -= delta
+	if trinket_cd <= 0.0:
+		trinket_charges += 1
+		trinket_cd = 0.0
+
+
+## Places a Stealth Ward at `aim` (up to 600 away; further away we first walk into range).
+func use_trinket(aim: Vector2, approach := false) -> bool:
+	if dead or trinket_charges <= 0 or not aim.is_finite() or has_status("stasis") or forced != null or attack_action_locked():
+		return false
+	if sion != null and sion.action != SionKit.IDLE:
+		return false
+	if approach and _needs_approach(TRINKET, aim, 0):
+		return _queue_cast("trinket", 0, aim, 0, TRINKET)
+	var at := world.map.nearest_open(global_position + (aim - global_position).limit_length(float(TRINKET.range)))
+	trinket_charges -= 1
+	_cancel_recall()
+	face(at)
+	place_ward(at)
+	return true
+
+
+## At most TRINKET_WARD_LIMIT of your Stealth Wards stand at once: a new one replaces the oldest.
+## They turn invisible to enemies after a second (only true sight - Control Wards - shows them).
+func place_ward(at: Vector2) -> Summon:
+	var mine := []
+	for u in world.units:
+		if u is Summon and not u.dead and u.is_ward and u.owner_unit == self and u.display_name == TRINKET.name:
+			mine.append(u)
+	while mine.size() >= TRINKET_WARD_LIMIT:
+		mine.pop_front().die(null)
+	var ward: Summon = world.spawn("summon", {"pos": at, "team": team, "name": TRINKET.name, "ward": true, "stationary": true,
+		"stats": {"max_hp": 3.0, "vision": 900.0}, "color": WARD_COLOR})
+	ward.init_server(self, lerpf(90.0, 120.0, _average_level_progress()), {}, {})
+	ward.gold_value = 10.0
+	world.schedule(1.0, func():
+		if is_instance_valid(ward) and not ward.dead:
+			ward.add_status({"type": "stealth", "time": 9999.0}, ward, "ward_stealth"))
+	world.fx("spawn", {"p": at, "c": WARD_COLOR, "r": 18.0, "team": team})
+	return ward
 
 
 # ---------------------------------------------------------------- autobuy ---
@@ -1305,17 +1563,122 @@ func shop_toward(plan: Array, done: Array) -> Array:
 	return skip
 
 
-## "mage", "marksman" or "bruiser" - for bot builds, the recommended build and default summoners.
+## League's quick buy (right-click an item you can't afford yet): the parts of `id` you can buy
+## right now, choosing the combination that spends the most gold and fits your free slots (owned
+## components are counted as already built). Returns the item ids to buy, in buying order.
+func quick_buy_plan(id: String) -> Array:
+	var it = Game.items.get(id)
+	if it == null or it.from.is_empty():
+		return []
+	var root := _missing_parts(id, [])
+	var free := items.count(null)
+	var best := {"cost": 0, "slots": 0, "items": []}
+	for opt in _part_options(root.children, int(floorf(gold + 0.001))):
+		if opt.slots <= free and (opt.cost > best.cost or (opt.cost == best.cost and opt.slots < best.slots)):
+			best = opt
+	# Parts that use up owned components first: they free the slots the others need.
+	var order: Array = best.items.duplicate()
+	order.sort_custom(func(a, b): return int(a.slots) < int(b.slots))
+	return order.map(func(o): return str(o.id))
+
+
+## Buys quick_buy_plan(id). Returns what was bought.
+func quick_buy(id: String) -> Array:
+	var bought := []
+	for part in quick_buy_plan(id):
+		if buy(part) == "":
+			bought.append(part)
+	return bought
+
+
+## The recipe tree of `id` without the parts you own: {id, price, slots, children}. `price` is what
+## buying it costs now (owned parts subtracted), `slots` the inventory slots it adds (1 minus the
+## owned parts it uses up). `used` collects owned slots already counted.
+func _missing_parts(id: String, used: Array) -> Dictionary:
+	var it: Dictionary = Game.items[id]
+	var node := {"id": id, "children": [], "owned_value": 0, "owned_count": 0}
+	for c in it.from:
+		var slot := -1
+		for s in ITEM_SLOTS:
+			if items[s] != null and items[s].id == c and not used.has(s):
+				slot = s
+				break
+		if slot >= 0:
+			used.append(slot)
+			node.owned_value += int(Game.items[c].cost)
+			node.owned_count += 1
+		elif Game.items.has(c):
+			var child := _missing_parts(c, used)
+			node.children.append(child)
+			node.owned_value += int(child.owned_value)
+			node.owned_count += int(child.owned_count)
+	node.price = maxi(int(it.cost) - int(node.owned_value), 0)
+	node.slots = 1 - int(node.owned_count)
+	return node
+
+
+## Every affordable way to buy parts of `nodes`: [{cost, slots, items: [{id, slots}]}], buying
+## nothing included. A part is bought whole or by its own parts, never both.
+func _part_options(nodes: Array, budget: int) -> Array:
+	var combos := [{"cost": 0, "slots": 0, "items": []}]
+	for n in nodes:
+		var mine := _part_options(n.children, budget)
+		if int(n.price) <= budget and bool(Game.items[n.id].buyable) and check_buy_rules(n.id):
+			mine.append({"cost": n.price, "slots": n.slots, "items": [{"id": n.id, "slots": n.slots}]})
+		var next := {}
+		for a in combos:
+			for b in mine:
+				var cost: int = int(a.cost) + int(b.cost)
+				if cost > budget:
+					continue
+				var slots: int = int(a.slots) + int(b.slots)
+				var key := "%d/%d" % [cost, slots]
+				if not next.has(key):
+					next[key] = {"cost": cost, "slots": slots, "items": a.items + b.items}
+		combos = next.values()
+	return combos
+
+
+## check_buy() without the gold check: whether you could own `id` (level, unique groups...).
+func check_buy_rules(id: String) -> bool:
+	var err := check_buy(id)
+	return err == "" or err.begins_with("Not enough gold") or err.begins_with("Your inventory")
+
+
+## "mage", "marksman" or "bruiser" - for bot builds, the recommended build, default summoners and
+## rune pages (and which way adaptive force goes). Mana alone doesn't make a mage: champions whose
+## spells scale more with AD than AP (Gizmo, Zeri) count by their attack (marksman or bruiser).
 static func role_of(d: Dictionary) -> String:
 	if d.get("id") == "sion":
 		return "bruiser"
 	var st = d.get("stats", {})
-	if st is Dictionary and (float(st.get("ability_power", 0.0)) >= 25.0 or float(st.get("max_mana", 0.0)) > 0.0):
+	if st is Dictionary and (float(st.get("ability_power", 0.0)) >= 25.0 or (float(st.get("max_mana", 0.0)) > 0.0 and _ap_scaling(d))):
 		return "mage"
 	var atk = d.get("attack", {})
 	if atk is Dictionary and bool(atk.get("ranged", false)):
 		return "marksman"
 	return "bruiser"
+
+
+## True if a character's ability effects use the "ap" variable more often than AD ones.
+static func _ap_scaling(d: Dictionary) -> bool:
+	var ap := 0
+	var ad := 0
+	var abilities = d.get("abilities", {})
+	if abilities is Dictionary:
+		for slot in abilities:
+			var ab = abilities[slot]
+			if not (ab is Dictionary):
+				continue
+			var text := JSON.stringify(ab.get("effects", []))
+			ap += _count_word(text, "ap")
+			ad += _count_word(text, "ad") + _count_word(text, "bonus_ad")
+	return ap > ad
+
+
+static func _count_word(text: String, word: String) -> int:
+	var re := RegEx.create_from_string("(?<![A-Za-z0-9_'])%s(?![A-Za-z0-9_'])" % word)
+	return re.search_all(text).size()
 
 
 ## A simple build for the character's role: boots, a mythic, tier-2 boots, then legendaries.
@@ -1408,6 +1771,7 @@ func _think(delta: float) -> void:
 		if cooldowns[s] > 0.0:
 			cooldowns[s] = maxf(cooldowns[s] - delta, 0.0)
 	_tick_summoners(delta)
+	_tick_trinket(delta)
 	if autobuy and not is_bot:
 		_autobuy(delta)
 	if not recasts.is_empty():
@@ -1458,6 +1822,11 @@ func _think(delta: float) -> void:
 				sion.death_surge()
 	elif is_bot and (sion == null or sion.action == SionKit.IDLE):
 		_bot().tick(delta)
+	if pending_cast != null:
+		_tick_pending_cast(delta)
+	if attack_target != null and is_instance_valid(attack_target) and not attackable(attack_target):
+		cancel_attack_windup()
+		attack_target = null  # e.g. an inhibitor respawned and the Nexus turrets are protected again
 	if amove != null:
 		if attack_target == null:
 			attack_target = amove_pick(amove, 120.0)
@@ -1504,6 +1873,7 @@ func _act(delta: float) -> void:
 
 ## WASD steering: an attack command interrupts it for one attack, then you keep walking.
 func perform_attack(t: Unit, elapsed_windup: float) -> void:
+	world.brush_reveal(self, t)
 	if char_id == "zeri":
 		ZeriKit.zap(self, t)
 	else:
@@ -1536,6 +1906,21 @@ func attack_reach(t) -> float:
 	if char_id == "zeri":
 		return float(base_stats.attack_range) + radius + t.radius
 	return super.attack_reach(t)
+
+
+## League's turret rule: unmodified basic attacks hit structures for AD + 60% AP (no crits, see
+## perform_attack), as magic damage when 60% AP beats bonus AD - so AP champions can siege too.
+func attack_damage_against(t) -> float:
+	var dmg := super.attack_damage_against(t)
+	if t is Unit and t.is_structure:
+		dmg += 0.6 * float(stats.ability_power)
+	return dmg
+
+
+func attack_damage_type(t, ad: Dictionary) -> String:
+	if t is Unit and t.is_structure and not ad.has("damage") and not ad.has("damage_type"):
+		return "magic" if 0.6 * float(stats.ability_power) > float(stats.attack_damage) - float(base_stats.attack_damage) else "physical"
+	return super.attack_damage_type(t, ad)
 
 
 func attack_windup_ratio() -> float:
@@ -1572,7 +1957,7 @@ func amove_pick(p: Vector2, pad: float) -> Unit:
 	var bd := INF
 	var from := global_position if amove_mode == "champion" else p
 	for u in world.units:
-		if u.team == team or u.dead or u.is_ward or not u.targetable() or not u.visible_to(team):
+		if u.team == team or u.dead or u.is_ward or not u.targetable() or not u.visible_to(team) or not attackable(u):
 			continue
 		if global_position.distance_to(u.global_position) > attack_reach(u) + pad:
 			continue
@@ -1598,6 +1983,24 @@ func start_recall() -> void:
 
 func _cancel_recall() -> void:
 	recall_timer = 0.0
+
+
+## A blink while an ability charges or channels (Flash mid-cast) carries the cast along: it goes
+## off from where you land, aimed the same way, and ground-targeted spells move with you.
+func teleport(p: Vector2) -> void:
+	var moved := p - global_position
+	super.teleport(p)
+	if casting == null or casting.has("summoner") or moved.is_zero_approx():
+		return
+	var ctx: Dictionary = casting.ctx
+	var t = ctx.get("target")
+	if casting.ab.targeting in ["unit", "ally"] and is_instance_valid(t) and t != self:
+		ctx.dir = global_position.direction_to(t.global_position)
+		windup_dir = ctx.dir
+		windup_marker = t.global_position - global_position
+	else:
+		ctx.pos = Vector2(ctx.get("pos", global_position)) + moved
+	ctx.origin = global_position
 
 
 func _interrupted() -> void:
@@ -1677,6 +2080,7 @@ func _update_statuses(delta: float) -> void:
 func _on_death() -> void:
 	deaths += 1
 	casting = null
+	pending_cast = null
 	recall_timer = 0.0
 	amove = null
 	energy = 0.0
@@ -1693,6 +2097,7 @@ func _dead_process(delta: float) -> void:
 	for s in SLOTS:
 		cooldowns[s] = maxf(cooldowns[s] - delta, 0.0)
 	_tick_summoners(delta)
+	_tick_trinket(delta)
 	if autobuy and not is_bot:
 		_autobuy(delta)
 	_tick_items(delta)
@@ -1779,8 +2184,13 @@ func net_state() -> PackedFloat32Array:
 		s.append(spell_codes.find(summoners[i]) if i < summoners.size() else -1)
 	s.append(float(rune_state.state.get("biscuits", 0)) if rune_state != null else 0.0)
 	s.append(1.0 if rune_hexflash else 0.0)
-	s.append(rune_state.rotation[rune_state.rotation_index] if rune_state != null and rune_state.keystone == 8358 else 0)
+	var keystone_view: Array = rune_state.keystone_view() if rune_state != null else [0, 0.0, 1.0, 0]
+	s.append(keystone_view[0])
 	s.append(1.0 if rune_state != null and rune_state.state.get("shoes", false) else 0.0)
+	var goal := nav_goal()
+	s.append_array([keystone_view[1], keystone_view[2], keystone_view[3], cs,
+		goal.x if goal.is_finite() else -1.0, goal.y if goal.is_finite() else -1.0,
+		trinket_charges, trinket_cd, trinket_cd_total])
 	if world.aram:
 		s.append(1.0 if aram_shop_locked else 0.0)
 	return s
@@ -1901,8 +2311,17 @@ func apply_net_state(s: PackedFloat32Array) -> void:
 		rune_hexflash = s[o + 3] > 0.5
 		rune_keystone = int(s[o + 4])
 		rune_shoes = s[o + 5] > 0.5
-		if world.aram and o + 6 < s.size():
-			aram_shop_locked = s[o + 6] > 0.5
+		if o + 15 <= s.size():
+			rune_ks_cd = s[o + 6]
+			rune_ks_cd_total = s[o + 7]
+			rune_ks_stacks = int(s[o + 8])
+			cs = int(s[o + 9])
+			nav_target = Vector2(s[o + 10], s[o + 11]) if s[o + 10] >= 0.0 else Vector2.INF
+			trinket_charges = int(s[o + 12])
+			trinket_cd = s[o + 13]
+			trinket_cd_total = s[o + 14]
+		if world.aram and o + 15 < s.size():
+			aram_shop_locked = s[o + 15] > 0.5
 	if changed:
 		_rebuild_triggers()
 
@@ -1915,6 +2334,13 @@ func _physics_process(delta: float) -> void:
 			flags |= F_RECALL
 		if energy >= 100.0 and trig_by_event.has("energized"):
 			flags |= F_ENERGIZED
+		nav_target = nav_goal()
+		if rune_state != null:
+			var kv := rune_state.keystone_view()
+			rune_keystone = kv[0]
+			rune_ks_cd = kv[1]
+			rune_ks_cd_total = kv[2]
+			rune_ks_stacks = kv[3]
 
 
 # ---------------------------------------------------------------- drawing ---

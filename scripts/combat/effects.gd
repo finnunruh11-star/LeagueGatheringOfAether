@@ -865,7 +865,7 @@ static func _hit(e: Dictionary, ctx: Dictionary, u: Unit) -> Dictionary:
 	return {"vfx": str(e.get("vfx", "ability")), "col": _color(e, ctx), "dir": ang,
 		"ability": str(ctx.get("src_slot", "")), "item": str(ctx.get("item", "")), "aoe": bool(ctx.get("aoe", false)),
 		"proc": bool(ctx.get("proc", false)), "onhit": bool(e.get("onhit", ctx.get("onhit", false))),
-		"attack": bool(e.get("attack", false)), "raw": bool(e.get("raw", false))}
+		"attack": bool(e.get("attack", false)), "raw": bool(e.get("raw", false)), "targeted": bool(ctx.get("targeted", false))}
 
 
 static func _cc_time(u: Unit, e: Dictionary, ctx: Dictionary, def: float) -> float:

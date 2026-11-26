@@ -33,7 +33,7 @@ static func zap(c: Champion, t: Unit) -> void:
 		t.take_damage(1.0, c, "magic", {"attack": true})
 		return
 	var ap: float = c.stats.ability_power
-	var hit := {"ability": "passive", "spell": true, "col": COLOR}
+	var hit := {"ability": "passive", "spell": true, "col": COLOR, "targeted": true}
 	if charged:
 		c.zeri_charge = 0.0
 		if Effects._blocked(t, ctx):
@@ -129,6 +129,7 @@ static func _chain(c: Champion, first: Unit, burst: Dictionary) -> void:
 static func _pulse(c: Champion, ab: Dictionary, ctx: Dictionary) -> void:
 	var shot: Dictionary = ab.effects[0]
 	var p := _projectile(c, ctx.origin, ctx.dir, float(shot.speed), float(shot.radius), float(ctx.range), COLOR)
+	p.through_walls = false  # terrain stops the pulse and fires the wall laser
 	p.swept_hit = _pulse_hit.bind(c, shot.on_hit, ctx, false)
 	p.swept_wall = _wall_laser.bind(c, shot.on_hit, ctx)
 
@@ -170,6 +171,7 @@ static func _surge(c: Champion, ab: Dictionary, ctx: Dictionary) -> void:
 	c.change_cooldown("q", 0.0, true)
 	var effect: Dictionary = ab.effects[0].duplicate()
 	effect.precise_distance = true
+	effect.phase_terrain = false  # Spark Surge stops at terrain unless it rides over it (below)
 	var rounds: Dictionary = ab.lightning_rounds
 	var length := Effects.num(effect.distance, ctx, 300.0)
 	var speed := Effects.num(effect.speed, ctx, 930.0)

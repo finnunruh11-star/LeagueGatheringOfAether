@@ -57,6 +57,9 @@ func _ready() -> void:
 	if Game.cmdline.get("selftest") == "colorblind":
 		await _test_colorblind()
 		return
+	if Game.cmdline.get("selftest") == "feedback":
+		await _test_feedback()
+		return
 	for e in world.entities.values():
 		if e is Dummy:
 			world.despawn(e)
@@ -417,6 +420,8 @@ func _test_zeri() -> void:
 			world.despawn(u)
 	var at := Vector2(700, 900)
 	c.teleport(at)
+	c.rune_state = null  # exact kit numbers: no rune shards or keystones
+	c.recompute_stats()
 	await get_tree().physics_frame
 	await get_tree().physics_frame
 	var primary: Dummy = world.spawn("dummy", {"pos": at + Vector2(300, 0), "hp": 1000})
@@ -668,12 +673,12 @@ func _test_balance() -> void:
 			if u.minion_type == "siege":
 				cannons += 1
 	ok = _check(cannons == 4 and wave_units == 28, "third wave spawns three melee, three casters and one cannon per team per lane") and ok
-	var minion_radii := {"melee": 22.5, "ranged": 19.5, "siege": 33.0, "super": 36.0}
+	var minion_radii := {"melee": 48.0, "ranged": 48.0, "siege": 65.0, "super": 65.0}
 	for type in minion_radii:
 		var minion: Minion = world.spawn("minion", {"team": 0, "type": type, "pos": world.map.lane(0, 0)[0]})
 		var shape := minion.collider.shape as CircleShape2D
 		ok = _check(is_equal_approx(minion.radius, minion_radii[type])
-			and is_equal_approx(shape.radius, float(minion_radii[type]) * 0.6), "%s minion has 50%% larger hitbox and collider" % type) and ok
+			and is_equal_approx(shape.radius, float(minion_radii[type]) * 0.6), "%s minion has League's gameplay radius and a smaller collider" % type) and ok
 		world.despawn(minion)
 	lane_turrets.sort_custom(func(a, b): return a.order < b.order)
 	for s in lane_turrets:
@@ -971,14 +976,14 @@ func _test_match_fixes() -> void:
 
 	var xp_before := player.xp
 	minion.die(player)
-	ok = _check(is_equal_approx(player.xp - xp_before, 57.04), "solo melee minion awards 57.04 XP") and ok
+	ok = _check(is_equal_approx(player.xp - xp_before, 61.75), "solo melee minion awards 95% of its 65 XP") and ok
 	var ally: Champion = world.spawn("champion", {"peer": 999, "team": player.team, "character": player.char_id,
 		"name": "Ally", "pos": player.global_position})
 	xp_before = player.xp
 	var shared: Minion = world.spawn("minion", {"team": 1 - player.team, "pos": center})
 	shared.die(player)
-	ok = _check(is_equal_approx(player.xp - xp_before, 34.224) and is_equal_approx(ally.xp, 34.224),
-		"nearby allies split the reduced minion XP pool") and ok
+	ok = _check(is_equal_approx(player.xp - xp_before, 40.3) and is_equal_approx(ally.xp, 40.3),
+		"nearby allies split a 124% minion XP pool") and ok
 	world.despawn(ally)
 	world.champions.erase(999)
 	player.xp = 0.0
@@ -1134,10 +1139,14 @@ func _test_rift() -> void:
 	_vision()
 	ok = _check(world.can_see(red, 0), "standing in the same brush reveals who is inside") and ok
 	blue.teleport(outside)
-	blue.take_damage(20.0, red, "physical", {"attack": true})
+	blue.take_damage(20.0, red, "magic", {"ability": "q"})
 	red.flags = red._compute_flags()
 	_vision()
-	ok = _check(world.can_see(red, 0), "damaging a champion from brush reveals the attacker") and ok
+	ok = _check(not world.can_see(red, 0), "a skillshot from brush does not reveal its caster") and ok
+	red.perform_attack(blue, 0.0)
+	red.flags = red._compute_flags()
+	_vision()
+	ok = _check(world.can_see(red, 0), "a basic attack from brush reveals the attacker") and ok
 	red._update_statuses(World.BRUSH_REVEAL + 0.1)
 	red.flags = red._compute_flags()
 	_vision()
@@ -1281,3 +1290,276 @@ func _vision() -> void:
 	for t in 2:
 		world.fog._collect(t)
 		world.fog._compute(t)
+
+
+func _frames(n: int) -> void:
+	for i in n:
+		await get_tree().physics_frame
+
+
+func _first_projectile(slot: String) -> Projectile:
+	for e in world.entities.values():
+		if e is Projectile and e.ctx.get("src_slot") == slot:
+			return e
+	return null
+
+
+## Tester feedback (League parity): targeting ranges, walking into range, Flash mid-cast, terrain,
+## structures, minions, passive gold, quick buy, item swaps, wards, runes, kill feed, camera...
+##   godot --headless --path . -- --auto=practice --map=arena --char=gizmo --selftest=feedback
+func _test_feedback() -> void:
+	var c := world.local_champion
+	if c == null or c.char_id != "gizmo" or world.map.data.get("name") != "Training Arena":
+		push_error("[feedback] requires --char=gizmo --map=arena")
+		get_tree().quit(1)
+		return
+	for u in world.units.duplicate():
+		if u is Dummy:
+			world.despawn(u)
+	var checks := {}
+	c.rune_state = null
+	c.recompute_stats()
+	c.max_ranks()
+	c.summoners = ["flash", "ignite"]
+	c.sum_cd = [0.0, 0.0]
+	var center := Vector2(1440, 900)
+
+	# Targeted spells reach their range center to center; further away they walk into range first.
+	c.teleport(center)
+	var foe: Champion = world.spawn("champion", {"peer": 2001, "team": 1, "character": "sir_bonk", "name": "Foe", "pos": center + Vector2(640, 0)})
+	foe.rune_state = null
+	checks["Ignite (600) no longer reaches 640 units away"] = not c.use_summoner(1, foe.global_position, foe.net_id)
+	c.command("summoner", [1, foe.global_position, foe.net_id])
+	checks["an out-of-range Ignite walks into range instead of failing"] = c.pending_cast != null and c.move_goal is Vector2
+	await _frames(40)
+	checks["... and goes off once within 600"] = c.pending_cast == null and c.sum_cd[1] > 0.0 and not foe.find_status("ignite").is_empty() \
+		and c.global_position.distance_to(foe.global_position) <= 601.0
+	foe.cleanse()
+	foe.statuses.clear()
+
+	c.teleport(center)
+	c.mana = c.stats.max_mana
+	c.cooldowns.w = 0.0
+	var spot := center - Vector2(800, 0)
+	c.command("cast", ["w", spot, 0])
+	checks["a trap aimed beyond its range is not dropped at max range"] = c.pending_cast != null and c.cooldowns.w == 0.0
+	await _frames(70)
+	var trap_ok := false
+	for e in world.entities.values():
+		if e is Zone and e.global_position.distance_to(spot) < 2.0:
+			trap_ok = true
+	checks["... the champion walks up and places it at the cursor"] = trap_ok and c.pending_cast == null
+	c.command("move", [center])
+	checks["a move order cancels a queued cast"] = c.pending_cast == null
+
+	# Flash during a cast: the spell comes out where you land.
+	c.teleport(Vector2(600, 1250))
+	c.cooldowns.q = 0.0
+	c.mana = c.stats.max_mana
+	c.sum_cd[0] = 0.0
+	var cast_ok := c.cast("q", Vector2(1600, 1250), 0)
+	var flashed := c.use_summoner(0, Vector2(600, 1650), 0)
+	checks["Flash can be used while Piercing Bolt charges"] = cast_ok and flashed and c.casting != null
+	await _frames(24)
+	var bolt := _first_projectile("q")
+	checks["... and the bolt leaves from where Gizmo landed"] = bolt != null and absf(bolt.global_position.y - c.global_position.y) < 20.0 \
+		and c.global_position.y > 1500.0
+	if bolt != null:
+		world.despawn(bolt)
+
+	# Skillshots and dashes go over terrain (the wall spans x 768-912 at y 312-456).
+	c.teleport(Vector2(560, 384))
+	c.cooldowns.q = 0.0
+	c.cast("q", Vector2(1600, 384), 0)
+	await _frames(45)
+	bolt = _first_projectile("q")
+	checks["Piercing Bolt flies over terrain"] = bolt != null and bolt.global_position.x > 960.0
+	if bolt != null:
+		world.despawn(bolt)
+	c.teleport(Vector2(640, 384))
+	Effects.run([{"type": "dash", "to": "aim", "distance": 500, "speed": 2500}],
+		{"caster": c, "team": c.team, "pos": Vector2(1100, 384), "dir": Vector2.RIGHT, "origin": c.global_position})
+	await _frames(20)
+	checks["dashes cross terrain"] = c.global_position.x > 1050.0 and not world.map.is_wall(c.global_position)
+	c.teleport(Vector2(640, 384))
+	Effects.run([{"type": "dash", "to": "aim", "distance": 500, "speed": 2500}],
+		{"caster": c, "team": c.team, "pos": Vector2(840, 384), "dir": Vector2.RIGHT, "origin": c.global_position})
+	await _frames(20)
+	checks["a dash ending inside terrain lands next to it"] = c.forced == null and not world.map.is_wall(c.global_position)
+
+	# Abilities don't hit structures; basic attacks hit turrets for AD + 60% AP (magic for AP champions, never crits).
+	var tower: Tower = world.spawn("tower", {"team": 1, "pos": Vector2(2300, 900)})
+	Effects.run([{"type": "area", "radius": 300, "effects": [{"type": "damage", "amount": 100}]}],
+		{"caster": c, "team": c.team, "pos": tower.global_position, "origin": tower.global_position, "src_slot": "q"})
+	checks["area spells skip turrets"] = is_equal_approx(tower.hp, tower.stats.max_hp)
+	c.base_stats.ability_power = 100.0
+	c.recompute_stats()
+	checks["turret damage is AD + 60% AP, as magic damage when AP beats bonus AD"] = is_equal_approx(c.attack_damage_against(tower),
+		c.stats.attack_damage + 60.0) and c.attack_damage_type(tower, c.attack_def) == "magic" and c.attack_damage_type(foe, c.attack_def) == "physical"
+	c.base_stats.ability_power = 0.0
+	c.base_stats.crit_chance = 1.0
+	c.recompute_stats()
+	c.teleport(tower.global_position - Vector2(500, 0))
+	c.perform_attack(tower, 0.0)
+	var shot: Projectile = null
+	for e in world.entities.values():
+		if e is Projectile and e.mode == "attack":
+			shot = e
+	checks["basic attacks never crit turrets"] = shot != null and not shot.crit
+	c.base_stats.crit_chance = 0.0
+	c.recompute_stats()
+	for e in world.entities.values():
+		if e is Projectile:
+			world.despawn(e)
+	world.despawn(tower)
+
+	# Turrets that can't be damaged yet can't be targeted.
+	var outer: Tower = world.spawn("tower", {"team": 1, "lane": 0, "order": 0, "pos": Vector2(2500, 400)})
+	var inner: Tower = world.spawn("tower", {"team": 1, "lane": 0, "order": 1, "pos": Vector2(2500, 1400)})
+	c.teleport(inner.global_position - Vector2(400, 0))
+	c.command("attack", [inner.net_id])
+	checks["clicking a protected turret doesn't attack it"] = inner.is_protected() and c.attack_target != inner
+	checks["attack-move and hovering skip protected turrets"] = c.amove_pick(inner.global_position, 40.0) != inner \
+		and world.pick_unit(inner.global_position, c.team, true, 14.0, true, false, true) != inner \
+		and world.pick_unit(inner.global_position, c.team, true, 14.0, true) == inner
+	world.despawn(outer)
+	world.despawn(inner)
+
+	# Minions: League stats, size and damage.
+	var expect := {"melee": [477.0, 12.0, 48.0, 21.0], "ranged": [296.0, 24.0, 48.0, 14.0], "siege": [912.0, 41.0, 65.0, 60.0], "super": [1600.0, 230.0, 65.0, 60.0]}
+	var stats_ok := true
+	for type in expect:
+		var m: Minion = world.spawn("minion", {"team": 1, "type": type, "pos": Vector2(2400, 1600)})
+		var e: Array = expect[type]
+		stats_ok = stats_ok and is_equal_approx(m.stats.max_hp, e[0]) and is_equal_approx(m.stats.attack_damage, e[1]) \
+			and is_equal_approx(m.radius, e[2]) and is_equal_approx(m.gold_value, e[3]) and is_equal_approx(m.stats.move_speed, 325.0)
+		if type == "melee":
+			checks["minions deal half damage to champions"] = is_equal_approx(m.attack_damage_against(c), 6.0)
+		world.despawn(m)
+	checks["minions have League's health, damage, size, gold and speed"] = stats_ok
+	var late: Minion = world.spawn("minion", {"team": 1, "type": "melee", "pos": Vector2(2400, 1600), "upgrades": 5})
+	checks["minions grow every 90 seconds (sixth upgrade: 601.75 HP)"] = is_equal_approx(late.stats.max_hp, 601.75)
+	world.despawn(late)
+
+	# Minion targeting: minions first, unless a champion hurts an allied champion (call for help).
+	var at := Vector2(2000, 1200)
+	var red_minion: Minion = world.spawn("minion", {"team": 1, "type": "melee", "pos": at})
+	var blue_minion: Minion = world.spawn("minion", {"team": 0, "type": "melee", "pos": at + Vector2(200, 0)})
+	var red_ally: Champion = world.spawn("champion", {"peer": 2002, "team": 1, "character": "sir_bonk", "name": "Red ally", "pos": at + Vector2(0, 300)})
+	c.teleport(at + Vector2(-150, 200))
+	c.aggro_time = -100.0
+	red_minion._retarget()
+	checks["minions prefer an enemy minion over a nearby champion"] = red_minion.attack_target == blue_minion
+	red_ally.take_damage(10.0, c, "magic", {"ability": "q"})
+	red_minion._retarget()
+	checks["skillshots don't call minions for help"] = red_minion.attack_target == blue_minion
+	red_ally.take_damage(10.0, c, "physical", {"attack": true})
+	red_minion._retarget()
+	checks["hitting an enemy champion draws its minions onto you"] = red_minion.attack_target == c
+	world.despawn(red_minion)
+	world.despawn(blue_minion)
+	world.despawn(red_ally)
+	world.champions.erase(2002)
+
+	# Passive gold.
+	var old_time := world.time
+	world.time = 200.0
+	c.gold = 0.0
+	world._trickle(1.0)
+	checks["passive gold is 16 per 10 seconds"] = is_equal_approx(c.gold, 1.6)
+	world.time = 60.0
+	c.gold = 0.0
+	world._trickle(1.0)
+	checks["... and starts at 1:50"] = c.gold == 0.0
+	world.time = old_time
+
+	# Quick buy: right-click an item you can't afford to buy the parts that use the most gold.
+	for i in Champion.ITEM_SLOTS:
+		c.items[i] = null
+	c._items_changed()
+	c.gold = 1500.0
+	checks["quick buy picks Pickaxe + Cloak (1475) over B.F. Sword (1300)"] = c.quick_buy_plan("infinity_edge") == ["pickaxe", "cloak_of_agility"] \
+		or c.quick_buy_plan("infinity_edge") == ["cloak_of_agility", "pickaxe"]
+	world.hud.shop._buy("infinity_edge")
+	checks["right-click quick buy spends the gold on those parts"] = c.has_item("pickaxe") and c.has_item("cloak_of_agility") and is_equal_approx(c.gold, 25.0)
+	c.gold = 1300.0
+	checks["... and keeps counting owned parts"] = c.quick_buy_plan("infinity_edge") == ["b_f_sword"]
+
+	# Rearranging items outside the shop (drag one HUD slot onto another).
+	var from := -1
+	for i in Champion.ITEM_SLOTS:
+		if c.items[i] != null and c.items[i].id == "pickaxe":
+			from = i
+	var drag := {"hud_item": from}
+	var dropped_ok: bool = world.hud.item_boxes[5]._can_drop_data(Vector2.ZERO, drag)
+	world.hud.item_boxes[5]._drop_data(Vector2.ZERO, drag)
+	checks["dragging an item onto another HUD slot swaps them"] = from >= 0 and dropped_ok and c.items[5] != null and c.items[5].id == "pickaxe"
+
+	# Ward trinket.
+	c.teleport(center)
+	c.trinket_charges = 4
+	checks["placing a Stealth Ward uses a charge"] = c.use_trinket(center + Vector2(300, 0)) and c.trinket_charges == 3
+	var wards := world.units.filter(func(u): return u is Summon and u.is_ward and u.owner_unit == c)
+	checks["the ward has 3 health and 900 sight"] = wards.size() == 1 and is_equal_approx(wards[0].stats.max_hp, 3.0) and is_equal_approx(wards[0].stats.vision, 900.0)
+	await _frames(70)
+	wards[0].flags = wards[0]._compute_flags()
+	checks["the ward turns invisible to enemies after a second"] = wards[0].has_status("stealth") and not world.can_see(wards[0], 1)
+	for i in 3:
+		c.use_trinket(center + Vector2(300, 100.0 * i))
+	checks["a fourth ward replaces the oldest"] = world.units.filter(func(u): return u is Summon and u.is_ward and not u.dead and u.owner_unit == c).size() == 3
+
+	# Runes: AD champions with mana get AD rune pages; keystones are announced and shown on the HUD.
+	checks["Gizmo counts as a marksman (not a mage)"] = Champion.role_of(c.def) == "marksman" and Champion.role_of(Game.characters.ember) == "mage"
+	c.rune_state = RuneState.new(c, Game.default_runes("gizmo"))
+	c.recompute_stats()
+	checks["adaptive force gives Gizmo attack damage, not ability power"] = c.stats.ability_power == 0.0 and c.stats.attack_damage > c.base_stats.attack_damage
+	for i in 3:
+		foe.take_damage(5.0, c, "true", {"attack": true})
+	var view: Array = c.rune_state.keystone_view()
+	checks["Press the Attack procs and the HUD shows its cooldown"] = view[0] == 8005 and float(view[1]) > 0.0
+
+	# Kill feed: portraits of the killer, the assists and the victim.
+	var helper: Champion = world.spawn("champion", {"peer": 2003, "team": 0, "character": "mender", "name": "Helper", "pos": center})
+	foe.take_damage(5.0, helper, "true")
+	foe.take_damage(100000.0, c, "true")
+	var entry: Dictionary = world.hud.feed[world.hud.feed.size() - 1] if not world.hud.feed.is_empty() else {}
+	checks["the kill feed shows killer, victim and assists"] = entry.get("kind") == "kill" and int(entry.k) == c.net_id \
+		and int(entry.v) == foe.net_id and helper.net_id in entry.a
+	checks["characters without a portrait file get one from their idle sprite"] = Hud._sprite_portrait(Game.characters.clorinde.sprite) != null
+
+	# Replication of the new HUD values (CS, wards, keystone, route) to clients.
+	c.cs = 7
+	c.command("move", [center + Vector2(600, 500)])
+	var copy: Champion = world.spawn("champion", {"peer": 2004, "team": 0, "character": "gizmo", "name": "Copy", "pos": center})
+	copy.puppet = true
+	copy.apply_net_state(c.net_state())
+	checks["CS, ward charges, keystone and route reach clients"] = copy.cs == 7 and copy.trinket_charges == c.trinket_charges \
+		and copy.rune_keystone == 8005 and copy.nav_target.distance_to(center + Vector2(600, 500)) < 1.0
+	world.despawn(copy)
+	world.champions.erase(2004)
+	await _frames(3)
+	await get_tree().process_frame
+	checks["the minimap draws your route"] = not world.hud._path.is_empty()
+
+	# Camera and settings.
+	world.cam_locked = true
+	c.command("stop", [])
+	await _frames(2)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	checks["the locked camera sits exactly on the champion"] = not world.camera.position_smoothing_enabled \
+		and world.camera.global_position.is_equal_approx(c.global_position)
+	Game.prefs.target_champs_mode = "always"
+	checks["target champions only can be always on"] = world.target_champions_only()
+	Game.prefs.target_champs_mode = "hold"
+	checks["fullscreen is a saved setting"] = Game.prefs.has("fullscreen") and Controls.label("trinket") == "4" and Controls.label("item_4") == "5"
+
+	var passed := true
+	for label in checks:
+		if checks[label]:
+			print("[feedback] OK: ", label)
+		else:
+			push_error("[feedback] " + label)
+			passed = false
+	print("[feedback] ", "passed" if passed else "failed")
+	get_tree().quit(0 if passed else 1)

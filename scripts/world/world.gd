@@ -7,12 +7,14 @@ const SNAP_EVERY := 3
 const SNAP_DT := SNAP_EVERY / 60.0
 const SNAP_CHUNK := 300  # floats per snapshot packet (~1.2 KB, under the usual 1392-byte MTU)
 const XP_RANGE := 1400.0
-const MINION_XP_MULTIPLIER := 0.92
-const SHARED_MINION_XP_MULTIPLIER := 1.2
+const MINION_XP_MULTIPLIER := 0.95          # League: a lane minion gives 95% of its XP to a lone champion
+const SHARED_MINION_XP_MULTIPLIER := 1.24   # ...and 124% split between several nearby champions
 const KILL_GOLD := 300.0
 const ASSIST_GOLD := 150.0
 const TOWER_GOLD := 50.0
-const BRUSH_REVEAL := 2.0       # seconds a champion stays revealed after damaging a champion from brush
+const PASSIVE_GOLD := 1.6         # gold per second for every champion (16 per 10 s, ~20% below League's 20.4)
+const PASSIVE_GOLD_START := 110.0 # passive gold starts at 1:50 (maps: "gold_per_second", "gold_start")
+const BRUSH_REVEAL := 2.0       # seconds a champion stays revealed after attacking or casting a targeted spell from brush
 const RELIC_FIRST := 75.0
 const RELIC_RESPAWN := 90.0
 const RELIC_COLOR := Color("78f5a8")
@@ -90,6 +92,7 @@ var _amove_ring := 0.0             # attack-range ring flash after an instant at
 var _steer_sent := Vector2.ZERO    # last WASD direction sent to the host
 var _sion_q_held := false
 var _sion_steer_timer := 0.0
+var _champs_toggle := false        # target-champions-only switched on by its key ("toggle" mode)
 var pings := PINGS.new()
 
 
@@ -131,8 +134,10 @@ func start(cfg: Dictionary) -> void:
 	add_child(indicator)
 	camera = Camera2D.new()
 	camera.zoom = Vector2.ONE * cam_zoom
-	camera.position_smoothing_enabled = true
-	camera.position_smoothing_speed = 10.0
+	# A locked camera sits exactly on the champion (no trailing); _process moves it after the
+	# units moved (see process_priority) and Camera2D applies an unsmoothed move immediately.
+	camera.position_smoothing_enabled = false
+	process_priority = 100
 	camera.limit_left = -300
 	camera.limit_top = -300
 	camera.limit_right = int(map.size.x) + 300
@@ -793,7 +798,7 @@ func _trickle(delta: float) -> void:
 	_trickle_t += delta
 	if _trickle_t >= 1.0:
 		_trickle_t -= 1.0
-		var g := float(map.data.get("gold_per_second", 2.04 if time >= 110.0 else 0.0))
+		var g := float(map.data.get("gold_per_second", PASSIVE_GOLD)) if time >= float(map.data.get("gold_start", PASSIVE_GOLD_START)) else 0.0
 		for c in champions.values():
 			c.gold += g
 			if aram:
@@ -891,8 +896,14 @@ func _fx_visible(kind: String, data: Dictionary) -> bool:
 	return not any
 
 
-## Stealthed units are revealed when an enemy champion is very close.
+## Stealthed units are revealed when an enemy champion is very close; stealthed wards only by
+## true sight (an enemy Control Ward that sees them).
 func _revealed(u: Unit, viewer_team: int) -> bool:
+	if u.is_ward:
+		for w in units:
+			if w.team == viewer_team and w.reveal and not w.dead and w.global_position.distance_to(u.global_position) <= float(w.stats.get("vision", 0.0)) + u.radius:
+				return true
+		return false
 	for c in champions.values():
 		if c.team == viewer_team and not c.dead and c.global_position.distance_to(u.global_position) < 250.0:
 			return true
@@ -901,6 +912,14 @@ func _revealed(u: Unit, viewer_team: int) -> bool:
 
 func respawn_time(level: int) -> float:
 	return 3.0 if map.lane_count() == 0 else 4.0 + 1.25 * level
+
+
+## Average champion level of the match (ward trinket timings scale with it, like League).
+func average_level() -> float:
+	var total := 0.0
+	for c in champions.values():
+		total += c.level
+	return total / maxf(champions.size(), 1.0)
 
 
 func is_protected(t: Tower) -> bool:
@@ -955,10 +974,21 @@ func on_damage(victim: Unit, amount: float, src, dtype: String, hit := {}) -> vo
 		for t in structures:
 			if t.team == victim.team and t.global_position.distance_to(victim.global_position) < t.stats.attack_range + 300.0:
 				t.aggro(src)
-		# Damaging a champion from brush gives your position away for a moment.
-		if victim.team != src.team and victim.team <= 1 and fog != null and fog.enabled and fog.in_brush(src):
-			src.add_status({"type": "reveal", "team": victim.team, "time": float(map.data.get("brush_reveal", BRUSH_REVEAL))},
-				src, "brush_reveal")
+	# Basic attacks and targeted spells (not skillshots or areas) call nearby minions for help.
+	if src != null and src.is_champion and victim.team != src.team and (hit.get("attack", false) or hit.get("targeted", false)):
+		src.aggro_target_id = victim.net_id
+		src.aggro_time = time
+
+
+## Basic attacks and targeted spells used from brush give the user's position away for a moment
+## (skillshots and areas don't). Allied targets (heals, shields) don't count.
+func brush_reveal(src: Unit, target = null) -> void:
+	if not is_server or src == null or not src.is_champion or src.team > 1 or fog == null or not fog.enabled or not fog.in_brush(src):
+		return
+	if target is Unit and target.team == src.team:
+		return
+	src.add_status({"type": "reveal", "team": 1 - src.team, "time": float(map.data.get("brush_reveal", BRUSH_REVEAL))},
+		src, "brush_reveal")
 
 
 func on_unit_died(u: Unit, killer) -> void:
@@ -990,7 +1020,11 @@ func on_unit_died(u: Unit, killer) -> void:
 		for h in helpers:
 			h.add_gold(ASSIST_GOLD / helpers.size(), u.global_position)
 			h.on_takedown(u, true)
-		fx("kill", {"k": ck.net_id if ck != null else 0, "v": u.net_id})
+		var executor := ""
+		if ck == null and is_instance_valid(killer):
+			executor = "tower" if killer is Tower else ("minion" if killer is Minion else ("monster" if killer is Monster else ""))
+		fx("kill", {"k": ck.net_id if ck != null else 0, "v": u.net_id, "a": helpers.map(func(h): return h.net_id),
+			"kk": "champion" if ck != null else executor, "kt": ck.team if ck != null else (killer.team if is_instance_valid(killer) else 2)})
 		_give_xp(u.global_position, u.team, 90.0 + 30.0 * u.level, ck)
 	else:
 		if is_instance_valid(credit) and credit is Champion:
@@ -1029,7 +1063,7 @@ func _give_xp(pos: Vector2, victim_team: int, amount: float, killer, lane_minion
 		return
 	var total_multiplier := 1.0 + 0.2 * (near.size() - 1)
 	if lane_minion:
-		total_multiplier = MINION_XP_MULTIPLIER * (SHARED_MINION_XP_MULTIPLIER if near.size() > 1 else 1.0)
+		total_multiplier = SHARED_MINION_XP_MULTIPLIER if near.size() > 1 else MINION_XP_MULTIPLIER
 	var share := amount * total_multiplier / near.size()
 	for c in near:
 		c.gain_xp(share)
@@ -1120,14 +1154,17 @@ func nearest_enemy(pos: Vector2, team: int, max_d: float, champs_only := false, 
 	return best
 
 
-## Unit under/near a point. enemy=true picks enemies of `team`, otherwise allies.
-func pick_unit(pos: Vector2, team: int, enemy: bool, tolerance: float, structs := true, champs_only := false) -> Unit:
+## Unit under/near a point. enemy=true picks enemies of `team`, otherwise allies. `attack_only`
+## skips structures that can't be damaged yet (clicks and hovering for attacks).
+func pick_unit(pos: Vector2, team: int, enemy: bool, tolerance: float, structs := true, champs_only := false, attack_only := false) -> Unit:
 	var best: Unit = null
 	var bd := INF
 	for u in units:
 		if u.dead or not u.targetable() or (u.is_structure and not structs) or (u.team != team) != enemy or (champs_only and not u.is_champion):
 			continue
 		if enemy and not can_see(u, team):
+			continue
+		if attack_only and u.is_structure and u.is_protected():
 			continue
 		var d: float = u.global_position.distance_to(pos) - u.selection_radius()
 		if d <= tolerance and d < bd:
@@ -1181,7 +1218,7 @@ func _unhandled_input(event: InputEvent) -> void:
 							amove_armed = false
 							attack_move(click_world)
 						else:
-							var target := pick_unit(click_world, local_team, true, 14.0, true, Input.is_action_pressed("target_champions"))
+							var target := pick_unit(click_world, local_team, true, 14.0, true, target_champions_only(), true)
 							if target != null:
 								send_command("attack", [target.net_id])
 							else:
@@ -1220,6 +1257,8 @@ func _unhandled_input(event: InputEvent) -> void:
 		slot = "i%d" % (int(act.substr(5)) - 1)
 	elif act.begins_with("summoner_"):
 		slot = "s%d" % (int(act.substr(9)) - 1)
+	elif act == "trinket":
+		slot = "t"
 	if slot != "":
 		var wm := event as InputEventWithModifiers
 		var mods: bool = wm != null and (wm.ctrl_pressed or wm.alt_pressed)
@@ -1252,6 +1291,10 @@ func _unhandled_input(event: InputEvent) -> void:
 			hud.show_scores(pressed)
 		"camera_center":
 			_cam_hold = pressed
+		"target_champions":
+			if pressed and Game.prefs.target_champs_mode == "toggle":
+				_champs_toggle = not _champs_toggle
+				hud.notice("Targeting champions only" if _champs_toggle else "Targeting all units")
 	if not pressed:
 		return
 	match act:
@@ -1276,6 +1319,17 @@ func _unhandled_input(event: InputEvent) -> void:
 			cam_locked = not cam_locked
 
 
+## True while clicks and targeted spells should only pick enemy champions (see Settings: held key,
+## toggled by its key, or always on).
+func target_champions_only() -> bool:
+	match str(Game.prefs.target_champs_mode):
+		"always":
+			return true
+		"toggle":
+			return _champs_toggle
+	return keys_free() and Input.is_action_pressed("target_champions")
+
+
 ## Attack-move at the cursor: the host attacks the enemy in range closest to the cursor (or to
 ## you - see Settings), otherwise walks there attacking whatever comes into range.
 func attack_move(at := Vector2.INF) -> void:
@@ -1294,6 +1348,15 @@ func send_build() -> void:
 	var b = Game.prefs.builds.get(local_champion.char_id, [])
 	send_command("build", [b if b is Array else []])
 	send_command("autobuy", [bool(Game.prefs.autobuy)])
+
+
+## Round trip time to the host in milliseconds (-1 when hosting or offline).
+func ping_ms() -> int:
+	if is_server or not online:
+		return -1
+	var p := multiplayer.multiplayer_peer as ENetMultiplayerPeer
+	var host := p.get_peer(1) if p != null else null
+	return int(host.get_statistic(ENetPacketPeer.PEER_ROUND_TRIP_TIME)) if host != null else -1
 
 
 ## True while keyboard keys should control the game (not typing in a text box or in a menu).
@@ -1325,10 +1388,13 @@ func channeling(slot: String) -> bool:
 	return c.flags & Unit.F_CAST != 0 and ab != null and Effects.num(ab.cast_time, {"caster": c}, 0.0) > 0.0
 
 
-## The ability (or item active / summoner spell) bound to an aim slot: q/w/e/r, i0..i5 or s0/s1.
+## The ability (or item active / summoner spell) bound to an aim slot: q/w/e/r, i0..i5, s0/s1 or
+## t (the ward trinket).
 func aim_ability(slot: String):
 	if local_champion == null:
 		return null
+	if slot == "t":
+		return Champion.TRINKET
 	if slot.begins_with("i"):
 		var it = local_champion.item_def(int(slot.substr(1)))
 		return it.active if it != null else null
@@ -1341,7 +1407,7 @@ func _right_click(with_fx: bool) -> void:
 	if local_champion == null or local_champion.dead:
 		return
 	var m := get_global_mouse_position()
-	var t := pick_unit(m, local_team, true, 14.0, true, Input.is_action_pressed("target_champions"))
+	var t := pick_unit(m, local_team, true, 14.0, true, target_champions_only(), true)
 	if t != null:
 		send_command("attack", [t.net_id])
 		if with_fx:
@@ -1368,9 +1434,16 @@ func _cast(slot: String, at := Vector2.INF) -> void:
 			return
 	var tid := 0
 	if ab.targeting == "unit" or ab.targeting == "ally":
-		var t := pick_unit(m, local_team, ab.targeting == "unit", 14.0, bool(ab.get("structures", false)), Input.is_action_pressed("target_champions"))
+		var t := pick_unit(m, local_team, ab.targeting == "unit", 14.0, bool(ab.get("structures", false)), target_champions_only())
 		if t != null:
 			tid = t.net_id
+	if slot == "t":
+		if c.trinket_charges > 0:
+			send_command("trinket", [m])
+			_sfx("cast", c.global_position, -14.0)
+		else:
+			hud.notice("No ward charges - next one in %ds" % ceili(c.trinket_cd))
+		return
 	if slot.begins_with("i"):
 		var i := int(slot.substr(1))
 		if c.items[i] != null and c.items[i].cd <= 0.0:
@@ -1467,7 +1540,7 @@ func _process(delta: float) -> void:
 		camera.offset = Vector2.ZERO
 	hover_unit = null
 	if local_champion != null and not ended and not closing and get_viewport().gui_get_hovered_control() == null:
-		hover_unit = pick_unit(get_global_mouse_position(), local_team, true, 10.0, true, Input.is_action_pressed("target_champions"))
+		hover_unit = pick_unit(get_global_mouse_position(), local_team, true, 10.0, true, target_champions_only(), true)
 	var want_attack := hover_unit != null or amove_armed
 	if want_attack != _cursor_attack:
 		_cursor_attack = want_attack
@@ -1501,7 +1574,9 @@ func _draw_indicator(n: Node2D) -> void:
 	var ind: Dictionary = ab.get("indicator", {})
 	var rng := Effects.num(ab.range, {"caster": c, "rank": maxi(int(c.ranks.get(aim_slot, 1)), 1)}, 700.0)
 	var on_cd: bool = c.cooldowns.get(aim_slot, 0.0) > 0.0
-	if aim_slot.begins_with("i"):
+	if aim_slot == "t":
+		on_cd = c.trinket_charges <= 0
+	elif aim_slot.begins_with("i"):
 		on_cd = c.items[int(aim_slot.substr(1))] != null and c.items[int(aim_slot.substr(1))].cd > 0.0
 	elif aim_slot.begins_with("s"):
 		var spd = c.summoner_def(int(aim_slot.substr(1)))
@@ -1548,6 +1623,10 @@ func _draw_indicator(n: Node2D) -> void:
 		_:
 			if ab.targeting == "self":
 				_draw_disc(n, p, r if r > 0.0 else c.radius + 20.0, col)
+			elif bool(ab.get("approach", false)) and to.length() > rng:
+				# Out of range: the champion walks into range, then casts at the cursor.
+				n.draw_dashed_line(end, m, Color(col, 0.6), 2.0, 12.0)
+				_draw_disc(n, m, r if r > 0.0 else 40.0, Color(col, 0.75))
 			else:
 				_draw_disc(n, end, r if r > 0.0 else 40.0, col)
 

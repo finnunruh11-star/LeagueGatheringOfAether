@@ -5,6 +5,9 @@ extends CanvasLayer
 class DrawControl extends Control:
 	var draw_func: Callable
 	var tip_func: Callable  # optional: builds a custom tooltip Control
+	var drag_func: Callable  # optional drag & drop: (at) -> data or null, (at, data) -> bool, (at, data)
+	var can_drop_func: Callable
+	var drop_func: Callable
 
 	func _draw() -> void:
 		if draw_func.is_valid():
@@ -12,6 +15,16 @@ class DrawControl extends Control:
 
 	func _make_custom_tooltip(for_text: String) -> Object:
 		return tip_func.call() if tip_func.is_valid() and for_text != "" else null
+
+	func _get_drag_data(at: Vector2) -> Variant:
+		return drag_func.call(at) if drag_func.is_valid() else null
+
+	func _can_drop_data(at: Vector2, data: Variant) -> bool:
+		return can_drop_func.is_valid() and bool(can_drop_func.call(at, data))
+
+	func _drop_data(at: Vector2, data: Variant) -> void:
+		if drop_func.is_valid():
+			drop_func.call(at, data)
 
 
 class Scoreboard extends DrawControl:
@@ -29,20 +42,28 @@ class Scoreboard extends DrawControl:
 
 
 const SLOT_KEYS := ["p", "q", "w", "e", "r"]
-const BAR_W := 966.0
+const BAR_W := 1016.0
 const SLOT_X := 262.0
 const SUM_X := 614.0    # the two summoner spell slots, right of R
 const ITEM_X := 722.0
+const TRINKET_X := 874.0  # the ward trinket, right of the six item slots
+const GOLD_X := 924.0     # gold and the shop button
+const FEED_TIME := 10000  # ms a kill feed line stays
+const FEED_ROW := 38.0
+const ALLY_RING := Color(0.3, 0.6, 1.0)
+const ENEMY_RING := Color(0.95, 0.28, 0.22)
 
 var world: World
 var font: Font
 var top_label: Label
-var feed_label: RichTextLabel
-var _feed_dirty := false
+var stats_panel: DrawControl    # top right: KDA, CS, game time, FPS / ping
+var kill_feed: DrawControl      # right side: kills with portraits, plus announcements
 var center_label: Label
 var bar: DrawControl
 var slot_boxes := {}
 var item_boxes: Array = []
+var trinket_box: DrawControl
+var _item_press := -1           # item slot clicked (used on release unless it was dragged)
 var sum_boxes: Array = []
 var help_label: Label
 var ui_root: Control
@@ -62,7 +83,11 @@ var inspect_label: Label
 var end_panel: PanelContainer
 var end_label: Label
 var menu_panel: PanelContainer
-var feed: Array = []
+var feed: Array = []            # kill feed entries: {kind: "kill" | "text", t (ms), ...}
+var champs_label: Label
+var _path := PackedVector2Array()  # minimap path line of the local champion
+var _path_goal := Vector2.INF
+var _path_t := 0.0
 var _tooltips_for := ""
 var _tooltip_key := ""
 var _ability_tip: PanelContainer
@@ -128,15 +153,21 @@ func _ready() -> void:
 
 	top_label = _label(root, 26, HORIZONTAL_ALIGNMENT_CENTER)
 	_place(top_label, 0.5, 0.0, -300, 8, 600, 40)
-	feed_label = RichTextLabel.new()
-	feed_label.bbcode_enabled = true
-	feed_label.scroll_active = false
-	feed_label.mouse_filter = Control.MOUSE_FILTER_IGNORE
-	feed_label.add_theme_font_size_override("normal_font_size", 16)
-	feed_label.add_theme_constant_override("outline_size", 6)
-	feed_label.add_theme_color_override("font_outline_color", Color.BLACK)
-	root.add_child(feed_label)
-	_place(feed_label, 1.0, 0.0, -620, 10, 600, 200)
+	stats_panel = DrawControl.new()
+	stats_panel.draw_func = _draw_stats_panel
+	stats_panel.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_place(stats_panel, 1.0, 0.0, -352, 8, 344, 56)
+	root.add_child(stats_panel)
+	kill_feed = DrawControl.new()
+	kill_feed.draw_func = _draw_kill_feed
+	kill_feed.mouse_filter = Control.MOUSE_FILTER_IGNORE
+	_place(kill_feed, 1.0, 0.0, -472, 72, 464, FEED_ROW * 7)
+	root.add_child(kill_feed)
+	champs_label = _label(root, 15, HORIZONTAL_ALIGNMENT_CENTER)
+	champs_label.text = "TARGETING CHAMPIONS ONLY"
+	champs_label.add_theme_color_override("font_color", Color(1, 0.55, 0.45))
+	_place(champs_label, 0.5, 1.0, -200, -262, 400, 24)
+	champs_label.visible = false
 	center_label = _label(root, 36, HORIZONTAL_ALIGNMENT_CENTER)
 	_place(center_label, 0.5, 0.3, -400, 0, 800, 110)
 	help_label = _label(root, 13, HORIZONTAL_ALIGNMENT_LEFT)
@@ -192,13 +223,24 @@ func _ready() -> void:
 		s.draw_func = func(c): _draw_item_slot(c, idx)
 		s.position = Vector2(ITEM_X + (i % 3) * 50, 12 + (i / 3) * 50)
 		s.size = Vector2(44, 44)
-		s.gui_input.connect(func(ev): _slot_click(ev, "i%d" % idx))
+		s.gui_input.connect(func(ev): _item_click(ev, idx))
 		s.tip_func = func():
 			var ch := world.local_champion
 			var it = ch.item_def(idx) if is_instance_valid(ch) else null
 			return ItemUI.tooltip(it) if it != null else null
+		# Drag an item onto another slot to swap them (works anywhere, not only in the shop).
+		s.drag_func = func(_at): return _item_drag(idx)
+		s.can_drop_func = func(_at, data): return data is Dictionary and data.has("hud_item") and int(data.hud_item) != idx
+		s.drop_func = func(_at, data): world.send_command("swap_items", [int(data.hud_item), idx])
 		bar.add_child(s)
 		item_boxes.append(s)
+	trinket_box = DrawControl.new()
+	trinket_box.draw_func = _draw_trinket
+	trinket_box.position = Vector2(TRINKET_X, 37)
+	trinket_box.size = Vector2(44, 44)
+	trinket_box.gui_input.connect(func(ev): _slot_click(ev, "t"))
+	trinket_box.tooltip_text = "%s (%s)\n%s" % [Champion.TRINKET.name, Controls.label("trinket"), Champion.TRINKET.description]
+	bar.add_child(trinket_box)
 	for i in 2:
 		var s := DrawControl.new()
 		var idx := i
@@ -212,7 +254,7 @@ func _ready() -> void:
 	var shop_btn := Button.new()
 	shop_btn.text = "Shop (P)"
 	shop_btn.focus_mode = Control.FOCUS_NONE
-	shop_btn.position = Vector2(ITEM_X + 152, 70)
+	shop_btn.position = Vector2(GOLD_X, 70)
 	shop_btn.size = Vector2(84, 36)
 	shop_btn.pressed.connect(toggle_shop)
 	bar.add_child(shop_btn)
@@ -497,6 +539,7 @@ func refresh_controls() -> void:
 	help_label.text = Controls.help_text(Game.prefs.move_mode)
 	for key in plus_buttons:
 		plus_buttons[key].tooltip_text = "Level up (Ctrl+%s)" % Controls.label("ability_" + key)
+	trinket_box.tooltip_text = "%s (%s)\n%s" % [Champion.TRINKET.name, Controls.label("trinket"), Champion.TRINKET.description]
 	_tooltip_key = ""
 
 
@@ -589,36 +632,38 @@ func show_end(t: int) -> void:
 	end_label.add_theme_color_override("font_color", Color(1, 0.85, 0.3) if won else Color(1, 0.4, 0.35))
 
 
+## A text line in the kill feed (turrets, objectives, players leaving...).
 func announce(text: String, col: Color) -> void:
-	announce_rich("[color=#%s]%s[/color]" % [col.to_html(false), text])
+	_push_feed({"kind": "text", "text": text, "color": col})
 
 
-## Adds a BBCode line to the kill feed (top right).
-func announce_rich(bbcode: String) -> void:
-	feed.append([bbcode, Time.get_ticks_msec()])
-	if feed.size() > 6:
+## A champion kill in the kill feed: the killer's portrait with smaller assist portraits, crossed
+## swords, then the victim. `killer_kind`: "champion", "tower", "minion", "monster" or "".
+func announce_kill(killer_id: int, victim_id: int, assists: Array, killer_kind: String, killer_team: int) -> void:
+	_push_feed({"kind": "kill", "k": killer_id, "v": victim_id, "a": assists, "kk": killer_kind, "kt": killer_team})
+
+
+func _push_feed(e: Dictionary) -> void:
+	e.t = Time.get_ticks_msec()
+	feed.append(e)
+	while feed.size() > 7:
 		feed.pop_front()
-	_feed_dirty = true
 
 
 func _process(_delta: float) -> void:
 	_update_inspection()
-	var t := int(world.time)
-	top_label.text = "%s %d  :  %d %s      %02d:%02d" % [Game.TEAM_NAMES[0], world.kills[0], world.kills[1], Game.TEAM_NAMES[1], t / 60, t % 60]
+	top_label.text = "%s %d  :  %d %s" % [Game.TEAM_NAMES[0], world.kills[0], world.kills[1], Game.TEAM_NAMES[1]]
 	if world.urf:
 		top_label.text += "      ARURF"
 	if world.jungle != null:
 		top_label.text += "      Drakes %d : %d" % [world.jungle.drakes[0].size(), world.jungle.drakes[1].size()]
 	var now := Time.get_ticks_msec()
-	var before := feed.size()
-	feed = feed.filter(func(f): return now - f[1] < 10000)
-	if _feed_dirty or feed.size() != before:
-		_feed_dirty = false
-		var lines := PackedStringArray()
-		for f in feed:
-			lines.append(f[0])
-		feed_label.text = "[right]%s[/right]" % "\n".join(lines)
+	feed = feed.filter(func(f): return now - int(f.t) < FEED_TIME)
+	kill_feed.queue_redraw()
+	stats_panel.queue_redraw()
 	var ch := world.local_champion
+	champs_label.visible = ch != null and not world.ended and world.target_champions_only()
+	_update_path(_delta, ch)
 	center_label.text = ""
 	if not world.started:
 		center_label.text = "Waiting for players..."
@@ -642,6 +687,7 @@ func _process(_delta: float) -> void:
 		s.queue_redraw()
 	for s in item_boxes:
 		s.queue_redraw()
+	trinket_box.queue_redraw()
 	for s in sum_boxes:
 		s.queue_redraw()
 	_place_bar()
@@ -797,16 +843,48 @@ func _build_tooltips(ch: Champion) -> void:
 		sum_boxes[i].tooltip_text = "\n".join(lines)
 
 
-## Clicking an item or summoner slot uses it (or starts aiming it).
+## Clicking a summoner or trinket slot uses it (or starts aiming it).
 func _slot_click(ev: InputEvent, slot: String) -> void:
 	if ev is InputEventMouseButton and ev.pressed and ev.button_index == MOUSE_BUTTON_LEFT:
-		var ab = world.aim_ability(slot)
-		if ab == null:
-			return
-		if ab.targeting == "self" or world.channeling(slot):
-			world._cast(slot)
-		else:
-			world.aim_slot = slot
+		_use_slot(slot)
+
+
+func _use_slot(slot: String) -> void:
+	var ab = world.aim_ability(slot)
+	if ab == null:
+		return
+	if ab.targeting == "self" or world.channeling(slot):
+		world._cast(slot)
+	else:
+		world.aim_slot = slot
+
+
+## Item slots act on release, so pressing and dragging an item moves it to another slot instead.
+func _item_click(ev: InputEvent, idx: int) -> void:
+	if ev is InputEventMouseButton and ev.button_index == MOUSE_BUTTON_LEFT:
+		if ev.pressed:
+			_item_press = idx
+		elif _item_press == idx:
+			_item_press = -1
+			_use_slot("i%d" % idx)
+
+
+## Starts dragging the item in slot `idx` (drop it on another slot to swap them).
+func _item_drag(idx: int):
+	var ch := world.local_champion
+	var it = ch.item_def(idx) if is_instance_valid(ch) else null
+	if it == null:
+		return null
+	_item_press = -1
+	var holder := Control.new()
+	var icon := DrawControl.new()
+	icon.position = Vector2(-22, -22)
+	icon.size = Vector2(44, 44)
+	icon.modulate.a = 0.85
+	icon.draw_func = func(c): ItemUI.draw_icon(c, Rect2(Vector2.ZERO, c.size), it)
+	holder.add_child(icon)
+	item_boxes[idx].set_drag_preview(holder)
+	return {"hud_item": idx}
 
 
 ## Keeps the ability bar centered, but slides it left when it would cover the minimap.
@@ -900,6 +978,8 @@ func _draw_bar(c: Control) -> void:
 		c.draw_rect(pr, ch.color.darkened(0.2))
 		c.draw_string(font, Vector2(pr.position.x, pr.position.y + 58), ch.display_name.substr(0, 2), HORIZONTAL_ALIGNMENT_CENTER, pr.size.x, 34)
 	c.draw_rect(pr, ch.team_color(), false, 3.0)
+	if ch.rune_keystone != 0:
+		_draw_keystone(c, pr.position + Vector2(14, 14), 13.0, ch)
 	c.draw_circle(Vector2(250, 100), 14.0, Color(0.1, 0.1, 0.12))
 	c.draw_arc(Vector2(250, 100), 14.0, 0, TAU, 24, Color(1, 0.85, 0.4), 2.0)
 	c.draw_string(font, Vector2(236, 106), str(ch.level), HORIZONTAL_ALIGNMENT_CENTER, 28, 15, Color(1, 0.9, 0.5))
@@ -955,7 +1035,7 @@ func _draw_bar(c: Control) -> void:
 		c.draw_rect(mb, Color(0.12, 0.12, 0.14))
 		c.draw_string(font, mb.position + Vector2(0, 11), "no mana", HORIZONTAL_ALIGNMENT_CENTER, mb.size.x, 11, Color(0.6, 0.6, 0.65))
 	# Gold
-	var gx := ITEM_X + 152
+	var gx := GOLD_X
 	c.draw_circle(Vector2(gx + 10, 32), 8.0, Color(1, 0.8, 0.2))
 	c.draw_circle(Vector2(gx + 10, 32), 5.0, Color(0.85, 0.6, 0.1))
 	c.draw_string(font, Vector2(gx + 22, 38), str(int(ch.gold)), HORIZONTAL_ALIGNMENT_LEFT, -1, 18, Color(1, 0.88, 0.4))
@@ -1023,6 +1103,39 @@ func _draw_item_slot(c: Control, i: int) -> void:
 		elif it.active != null and cd <= 0.0:
 			c.draw_rect(r, Color(0.9, 0.8, 0.45, 0.8), false, 1.5)
 	var key := Controls.label("item_%d" % (i + 1))
+	c.draw_string_outline(font, Vector2(3, 12), key, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, 3, Color.BLACK)
+	c.draw_string(font, Vector2(3, 12), key, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1, 0.95, 0.8))
+
+
+## The Stealth Ward trinket: charges (bottom right), recharge sweep and its key.
+func _draw_trinket(c: Control) -> void:
+	var r := Rect2(Vector2.ZERO, c.size)
+	c.draw_rect(r, Color(0.08, 0.09, 0.12))
+	var ch := world.local_champion
+	if ch == null:
+		return
+	if world.aram:
+		c.draw_rect(r, Color(0.25, 0.27, 0.32), false, 1.0)
+		return
+	var mid := c.size * 0.5
+	var col := Champion.WARD_COLOR
+	c.draw_colored_polygon(PackedVector2Array([mid + Vector2(0, -16), mid + Vector2(12, 0), mid + Vector2(0, 16), mid + Vector2(-12, 0)]), col.darkened(0.3))
+	c.draw_circle(mid, 7.0, Color(0.95, 0.95, 0.88))
+	c.draw_circle(mid, 3.5, Color(0.08, 0.08, 0.1))
+	var n := ch.trinket_charges
+	var frac := clampf(ch.trinket_cd / maxf(ch.trinket_cd_total, 0.01), 0.0, 1.0)
+	if n <= 0:
+		c.draw_rect(Rect2(0, c.size.y * (1.0 - frac), c.size.x, c.size.y * frac), Color(0, 0, 0, 0.65))
+		var txt := str(ceili(ch.trinket_cd))
+		c.draw_string_outline(font, Vector2(0, 29), txt, HORIZONTAL_ALIGNMENT_CENTER, c.size.x, 16, 4, Color.BLACK)
+		c.draw_string(font, Vector2(0, 29), txt, HORIZONTAL_ALIGNMENT_CENTER, c.size.x, 16)
+	elif n < Champion.TRINKET_CHARGES:
+		c.draw_rect(Rect2(2, c.size.y - 5, (c.size.x - 4) * (1.0 - frac), 3), col)
+	c.draw_string_outline(font, Vector2(0, c.size.y - 3), str(n), HORIZONTAL_ALIGNMENT_RIGHT, c.size.x - 3, 13, 3, Color.BLACK)
+	c.draw_string(font, Vector2(0, c.size.y - 3), str(n), HORIZONTAL_ALIGNMENT_RIGHT, c.size.x - 3, 13)
+	var border := Color(0.45, 0.8, 1.0) if world.aim_slot == "t" else (Color(0.9, 0.8, 0.45, 0.8) if n > 0 else Color(0.25, 0.27, 0.32))
+	c.draw_rect(r, border, false, 3.0 if world.aim_slot == "t" else 1.5)
+	var key := Controls.label("trinket")
 	c.draw_string_outline(font, Vector2(3, 12), key, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, 3, Color.BLACK)
 	c.draw_string(font, Vector2(3, 12), key, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1, 0.95, 0.8))
 
@@ -1203,7 +1316,8 @@ func _draw_minimap(c: Control) -> void:
 		c.draw_circle(m.spawns[t] * sc, 7.0, Color(Game.TEAM_COLORS[t], 0.6))
 
 
-## Unit dots, camera frame and border - drawn above the minimap's fog layer.
+## Unit dots, camera frame and border - drawn above the minimap's fog layer. Champions are their
+## portraits in a blue (ally) or red (enemy) circle; your route is a white line (League-style).
 func _draw_minimap_units(c: Control) -> void:
 	var sc := c.size.x / world.map.size.x
 	var lt := world.local_team
@@ -1212,6 +1326,15 @@ func _draw_minimap_units(c: Control) -> void:
 	for i in world.relic_positions.size():
 		if world.time >= world.relic_ready[i]:
 			c.draw_circle(world.relic_positions[i] * sc, 4.0, World.RELIC_COLOR)
+	var me := world.local_champion
+	if me != null and _path.size() > 0 and not me.dead:
+		var pts := PackedVector2Array([me.global_position * sc])
+		for p in _path:
+			pts.append(p * sc)
+		c.draw_polyline(pts, Color(0, 0, 0, 0.55), 3.5, true)
+		c.draw_polyline(pts, Color(1, 1, 1, 0.9), 1.6, true)
+		c.draw_circle(pts[pts.size() - 1], 2.5, Color.WHITE)
+	var champs := []
 	for u in world.units:
 		if u.dead and not u.is_structure:
 			continue
@@ -1224,16 +1347,243 @@ func _draw_minimap_units(c: Control) -> void:
 		if u.is_structure:
 			c.draw_rect(Rect2(p - Vector2(4, 4), Vector2(8, 8)), Color(0.4, 0.4, 0.4) if u.dead else col)
 		elif u.is_champion:
-			c.draw_circle(p, 5.5, col)
-			c.draw_arc(p, 5.5, 0, TAU, 12, Color.WHITE if u == world.local_champion else Color.BLACK, 1.5)
+			champs.append(u)
 		elif u.is_ward:
 			c.draw_rect(Rect2(p - Vector2(2.5, 2.5), Vector2(5, 5)), col.lightened(0.3))
 		else:
 			c.draw_circle(p, 2.0, col)
+	# Your champion on top of everyone else.
+	champs.sort_custom(func(a, b): return a != me and b == me)
+	for u in champs:
+		var ring := Color(1.0, 0.86, 0.35) if u == me else side_color(u.team)
+		draw_portrait(c, u.global_position * sc, 8.5, u.def, ring)
 	var vs := get_viewport().get_visible_rect().size / world.camera.zoom
 	c.draw_rect(Rect2((world.camera.get_screen_center_position() - vs * 0.5) * sc, vs * sc), Color(1, 1, 1, 0.7), false, 1.0)
 	c.draw_rect(Rect2(Vector2.ZERO, c.size), Color(0.3, 0.32, 0.38), false, 2.0)
 	_draw_minimap_pings(c, sc)
+
+
+## The local champion's route for the minimap: recomputed when its destination changes (or every
+## half second), trimmed as it walks.
+func _update_path(delta: float, ch: Champion) -> void:
+	var goal: Vector2 = ch.nav_target if ch != null and not ch.dead and not world.ended else Vector2.INF
+	if not goal.is_finite():
+		_path = PackedVector2Array()
+		_path_goal = Vector2.INF
+		return
+	_path_t -= delta
+	if not _path_goal.is_finite() or _path_goal.distance_to(goal) > 60.0 or _path_t <= 0.0:
+		_path_goal = goal
+		_path_t = 0.5
+		_path = world.map.find_path(ch.global_position, goal)
+	while _path.size() > 1 and ch.global_position.distance_to(_path[0]) < 60.0:
+		_path.remove_at(0)
+
+
+## Blue for your team, red for the enemy team, yellow for neutrals (colorblind palette if enabled).
+func side_color(team: int) -> Color:
+	var cb: bool = Game.prefs.colorblind_mode
+	if team > 1:
+		return Unit.COLORBLIND_NEUTRAL if cb else Color(0.95, 0.8, 0.3)
+	if team == world.local_team:
+		return Unit.COLORBLIND_ALLY if cb else ALLY_RING
+	return Unit.COLORBLIND_ENEMY if cb else ENEMY_RING
+
+
+## A champion's round portrait: its portrait image, else the front of its idle sprite, else its
+## initials on its color - inside a `ring` colored circle.
+static func draw_portrait(ci: CanvasItem, center: Vector2, r: float, def: Dictionary, ring: Color, alpha := 1.0) -> void:
+	var tex := portrait_texture(def)
+	ci.draw_circle(center, r + 2.0, Color(0, 0, 0, 0.85 * alpha))
+	if tex != null:
+		var pts := PackedVector2Array()
+		var uvs := PackedVector2Array()
+		for i in 24:
+			var d := Vector2.from_angle(TAU * i / 24.0)
+			pts.append(center + d * r)
+			uvs.append(Vector2(0.5, 0.5) + d * 0.5)
+		ci.draw_colored_polygon(pts, Color(1, 1, 1, alpha), uvs, tex)
+	else:
+		var col: Color = def.get("color", Color(0.5, 0.5, 0.55))
+		ci.draw_circle(center, r, Color(col.darkened(0.35), alpha))
+		var size := maxi(int(r * 0.95), 6)
+		var initials := str(def.get("name", "?")).substr(0, 2)
+		ci.draw_string(ThemeDB.fallback_font, center + Vector2(-r, size * 0.36), initials, HORIZONTAL_ALIGNMENT_CENTER, r * 2.0, size, Color(1, 1, 1, alpha))
+	ci.draw_arc(center, r + 0.5, 0.0, TAU, 32, Color(ring, alpha), maxf(2.0, r * 0.18), true)
+
+
+## Cached portrait texture of a character (see draw_portrait), or null.
+static func portrait_texture(def: Dictionary) -> Texture2D:
+	var cache = def.get("textures")
+	if cache is Dictionary and cache.has("__hud_portrait"):
+		return cache["__hud_portrait"]
+	var tex: Texture2D = def.get("portrait")
+	if tex == null and def.get("sprite") is Dictionary:
+		tex = _sprite_portrait(def.sprite)
+	if cache is Dictionary:
+		cache["__hud_portrait"] = tex
+	return tex
+
+
+## A square around the head of the character's front-facing idle frame.
+static func _sprite_portrait(info: Dictionary) -> Texture2D:
+	var clips = info.get("clips", {})
+	if not (clips is Dictionary) or not clips.has("idle"):
+		return null
+	var anim: String = clips.idle[0].name
+	var dirs := int(info.get("dirs", 1))
+	if dirs > 1:
+		anim += "/%d" % posmod(roundi((PI * 0.5 - float(info.get("first_dir", 0.0))) / (TAU / dirs)), dirs)
+	var frames: SpriteFrames = info.frames
+	if not frames.has_animation(anim) or frames.get_frame_count(anim) == 0:
+		return null
+	var img := frames.get_frame_texture(anim, 0).get_image()
+	if img == null or img.is_empty():
+		return null
+	if img.is_compressed():
+		img.decompress()
+	var used := img.get_used_rect()
+	if used.size.x <= 0 or used.size.y <= 0:
+		return null
+	var side := mini(used.size.x, used.size.y)
+	var crop := Rect2i(used.position.x + (used.size.x - side) / 2, used.position.y, side, side)
+	return ImageTexture.create_from_image(img.get_region(crop))
+
+
+## Top right: K / D / A, creep score and game time; FPS (and ping when online) below.
+func _draw_stats_panel(c: Control) -> void:
+	c.draw_rect(Rect2(Vector2.ZERO, c.size), Color(0.04, 0.05, 0.07, 0.82))
+	c.draw_rect(Rect2(Vector2.ZERO, c.size), Color(0.3, 0.32, 0.38, 0.9), false, 1.0)
+	var ch := world.local_champion
+	var y := 26.0
+	var x := 12.0
+	var text_col := Color(0.95, 0.95, 0.97)
+	if ch != null:
+		_icon_swords(c, Vector2(x + 8, y - 6), 8.0, Color(0.85, 0.86, 0.92))
+		var kda := "%d / %d / %d" % [ch.kills, ch.deaths, ch.assists]
+		c.draw_string(font, Vector2(x + 21, y), kda, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, text_col)
+		x += 21.0 + font.get_string_size(kda, HORIZONTAL_ALIGNMENT_LEFT, -1, 18).x + 20.0
+		_icon_minion(c, Vector2(x + 7, y - 6), 7.0, Color(0.9, 0.78, 0.5))
+		c.draw_string(font, Vector2(x + 19, y), str(ch.cs), HORIZONTAL_ALIGNMENT_LEFT, -1, 18, text_col)
+	var t := int(world.time)
+	var clock := "%02d:%02d" % [t / 60, t % 60]
+	var cw := font.get_string_size(clock, HORIZONTAL_ALIGNMENT_LEFT, -1, 18).x
+	_icon_clock(c, Vector2(c.size.x - 12.0 - cw - 13.0, y - 6), 7.0, Color(0.85, 0.86, 0.92))
+	c.draw_string(font, Vector2(c.size.x - 12.0 - cw, y), clock, HORIZONTAL_ALIGNMENT_LEFT, -1, 18, text_col)
+	var info := "FPS %d" % Engine.get_frames_per_second()
+	var ping := world.ping_ms()
+	if ping >= 0:
+		info += "     Ping %d ms" % ping
+	c.draw_string(font, Vector2(0, 47), info, HORIZONTAL_ALIGNMENT_RIGHT, c.size.x - 12.0, 12, Color(0.65, 0.68, 0.75))
+
+
+func _icon_swords(c: Control, at: Vector2, r: float, col: Color) -> void:
+	for s in [-1.0, 1.0]:
+		var a := at + Vector2(-r * s, r)
+		var b := at + Vector2(r * s, -r)
+		c.draw_line(a, b, col, 2.0, true)
+		var guard := (b - a).normalized().orthogonal() * r * 0.35
+		var g := a.lerp(b, 0.28)
+		c.draw_line(g - guard, g + guard, col, 2.0, true)
+
+
+func _icon_minion(c: Control, at: Vector2, r: float, col: Color) -> void:
+	c.draw_circle(at, r, col.darkened(0.25))
+	c.draw_rect(Rect2(at + Vector2(-r, -r * 0.15), Vector2(r * 2.0, r * 0.35)), Color(0.1, 0.1, 0.12))
+	c.draw_line(at + Vector2(0, -r), at + Vector2(0, -r * 1.6), col, 2.0)
+
+
+func _icon_clock(c: Control, at: Vector2, r: float, col: Color) -> void:
+	c.draw_arc(at, r, 0.0, TAU, 20, col, 1.6, true)
+	c.draw_line(at, at + Vector2(0, -r * 0.7), col, 1.5)
+	c.draw_line(at, at + Vector2(r * 0.55, 0), col, 1.5)
+
+
+## Right side: kills (killer and assist portraits, crossed swords, victim) and announcements.
+func _draw_kill_feed(c: Control) -> void:
+	var now := Time.get_ticks_msec()
+	var y := 0.0
+	for e in feed:
+		var alpha := clampf(float(FEED_TIME - (now - int(e.t))) / 1000.0, 0.0, 1.0)
+		if e.kind == "kill":
+			_draw_kill_row(c, y, e, alpha)
+		else:
+			var text := str(e.text)
+			var tw := font.get_string_size(text, HORIZONTAL_ALIGNMENT_LEFT, -1, 15).x
+			c.draw_rect(Rect2(c.size.x - tw - 20.0, y + 4.0, tw + 20.0, FEED_ROW - 8.0), Color(0, 0, 0, 0.5 * alpha))
+			c.draw_string_outline(font, Vector2(c.size.x - tw - 10.0, y + 24.0), text, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, 4, Color(0, 0, 0, alpha))
+			c.draw_string(font, Vector2(c.size.x - tw - 10.0, y + 24.0), text, HORIZONTAL_ALIGNMENT_LEFT, -1, 15, Color(e.color, alpha))
+		y += FEED_ROW
+
+
+func _draw_kill_row(c: Control, y: float, e: Dictionary, alpha: float) -> void:
+	var victim = world.entities.get(int(e.v))
+	if not (victim is Champion):
+		return
+	var killer = world.entities.get(int(e.k))
+	var mid := y + FEED_ROW * 0.5
+	var vx := c.size.x - 22.0
+	var sx := vx - 36.0
+	var kx := sx - 36.0
+	var assists: Array = []
+	for id in e.get("a", []):
+		var h = world.entities.get(int(id))
+		if h is Champion:
+			assists.append(h)
+	var left := kx - 20.0 - assists.size() * 21.0
+	c.draw_rect(Rect2(left - 6.0, y + 2.0, c.size.x - left + 6.0, FEED_ROW - 4.0), Color(0, 0, 0, 0.55 * alpha))
+	var kill_col := side_color(int(e.get("kt", 2)))
+	if killer is Champion:
+		draw_portrait(c, Vector2(kx, mid), 14.0, killer.def, side_color(killer.team), alpha)
+	else:
+		_draw_executor(c, Vector2(kx, mid), 14.0, str(e.get("kk", "")), kill_col, alpha)
+	for i in assists.size():
+		draw_portrait(c, Vector2(kx - 30.0 - i * 21.0, mid + 4.0), 8.5, assists[i].def, side_color(assists[i].team), alpha)
+	_icon_swords(c, Vector2(sx, mid), 9.0, Color(kill_col.lightened(0.35), alpha))
+	draw_portrait(c, Vector2(vx, mid), 14.0, victim.def, side_color(victim.team), alpha)
+	c.draw_line(Vector2(vx - 10.0, mid - 10.0), Vector2(vx + 10.0, mid + 10.0), Color(0.9, 0.15, 0.1, 0.75 * alpha), 2.5, true)
+
+
+## A non-champion killer in the kill feed: a turret, minion or monster badge.
+func _draw_executor(c: Control, at: Vector2, r: float, kind: String, ring: Color, alpha: float) -> void:
+	c.draw_circle(at, r + 2.0, Color(0, 0, 0, 0.85 * alpha))
+	c.draw_circle(at, r, Color(0.22, 0.23, 0.27, alpha))
+	var col := Color(0.85, 0.86, 0.9, alpha)
+	match kind:
+		"tower":
+			c.draw_rect(Rect2(at + Vector2(-r * 0.35, -r * 0.55), Vector2(r * 0.7, r * 1.1)), col)
+			c.draw_rect(Rect2(at + Vector2(-r * 0.55, -r * 0.7), Vector2(r * 1.1, r * 0.3)), col)
+		"minion":
+			_icon_minion(c, at + Vector2(0, r * 0.15), r * 0.55, col)
+		_:
+			c.draw_circle(at + Vector2(0, -r * 0.1), r * 0.5, col)
+			c.draw_circle(at + Vector2(-r * 0.2, -r * 0.15), r * 0.13, Color(0.1, 0.1, 0.12, alpha))
+			c.draw_circle(at + Vector2(r * 0.2, -r * 0.15), r * 0.13, Color(0.1, 0.1, 0.12, alpha))
+	c.draw_arc(at, r + 0.5, 0.0, TAU, 32, Color(ring, alpha), 2.5, true)
+
+
+## Your keystone rune on the portrait: its cooldown and stacks (e.g. Conqueror, Lethal Tempo).
+func _draw_keystone(c: Control, at: Vector2, r: float, ch: Champion) -> void:
+	var id := ch.rune_keystone
+	var col := Runes.tree_color(id)
+	c.draw_circle(at, r + 2.0, Color(0.03, 0.03, 0.05, 0.95))
+	c.draw_circle(at, r, col.darkened(0.55))
+	var abbr := ""
+	for word in Runes.keystone_name(id).split(" ", false):
+		if word[0] == word[0].to_upper() and abbr.length() < 2:
+			abbr += word[0]
+	c.draw_string(font, at + Vector2(-r, 4.0), abbr, HORIZONTAL_ALIGNMENT_CENTER, r * 2.0, 11, col.lightened(0.35))
+	if ch.rune_ks_cd > 0.0:
+		var frac := clampf(ch.rune_ks_cd / maxf(ch.rune_ks_cd_total, 0.01), 0.0, 1.0)
+		var pts := PackedVector2Array([at])
+		for i in 25:
+			pts.append(at + Vector2.from_angle(-PI / 2.0 - TAU * frac * i / 24.0) * r)
+		c.draw_colored_polygon(pts, Color(0, 0, 0, 0.65))
+	c.draw_arc(at, r, 0.0, TAU, 28, col if ch.rune_ks_cd <= 0.0 else col.darkened(0.4), 2.0, true)
+	if ch.rune_ks_stacks > 0:
+		var s := str(ch.rune_ks_stacks)
+		c.draw_string_outline(font, at + Vector2(r - 4.0, r + 2.0), s, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, 3, Color.BLACK)
+		c.draw_string(font, at + Vector2(r - 4.0, r + 2.0), s, HORIZONTAL_ALIGNMENT_LEFT, -1, 11, Color(1, 0.95, 0.7))
 
 
 const CAMP_COLORS := {"blue": Color(0.3, 0.55, 1.0), "red": Color(1.0, 0.4, 0.25), "scuttle": Color(0.45, 0.85, 0.9),
@@ -1292,7 +1642,7 @@ func _draw_scores(c: Scoreboard) -> void:
 		for ch in world.champions.values():
 			if ch.team != t:
 				continue
-			var line := "%s  -  %s     Lv %d     %d / %d / %d" % [ch.player_name, ch.display_name, ch.level, ch.kills, ch.deaths, ch.assists]
+			var line := "%s - %s   Lv %d   %d / %d / %d   %d CS" % [ch.player_name, ch.display_name, ch.level, ch.kills, ch.deaths, ch.assists, ch.cs]
 			c.draw_string(font, Vector2(40, y), line, HORIZONTAL_ALIGNMENT_LEFT, -1, 18)
 			for i in 6:
 				var it = ch.item_def(i)

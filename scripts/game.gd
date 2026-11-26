@@ -63,6 +63,8 @@ var prefs := {
 	"camera_speed": 1.0,
 	"camera_locked": true,      # the camera follows your champion when a match starts
 	"colorblind_mode": false,
+	"fullscreen": false,        # borderless fullscreen window (F11 or Alt+Enter toggles it)
+	"target_champs_mode": "hold", # target-champions-only key: "hold", "toggle", or "always" on
 	"autobuy": false,
 	"summoners": ["flash", "ignite"],
 	"runes": {},
@@ -85,6 +87,7 @@ func _ready() -> void:
 	if cmdline.has("spells"):
 		prefs.summoners = Array(str(cmdline.spells).split(",", false))
 	Controls.setup(_saved_keys, prefs.move_mode)
+	apply_window_mode.call_deferred()
 	multiplayer.peer_connected.connect(_on_peer_connected)
 	multiplayer.peer_disconnected.connect(_on_peer_disconnected)
 	multiplayer.connected_to_server.connect(_on_connected_to_server)
@@ -95,6 +98,33 @@ func _ready() -> void:
 
 func is_host() -> bool:
 	return multiplayer.is_server()
+
+
+## F11 or Alt+Enter toggle fullscreen from any screen (menus, lobby and matches).
+func _input(event: InputEvent) -> void:
+	var k := event as InputEventKey
+	if k == null or not k.pressed or k.echo:
+		return
+	if k.keycode == KEY_F11 or (k.keycode in [KEY_ENTER, KEY_KP_ENTER] and k.alt_pressed):
+		set_fullscreen(not bool(prefs.fullscreen))
+		get_viewport().set_input_as_handled()
+
+
+func set_fullscreen(on: bool) -> void:
+	prefs.fullscreen = on
+	apply_window_mode()
+	save_settings()
+
+
+## Applies the saved window mode (borderless fullscreen or a normal window).
+func apply_window_mode() -> void:
+	if DisplayServer.get_name() == "headless":
+		return
+	var want := DisplayServer.WINDOW_MODE_FULLSCREEN if bool(prefs.fullscreen) else DisplayServer.WINDOW_MODE_WINDOWED
+	var now := DisplayServer.window_get_mode()
+	var full_now := now == DisplayServer.WINDOW_MODE_FULLSCREEN or now == DisplayServer.WINDOW_MODE_EXCLUSIVE_FULLSCREEN
+	if full_now != bool(prefs.fullscreen):
+		DisplayServer.window_set_mode(want)
 
 
 # ---------------------------------------------------------------- content ---

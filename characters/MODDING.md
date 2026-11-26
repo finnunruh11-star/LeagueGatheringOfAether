@@ -92,11 +92,19 @@ All stats can be changed temporarily with the `buff` effect.
   "effects": [ ... ]
 }
 ```
-- `direction`: skillshot toward the cursor. `point`: ground target (clamped to range).
-- `self`: centered on you. `unit`: enemy under the cursor (must be in range). `ally`: ally (or you) under the cursor.
-  `"structures": true` lets `unit`/`ally` target towers too (Teleport).
+- `direction`: skillshot toward the cursor (aimed further than `range`, it still flies `range`).
+  `point`: ground target. `self`: centered on you. `unit`: enemy under the cursor. `ally`: ally
+  (or you) under the cursor. `"structures": true` lets `unit`/`ally` target towers too (Teleport).
+- Ranges work like League's: basic attacks reach `attack_range` between the two gameplay edges, but
+  `unit`/`ally` spells reach `range` from your center to the target's center.
+- Out of range, `unit`/`ally` spells and `point` spells walk you into range and then cast (League's
+  "move to cast"); another order cancels that. `point` spells that move you (a `dash`, `teleport`,
+  `blink` or `swap` effect, like Flash) instead go off right away, clamped to `range`. Override with
+  `"approach": true` / `false` on the ability.
 - At the top level of an ability, the *target* is **you** (except `unit`/`ally` abilities),
   so `{"type": "shield"}` shields yourself. Inside projectiles/areas/zones the target is whoever got hit.
+- Instant summoner spells (Flash...) can be used while an ability's `cast_time` runs: the ability then
+  goes off from where you landed, aimed the same way (a `point` target moves along with you).
 
 Players hold Q/W/E/R to see the range indicator and release to cast.
 
@@ -224,20 +232,22 @@ completely fires the `bond_cleared` trigger.
 ### Movement (you)
 | type | keys |
 |---|---|
-| `dash` | `to` "aim" (toward the target point) / "direction" (full distance) / "back" / "target" / "behind_target" (continue `distance` units past the target's center); `distance` 350, `min_distance` (aim dashes go at least this far), `speed` 1400, `on_hit` [effects on each unit passed through], `stop_on_hit`, `on_end` [effects at the landing spot] |
+| `dash` | `to` "aim" (toward the target point) / "direction" (full distance) / "back" / "target" / "behind_target" (continue `distance` units past the target's center); `distance` 350, `min_distance` (aim dashes go at least this far), `speed` 1400, `on_hit` [effects on each unit passed through], `stop_on_hit`, `on_end` [effects at the landing spot], `phase_terrain` (default true: dashes fly over walls and land on the nearest open ground; false stops at walls) |
 | `teleport` | `to` "pos" (default) / "target" (behind the target) / "around_target" (a random spot `min_distance` 120 - `distance` 220 from the target's edge, on a different side than now, facing it) / "home"; `show` false hides the blink effect |
 
 ### Spawners
 | type | keys |
 |---|---|
-| `projectile` | `speed` 900, `range` (ability range), `radius` 12, `color`, `sprite`, `count` 1, `spread` (degrees, 360 = ring), `pierce` false/true/number, `homing`, `returns` (boomerang), `through_walls`, `affects` "enemies"/"allies"/"all", `hits_structures`, `on_hit` [...], `on_end` [... when it stops] |
+| `projectile` | `speed` 900, `range` (ability range), `radius` 12, `color`, `sprite`, `count` 1, `spread` (degrees, 360 = ring), `pierce` false/true/number, `homing`, `returns` (boomerang), `through_walls` (default true: projectiles fly over terrain; false stops them at walls), `affects` "enemies"/"allies"/"all", `hits_structures`, `on_hit` [...], `on_end` [... when it stops] |
 | `area` | instant explosion. `at` "pos" (default) / "self" / "target", `radius` 150, `delay` (shows a warning circle first), `scatter` (random offset), `angle` (cone toward the aim, e.g. 70), `affects`, `hits_structures`, `color`, `show` (false = no blast visual, for auras), `filter` "champions"/"minions"/"summons"/"non_champions", `offset` (move the center forward along your aim), `exclude_target`, `exclude_self`, `sort` "nearest"/"farthest"/"lowest_hp"/"lowest_hp_percent"/"champions_first"/"champions_lowest_hp"/"random", `max_targets`, `wards` (also hit wards - normally abilities ignore them), `effects` [... per unit inside] |
 | `beam` | instant line from you. `length` (ability range), `width` 70, `delay`, `affects`, `effects` [...] |
 | `zone` | lingering circle. `radius` 160, `duration` 4, `interval` 0.5, `follow` (true = aura around you), `affects`, `effects` [... each tick], `on_expire` [...] |
 | `trap` | `radius` 60, `duration` 30, `arm_time` 0.6, `hidden` true, `effects` [... on the unit that steps on it] |
 | `summon` | `name`, `count` 1, `duration` 10, `stats` {max_hp, attack_damage, attack_range, attack_speed, move_speed, armor, vision...}, `ranged`, `stationary` (turret), `size` 0.7, `sprite`, `on_hit` [...], `on_death` [...], `ward` (a ward: 1 damage per basic attack, ignored by minions and towers), `reveal` (sees stealthed enemies in its vision), `limit` (max of these per owner; the oldest disappears) |
 
-Abilities don't hurt towers unless you set `"hits_structures": true`.
+Abilities don't hurt towers, inhibitors or the Nexus unless you set `"hits_structures": true` (basic
+attacks and their on-hit effects - "empowered attacks" - always do). Basic attacks hit structures for
+AD + 60% AP, as magic damage when 60% AP is more than your bonus AD, and never crit them.
 
 ### Visual effects (optional)
 Every hit plays an impact animation automatically (melee champions slash in a color matching the
@@ -352,7 +362,7 @@ fountain or while dead (anywhere in Practice / the Training Arena). Keys **1-6**
 - `passives` are triggers (see Passive triggers) plus `name`/`description`. A passive without `on` is
   just text. Passives with the same `"unique": "name"` don't stack (default: per item, so two copies
   of one item don't double up). Inside them `rank` = your level, so 18-entry lists scale by level.
-- `active` works like an ability (targeting, range, indicator) and is used with keys 1-6 (`"while_dead": true` allows using it while dead; `"requires": "t_minion"` - an expression checked before the cooldown starts, e.g. only usable on minions).
+- `active` works like an ability (targeting, range, indicator) and is used with the item keys (1 2 3 5 6 7 by default; 4 is the ward trinket) (`"while_dead": true` allows using it while dead; `"requires": "t_minion"` - an expression checked before the cooldown starts, e.g. only usable on minions).
   Consumables (`"consume": true`, default for rarity consumable) lose one charge per use.
 - For an item active that should be blocked by spell shields, set `"spellshieldable": true` on its
   damage and buff effects. An `area` with `"filter": "large_minions"` selects only siege and super

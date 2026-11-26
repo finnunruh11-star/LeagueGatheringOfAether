@@ -28,7 +28,7 @@ var pierce := 0
 var returning := false
 var affects := "enemies"
 var hits_structures := false
-var through_walls := false
+var through_walls := true   # abilities fly over terrain unless their effect says "through_walls": false
 var last_hit = null
 var done := false
 var trail: Line2D
@@ -80,7 +80,7 @@ func init_ability(e: Dictionary, c: Dictionary, d: Vector2, homing_target) -> vo
 		pierce = int(p)
 	affects = str(e.get("affects", "enemies"))
 	hits_structures = bool(e.get("hits_structures", false))
-	through_walls = bool(e.get("through_walls", false))
+	through_walls = bool(e.get("through_walls", true))
 	target = homing_target
 
 

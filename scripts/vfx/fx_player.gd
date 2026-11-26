@@ -33,12 +33,8 @@ static func kill(w: World, d: Dictionary) -> void:
 	var killer = w.entities.get(int(d.get("k", 0)))
 	var victim = w.entities.get(int(d.get("v", 0)))
 	if victim is Champion:
-		var vname := "[color=#%s]%s[/color]" % [victim.team_color().lightened(0.25).to_html(false), victim.label()]
-		if killer is Champion:
-			var kname := "[color=#%s]%s[/color]" % [killer.team_color().lightened(0.25).to_html(false), killer.label()]
-			w.hud.announce_rich("%s  killed  %s" % [kname, vname])
-		else:
-			w.hud.announce_rich("%s  died" % vname)
+		w.hud.announce_kill(int(d.get("k", 0)), victim.net_id, d.get("a", []), str(d.get("kk", "champion" if killer is Champion else "")),
+			int(d.get("kt", killer.team if killer is Unit else 2)))
 	w._sfx("death", null, -6.0)
 	var lc = w.local_champion
 	if lc != null and int(d.get("k", 0)) == lc.net_id:

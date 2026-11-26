@@ -508,6 +508,9 @@ static func _ability(a: Dictionary, slot: String, def: Dictionary, errors: Packe
 	# Indicator hint: radius of the first area/zone effect, if any.
 	ab.indicator_radius = _find_radius(effects)
 	ab.indicator = _indicator(effects)
+	# Cast out of range: targeted spells and ground-targeted areas walk into range first; skillshots
+	# and spells that move the caster (dashes, blinks) go off right away, clamped to their range.
+	ab.approach = bool(a.get("approach", ab.targeting in ["unit", "ally"] or (ab.targeting == "point" and not _moves_caster(effects))))
 	# A recast is a second ability on the same slot, usable for a while after casting this one.
 	ab.erase("recast")
 	if a.get("recast") is Dictionary and slot in SLOTS:
@@ -520,6 +523,20 @@ static func _ability(a: Dictionary, slot: String, def: Dictionary, errors: Packe
 	elif a.has("recast"):
 		errors.append("%s %s: \"recast\" must be an ability { ... } on q, w, e or r" % [def.id, slot])
 	return ab
+
+
+## True if an ability list moves its caster (dash, blink/teleport, swap), also inside delays/repeats.
+static func _moves_caster(list) -> bool:
+	if not (list is Array):
+		return false
+	for e in list:
+		if not (e is Dictionary):
+			continue
+		if str(e.get("type", "")) in ["dash", "teleport", "blink", "swap"] and str(e.get("target", "self")) in ["self", "caster"]:
+			return true
+		if str(e.get("type", "")) in ["delay", "repeat"] and _moves_caster(e.get("effects")):
+			return true
+	return false
 
 
 ## True if an ability uses per-rank arrays ([60, 90, 120, ...]) or the `rank` variable anywhere.

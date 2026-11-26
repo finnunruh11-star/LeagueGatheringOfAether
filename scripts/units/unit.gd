@@ -77,6 +77,8 @@ var combat_t := -100.0      # last time this unit dealt/took champion damage
 var combat_start := -100.0
 var hurt_t := -100.0        # last time this unit took any damage
 var damagers := {}          # champion net_id -> last time it damaged this unit (assists)
+var aggro_target_id := 0    # champions: the enemy last hit by their attack or targeted spell (minion call for help)
+var aggro_time := -100.0
 
 var move_goal = null
 var attack_target = null
@@ -486,7 +488,7 @@ func perform_attack(t: Unit, _elapsed_windup: float) -> void:
 		dmg = maxf(Effects.num(a.damage, attack_ctx(t, a), dmg), 0.0)
 	# Decided when the attack starts, like its damage (not when a projectile lands).
 	var pierce: bool = a.has("pierce") and Effects.num(a.pierce, attack_ctx(t, a), 0.0) != 0.0
-	var crit: bool = stats.crit_chance > 0.0 and randf() < stats.crit_chance
+	var crit: bool = stats.crit_chance > 0.0 and not t.is_structure and randf() < stats.crit_chance
 	if crit:
 		dmg *= stats.crit_damage
 	trigger("attack_launch", t, null, {"crit_hit": crit})
@@ -513,6 +515,11 @@ func attack_damage_against(_t) -> float:
 	return stats.attack_damage
 
 
+## Damage type of a basic attack (`ad`: the attack it was fired with) against `t`.
+func attack_damage_type(t, ad: Dictionary) -> String:
+	return Effects.damage_type(ad.get("damage_type"), attack_ctx(t, ad), "physical")
+
+
 ## Visual style of this unit's basic-attack hits (see Vfx / World._hit_fx).
 func attack_hit_style(a = null) -> String:
 	var ad: Dictionary = a if a is Dictionary else attack_def
@@ -533,7 +540,7 @@ func land_attack(t, dmg: float, crit := false, a = null, pierce := false, shot_d
 		return
 	var ad: Dictionary = a if a is Dictionary else attack_def
 	var dir: Vector2 = t.global_position - global_position
-	var dtype := Effects.damage_type(ad.get("damage_type"), attack_ctx(t, ad), "physical")
+	var dtype := attack_damage_type(t, ad)
 	t.take_damage(dmg, self, dtype, {"vfx": attack_hit_style(ad), "col": ad.color, "dir": dir.angle(), "attack": true, "crit": crit})
 	if pierce:
 		_pierce(t, dmg, dtype, ad, crit, shot_dir)
@@ -1077,7 +1084,8 @@ func start_dash(dir: Vector2, length: float, speed: float, e: Dictionary, ctx: D
 func _forced_process(delta: float) -> void:
 	var f: Dictionary = forced
 	velocity = f.vel
-	var phased: bool = f.dash and bool(f.e.get("phase_terrain", false))
+	# Dashes fly over terrain unless their effect sets "phase_terrain": false; knockbacks don't.
+	var phased: bool = f.dash and bool(f.e.get("phase_terrain", true))
 	var collided := false
 	if phased:
 		global_position += velocity * minf(delta, float(f.time))
@@ -1107,8 +1115,26 @@ func _end_forced() -> void:
 	var f = forced
 	forced = null
 	velocity = Vector2.ZERO
+	if f != null and f.dash and bool(f.e.get("phase_terrain", true)):
+		_settle_on_open_ground()
 	if f != null and f.dash and not dead and f.e.has("on_end"):
 		Effects.run(f.e.on_end, Effects.sub(f.ctx, {"pos": global_position, "origin": global_position}))
+
+
+## After crossing terrain, a dash that ended inside a wall or a structure lands on the nearest
+## walkable spot instead.
+func _settle_on_open_ground() -> void:
+	if world == null or world.map == null:
+		return
+	var p := global_position
+	var blocked := world.map.is_wall(p)
+	if not blocked:
+		for s in world.structures:
+			if s != self and not s.dead and p.distance_to(s.global_position) < s.radius * 0.9 + pathing_radius():
+				blocked = true
+				break
+	if blocked:
+		global_position = world.map.nearest_open(p)
 
 
 func teleport(p: Vector2) -> void:

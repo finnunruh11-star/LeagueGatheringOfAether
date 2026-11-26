@@ -4,7 +4,7 @@ extends RefCounted
 ## button); defaults may have two ("Y|Z": Y and Z both work, for QWERTY and QWERTZ keyboards).
 ## Bindings are saved in the [keys] section of user://settings.cfg as "key:<keycode>" or
 ## "mouse:<button>", several joined with "|" ("" = unbound). Left/right click, the mouse wheel, Esc, Ctrl (level up), the arrow
-## keys (camera) and F1-F4 (practice cheats) are fixed.
+## keys (camera), F1-F4 (practice cheats) and F11 (fullscreen) are fixed.
 
 ## [action, label, classic default, WASD default]
 const ACTIONS := [
@@ -17,12 +17,13 @@ const ACTIONS := [
 	["item_1", "Item 1", "1", "1"],
 	["item_2", "Item 2", "2", "2"],
 	["item_3", "Item 3", "3", "3"],
-	["item_4", "Item 4", "4", "4"],
-	["item_5", "Item 5", "5", "5"],
-	["item_6", "Item 6", "6", "6"],
+	["item_4", "Item 4", "5", "5"],
+	["item_5", "Item 5", "6", "6"],
+	["item_6", "Item 6", "7", "7"],
+	["trinket", "Trinket (Stealth Ward)", "4", "4"],
 	["attack_move", "Attack move", "A", "X"],
 	["attack_move_click", "Attack move click (instant)", "", ""],
-	["target_champions", "Target champions only (hold)", "QuoteLeft", "QuoteLeft"],
+	["target_champions", "Target champions only", "QuoteLeft|AsciiCircum", "QuoteLeft|AsciiCircum"],
 	["stop", "Stop", "S", ""],
 	["recall", "Recall", "B", "B"],
 	["shop", "Shop", "P", "P"],
@@ -40,16 +41,38 @@ const ACTIONS := [
 const MOVE_ACTIONS := ["move_up", "move_left", "move_down", "move_right"]
 ## Mouse buttons that can be bound (left/right click and the wheel are taken).
 const MOUSE_OK := [MOUSE_BUTTON_MIDDLE, MOUSE_BUTTON_XBUTTON1, MOUSE_BUTTON_XBUTTON2]
+## Second-choice keys for actions added after a player saved their keys, used when the default is
+## already taken by one of the saved bindings.
+const FALLBACK_KEYS := {"trinket": "T"}
+## Short labels for keys whose Godot names are long (the key left of 1: ` on QWERTY, ^ on QWERTZ).
+const KEY_NAMES := {KEY_QUOTELEFT: "`", KEY_ASCIICIRCUM: "^"}
 
 
 ## Creates the actions with the defaults of `mode` ("click" or "wasd"), then applies `saved` bindings.
+## Actions missing from `saved` (added in a newer version) don't steal a key the player already uses.
 static func setup(saved: Dictionary, mode: String) -> void:
 	for a in ACTIONS:
 		if not InputMap.has_action(a[0]):
 			InputMap.add_action(a[0], 0.2)
 	var d := defaults(mode)
+	var taken := {}
 	for k in d:
-		bind(k, str(saved.get(k, d[k])) if saved.get(k) is String else d[k])
+		if saved.get(k) is String:
+			for c in str(saved[k]).split("|", false):
+				taken[c] = true
+	for k in d:
+		if saved.get(k) is String:
+			bind(k, str(saved[k]))
+		elif saved.is_empty():
+			bind(k, d[k])
+		else:
+			var free := PackedStringArray()
+			for c in str(d[k]).split("|", false):
+				if not taken.has(c):
+					free.append(c)
+			if free.is_empty() and FALLBACK_KEYS.has(k) and not taken.has(to_code(FALLBACK_KEYS[k])):
+				free.append(to_code(FALLBACK_KEYS[k]))
+			bind(k, "|".join(free))
 
 
 ## action -> code for a layout ("click" = right-click to move, "wasd" = WASD movement).
@@ -112,7 +135,10 @@ static func label(action: String) -> String:
 
 static func code_label(code: String) -> String:
 	if code.begins_with("key:"):
-		var s := OS.get_keycode_string(int(code.substr(4)))
+		var kc := int(code.substr(4))
+		if KEY_NAMES.has(kc):
+			return KEY_NAMES[kc]
+		var s := OS.get_keycode_string(kc)
 		return s if s != "" else "?"
 	if code.begins_with("mouse:"):
 		match int(code.substr(6)):
@@ -153,7 +179,7 @@ static func event_from_code(code: String) -> InputEvent:
 static func code_from_event(ev: InputEvent) -> String:
 	if ev is InputEventKey:
 		var kc: int = ev.keycode if ev.keycode != KEY_NONE else ev.physical_keycode
-		if kc == KEY_NONE or kc in [KEY_ESCAPE, KEY_CTRL, KEY_ALT, KEY_META, KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN, KEY_F1, KEY_F2, KEY_F3, KEY_F4]:
+		if kc == KEY_NONE or kc in [KEY_ESCAPE, KEY_CTRL, KEY_ALT, KEY_META, KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN, KEY_F1, KEY_F2, KEY_F3, KEY_F4, KEY_F11]:
 			return ""
 		return "key:%d" % kc
 	if ev is InputEventMouseButton and ev.button_index in MOUSE_OK:
@@ -192,7 +218,12 @@ static func help_text(mode: String) -> String:
 	parts.append("%s %s" % [abil, cast_hint])
 	parts.append("Ctrl+%s level up" % abil.replace(" ", ""))
 	parts.append("%s/%s summoners" % [label("summoner_1"), label("summoner_2")])
-	parts.append("%s-%s items" % [label("item_1"), label("item_6")])
+	var item_keys := PackedStringArray()
+	for i in 6:
+		item_keys.append(label("item_%d" % (i + 1)))
+	parts.append("%s items" % ("".join(item_keys) if "".join(item_keys).length() == 6 else " ".join(item_keys)))
+	if code_of("trinket") != "":
+		parts.append("%s ward" % label("trinket"))
 	if code_of("attack_move") != "":
 		parts.append("%s attack-move" % label("attack_move"))
 	if code_of("stop") != "":

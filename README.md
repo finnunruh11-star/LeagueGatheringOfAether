@@ -43,28 +43,39 @@ units are gray. The HUD health bar and ground rings use the same palette.
 
 | | |
 |---|---|
-| Right mouse | move / attack (hold to keep moving) |
-| Q W E R | quick cast on press by default. Settings also offers quick cast with an indicator on release and normal cast with left-click confirmation. Right-click cancels an armed cast. |
+| Right mouse | move / attack (hold to keep moving). Turrets, inhibitors and the Nexus can't be clicked or attack-moved onto while they are still protected. |
+| Q W E R | quick cast on press by default. Settings also offers quick cast with an indicator on release and normal cast with left-click confirmation. Right-click cancels an armed cast. Targeted spells and ground-targeted areas cast out of range walk you into range first, then cast (like League); skillshots, dashes and blinks go off right away. |
 | Ctrl + Q W E R | spend a skill point (or click the **+** above an ability) |
 | Shift | show detailed ability numbers and scaling in champion select or while hovering the ability bar |
-| D / F | summoner spells (Flash, Ignite... picked in the lobby) |
-| 1 - 6 | use item actives (aimed ones work like abilities) |
-| P | shop (in your fountain or while dead; anywhere in Practice). Click for details; right-click or double-click to buy, including from the build row. Shift+right-click removes a build entry. |
+| D / F | summoner spells (Flash, Ignite... picked in the lobby). Flash works while an ability charges or channels: the ability goes off from where you land. |
+| 1 2 3 5 6 7 | use item actives (aimed ones work like abilities). Drag an item onto another slot to move it - anywhere, not only in the shop. |
+| 4 | Stealth Ward trinket: every champion has one (2 charges, recharging in 210-120 s by average level). Wards turn invisible to enemies after 1 second, see 900 around them for 90-120 s and take 3 basic attacks; at most 3 per player. Not available in ARAM. |
+| P | shop (in your fountain or while dead; anywhere in Practice). Click for details; right-click or double-click to buy, including from the build row. Right-click an item you can't afford yet to **quick buy** its parts: the combination of components that uses the most gold. Shift+right-click removes a build entry. |
 | A | arm attack-move, then left-click to issue it. Settings can choose the nearest enemy to you instead of the cursor and bind a separate instant Attack Move Click key. |
-| Backtick | hold to target only champions with direct clicks and targeted spells; does not filter attack-move |
+| Backtick (` or ^ on QWERTZ) | target only champions with direct clicks and targeted spells; does not filter attack-move. Settings > Gameplay chooses hold (default), toggle or always on; the HUD shows when it's active. |
 | S | stop |
 | B | recall to base (8s, cancelled by damage or moving) |
-| Y or Z | lock/unlock camera (edge-pan or arrow keys when unlocked; speed in Settings), hold Space = center on your champion |
+| Y or Z | lock/unlock camera (edge-pan or arrow keys when unlocked; speed in Settings), hold Space = center on your champion. A locked camera stays exactly on your champion. |
 | Mouse wheel | zoom |
-| Tab | hold to show the scoreboard; hover an item to inspect it |
+| Tab | hold to show the scoreboard (with creep score); hover an item to inspect it |
 | G / V / H | hold G for the tactical ping wheel, V for an immediate retreat ping, hold H for the vision wheel. Flick toward an option and release, or tap for Attention / Enemy Vision. Aim at the battlefield or minimap; only teammates see the markers. Artwork is temporary. |
 | Esc | menu (Resume / **Settings** / leave) |
+| F11 or Alt+Enter | fullscreen on/off anywhere (also Settings > Display; saved) |
 | F1 / F2 / F3 / F4 | Practice only: level up / +1000 gold / reset cooldowns & mana / max ability ranks |
 | Minimap | left-click and drag to look around without changing camera lock; right-click to move there |
+
+**HUD:** the top right shows your K / D / A, creep score and the game time, with FPS (and your ping
+online) below. Kills appear underneath with the killer's portrait (smaller portraits for assists),
+crossed swords and the victim, in blue (your team) or red (enemies). The minimap shows champions as
+their portraits in blue or red circles (yours in gold) and draws the route you're walking as a white
+line. Your keystone rune sits on your portrait with its cooldown and stacks.
 
 **WASD mode** (Settings > Movement): W A S D walk, **left-click directly targets an enemy**
 (one attack, then you keep walking while you hold a direction), right-click still moves/attacks.
 Abilities move to Q E R F, summoner spells to Space / Shift, attack-move to X - all changeable.
+
+Key bindings saved by an older version keep working; new actions (like the ward trinket) take their
+default key only if it's free, otherwise a spare one (the trinket then uses T).
 
 Destroy the enemy **Nexus** to win. On **Two Lanes**, destroy a lane's turrets and inhibitor to
 open up the two Nexus turrets. The Nexus is vulnerable only while at least one inhibitor and both
@@ -78,9 +89,9 @@ without augments or **ARAM Mayhem** to play with augments. In both modes, pick o
 random champion cards; if you don't pick, you get the first card. Both use a one-lane Bridge
 variant with brush, an inhibitor and two Nexus turrets per team. Regular Bridge is unchanged.
 
-- Start at level 3 with 1,400 gold and earn passive gold and XP. There is no Recall or allied
-  fountain healing. Shop before leaving base or while dead. Mark and Clarity are available;
-  Teleport and Smite are not.
+- Start at level 3 with 1,400 gold and earn passive gold (44 per 10 seconds from 1:00) and XP.
+  There is no Recall, allied fountain healing or ward trinket. Shop before leaving base or while
+  dead. Mark and Clarity are available; Teleport and Smite are not.
 - In **Mayhem only**, at levels **3, 7, 11 and 15**, pick one of three **Silver, Gold or Prismatic** augments in
   the HUD. Each card can be rerolled once. Picks survive death, and bots choose their own.
   The 22 augments are original CusOba effects, not a copy of League's augment roster.
@@ -102,8 +113,9 @@ League's positions, three lanes (top, mid, bot), a river with the Dragon pit (bo
 Bots take lanes in the order mid, top, bot, **jungle**, support (`"lane_order"` in the map file);
 a bot jungler swaps a summoner spell for Smite and starts with a jungle pet.
 - **Brush:** standing in brush hides you from enemies outside it - they need a unit or ward inside
-  that same brush to see in. You still see out. Damaging an enemy champion from brush reveals you
-  for 2 seconds. Your own team shows faded while in brush. Brush works even with fog of war off.
+  that same brush to see in. You still see out. Basic attacks and targeted spells used from brush
+  reveal you for 2 seconds; skillshots and area spells don't. Your own team shows faded while in
+  brush. Brush works even with fog of war off.
 - **Camps** (from 1:30): Blue Sentinel, Gromp, Murk Wolves (blue's top side), Raptors, Red
   Brambleback, Krugs (bot side), mirrored for red. Monsters fight whoever hits them (the whole camp),
   return home and heal if pulled beyond their leash, grow with the average champion level and give
@@ -121,16 +133,28 @@ a bot jungler swaps a summoner spell for Smite and starts with a jungle pet.
   and your buffs plus your team's drakes are shown above the ability bar.
 
 - **Levels & abilities:** XP comes from nearby kills, not elapsed time. The level cap is 21.
-  In solo lane, a regular wave plus one melee minion grants level 2. Nearby allies split a fixed
-  pool of 120% of the solo XP award. Minions give up long chases and return to their lane.
+  In solo lane, a regular wave plus one melee minion grants level 2. Like League, a lone champion
+  gets 95% of a lane minion's XP and nearby allies split 124%.
   You start with one skill point and earn one per level up to 18; levels 19-21 only give stats. Q/W/E go to rank 5, R to rank 3
   (at levels 6/11/16).
+- **Minions** use League's stats (477 HP melee and 296 HP caster minions at the start, upgraded every
+  90 seconds; cannons from 912 HP; 325 movement speed, +25 every 5 minutes from 10:00 to 25:00), sizes
+  (48 melee/caster, 65 cannon/super) and damage rules (half damage to champions, reduced damage to
+  structures). They target like League's: the closest enemy minion first, then the closest champion -
+  but a champion that hits an allied champion with a basic attack or a targeted spell (not a
+  skillshot) draws every nearby minion, and minions also answer enemies attacking their allies.
+  They keep a target until something more important shows up, and give up long chases.
 - **Stats & mana:** health, mana (casters only - abilities cost mana), attack damage, ability power,
   attack speed, armor, magic resist, crit, ability haste, penetration, life steal/omnivamp, tenacity,
   move speed... shown in the bottom-left panel.
-- **Gold & items:** you start with 500 gold and earn passive gold from 1:50. Melee/caster last hits
-  grant 20/14 gold, champion kills grant 300 (assists share 150), and turret kills grant 50 to each
-  enemy player. The shop has ~180 League of
+- **Abilities and terrain/structures:** skillshots and dashes go over walls (a dash ending inside
+  one lands next to it); knockbacks and charges like Sion's R still stop at walls. Abilities don't
+  damage turrets, inhibitors or the Nexus unless they say so - basic attacks and their on-hit effects
+  do. Basic attacks hit structures for AD + 60% AP (magic damage when 60% AP beats your bonus AD), so
+  AP champions can siege, and never crit them.
+- **Gold & items:** you start with 500 gold and earn 16 passive gold per 10 seconds from 1:50 (a bit
+  less than League's 20.4). Melee/caster/cannon last hits grant 21/14/60-90 gold, champion kills
+  grant 300 (assists share 150), and turret kills grant 50 to each enemy player. The shop has ~180 League of
   Legends items from patches 10.23-13.24 (mythics, legendaries, components, boots, potions, elixirs,
   jungle items) with their stats and effects; recipes subtract owned components, only one Mythic and
   one pair of boots. Sell for 70%.
@@ -149,6 +173,9 @@ a bot jungler swaps a summoner spell for Smite and starts with a jungle pet.
 ## Rune pages
 Choose **Runes** in the lobby to set your primary and secondary paths and three stat shards.
 The host can select a bot's name to edit its page. Unedited pages use a preset for the champion's role.
+Champions whose spells scale with AD (Gizmo, Zeri...) count as marksmen or bruisers even with mana,
+so their preset and Adaptive Force give attack damage. In a match your keystone sits on your portrait
+with its cooldown and stacks, and its name pops up above your champion when it goes off.
 The roster mixes historical League patches. Hover a rune in the editor to see its version.
 Phase Rush and Stormraider's Surge are separate choices. Lethal Tempo uses the 12.19 version:
 six stacks increase range and lift the attack speed cap. Effects are adapted to CusOba's
@@ -234,7 +261,7 @@ describe the blue half (copied left-right); `"mirror": "rotate"` copies it rotat
 around the centre (diagonal maps - mirrored turrets join the lane they land on). Optional `"tower_stats"`, `"nexus_stats"` and
 `"inhibitor_stats"` and `"minion_stats": {"melee": {...}, "ranged": {...}}` override the default stats (same names as
 character stats). Also `"fog": false` (no fog of war), `"start_gold"`, `"start_level"`,
-`"gold_per_second"`, `"shop_anywhere"` and `"cheats"` (F1-F4 online). See `two_lanes.json`, `bridge.json` and `arena.json`.
+`"gold_per_second"` (default 1.6), `"gold_start"` (seconds, default 110), `"shop_anywhere"` and `"cheats"` (F1-F4 online). See `two_lanes.json`, `bridge.json` and `arena.json`.
 
 Terrain and jungle (see `rift.json`):
 - `"walls"`: rectangles `[x, y, w, h]` or polygons `{"poly": [[x, y], ...]}`. Any wall, brush,
@@ -256,8 +283,9 @@ Health and damage use direct values (no hidden multiplier). One world coordinate
 distance unit for attack range, spell geometry and pathing; movement speed is in units per second.
 Champion art is nominally 100 units tall. The default champion gameplay, pathing and selection
 radii are 65, 35 and 100 units respectively. Left-click a visible unit to see its stats.
-A 500-unit basic attack range is measured between gameplay edges. Unbuffed champions
-walk at 330-345 world units per second, compared with lane minions at 310.
+A 500-unit basic attack range is measured between gameplay edges; targeted spells (and summoner
+spells like Ignite) measure their range from center to center, like League. Unbuffed champions
+walk at 330-345 world units per second, compared with lane minions at 325.
 The default camera zoom is 0.8x. Walking pace, camera zoom, and map dimensions are independent
 of spell ranges, dash speeds, and projectile speeds.
 
@@ -268,7 +296,8 @@ The custom maps keep their own layouts: Two Lanes is 14,400 by 7,800 units,
 Bridge is 7,560 by 2,340, and Training Arena is 2,880 by 1,800. Aether Rift is 14,800 by 14,800 with
 structures, camps and pits at Summoner's Rift positions.
 
-Benchmarks include 465 HP melee minions, 284 HP casters, 750-range turrets, 4,000 HP inhibitors,
+Benchmarks include League's 477 HP melee minions and 296 HP casters (with League's growth every 90
+seconds), 750-range turrets, 4,000 HP inhibitors,
 and a 5,500 HP Nexus. Two Lanes uses the classic 1:05 first wave, a 30-second wave interval, and
 cannons that become more frequent later in the match. The [League of Legends Wiki](https://wiki.leagueoflegends.com/en-us/Minion)
 is a reference for scale, not a patch lock: custom spells, map layouts, minion growth, and the
@@ -284,7 +313,12 @@ godot --headless --path . -- --auto=practice --map=rift --char=ember --selftest=
 godot --headless --path . -- --auto=practice --map=arurf --selftest=arurf
 godot --headless --path . -- --auto=practice --map=aram --bots_red=1 --selftest=aram
 godot --headless --path . -- --auto=practice --map=aram_mayhem --bots_red=1 --selftest=mayhem
+godot --headless --path . -- --auto=practice --map=arena --char=gizmo --selftest=feedback
 ```
+
+The last one checks the League-parity fixes from playtesting: targeted ranges and walking into range,
+Flash during casts, terrain and structure rules, minion stats and targeting, passive gold, quick buy,
+item swaps, ward trinket, runes, kill feed, replication of the new HUD values and the camera.
 
 ## Visual effects
 Hit impacts, slashes, explosions and smoke use the pixel-art packs in the project root
@@ -305,8 +339,8 @@ animations, weapon trails and muzzle flashes). `clorinde_render.py` renders the 
 sprite block of her character.json. Godot ignores the `.py` files.
 
 All four lane minion types use Blender-rendered PNGs in [assets/minions](./assets/minions),
-with separate blue and red palettes. Lane minion sprites and hitbox radii are both 50% larger
-than their original sizes. Edit the eight scenes in
+with separate blue and red palettes. Lane minions use League's gameplay radii (48 for melee and
+caster minions, 65 for cannon and super minions) and their sprites scale with them. Edit the eight scenes in
 [minions.blend](./assets/minions/art/minions.blend) or rebuild them from the project root:
 
 ```powershell
@@ -348,5 +382,6 @@ Settings and key bindings are saved in Godot's user folder (`settings.cfg`; on W
 - Fog of war is visual + targeting rules; the host still sends every unit's position to clients
   (fine among friends, not cheat-proof).
 - No client-side prediction: on a laggy connection your own movement reacts with your ping.
-- Bots see only what their team sees (fog of war); they don't use wards.
+- Bots see only what their team sees (fog of war); Normal and Scripting bots drop their Stealth
+  Wards into nearby brush but don't buy Control Wards.
 - Exported builds load `characters/` and `maps/` from the folder next to the executable.

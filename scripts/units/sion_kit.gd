@@ -236,10 +236,11 @@ func end_rush() -> void:
 	c.start_action(Unit.ANIM_CAST, Unit.ACT_RECAST + 3, 0.0)
 	var at := c.global_position
 	c.world.fx("ring", {"pos": at, "radius": 500.0, "color": IMPACT_COLOR, "team": c.team})
-	for t: Unit in c.world.query(at, 500.0, c.team, "enemies", true):
+	# Turrets stop the charge (see rush) but, like other abilities, it doesn't damage structures.
+	for t: Unit in c.world.query(at, 500.0, c.team, "enemies", false):
 		if not trampled.has(t.net_id):
 			_r_damage(t, 5.0 if t is Minion else 1.0)
-		if not t.is_structure and not Effects._blocked(t, ctx):
+		if not Effects._blocked(t, ctx):
 			if at.distance_to(t.global_position) <= 300.0 + t.radius:
 				_airborne(t, dir, lerpf(0.75, 1.75, _rush_power()), ctx)
 			else:

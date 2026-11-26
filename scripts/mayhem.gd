@@ -74,7 +74,7 @@ static func map_variant(bridge: Dictionary, augments: bool) -> Dictionary:
 		"name": "ARAM Mayhem" if augments else "ARAM (Standard)",
 		"description": "Random champion cards and permanent augments on a single lane." if augments
 			else "All Random All Mid: a single-lane match without augments.",
-		"fog": false, "start_level": START_LEVEL, "start_gold": 1400.0, "gold_per_second": 5.5,
+		"fog": false, "start_level": START_LEVEL, "start_gold": 1400.0, "gold_per_second": 4.4, "gold_start": 60.0,
 		"waves": {"interval": 25, "first": 15, "melee": 3, "ranged": 3},
 		"brush": [
 			[[2830, 620], [3090, 605], [3170, 720], [3100, 860], [2860, 850], [2760, 730]],

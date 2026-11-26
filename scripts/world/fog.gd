@@ -202,9 +202,10 @@ func _compute(team: int) -> void:
 
 
 func _revealed(u: Unit, team: int) -> bool:
-	for c in world.champions.values():
-		if c.team == team and not c.dead and c.global_position.distance_to(u.global_position) < STEALTH_REVEAL:
-			return true
+	if not u.is_ward:
+		for c in world.champions.values():
+			if c.team == team and not c.dead and c.global_position.distance_to(u.global_position) < STEALTH_REVEAL:
+				return true
 	return _sees(reveals[team], u.global_position, u.radius, map.brush_at(u.global_position), true)
 
 
